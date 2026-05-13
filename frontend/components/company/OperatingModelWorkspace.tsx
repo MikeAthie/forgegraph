@@ -456,7 +456,10 @@ function ServiceHistoryPanel({ projection }: { projection: StateProjectionVM | n
     : [];
   const nextActions = Array.isArray(projection.state.next_actions) ? projection.state.next_actions.slice(0, 5) : [];
   return (
-    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+    <div
+      data-testid="service-history-panel"
+      className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
           <FileStack className="size-4" />
@@ -504,13 +507,20 @@ function PackSummary({
   const status = installation?.status ?? (installed ? "active" : "available");
   const role = installation?.role ?? "available";
   return (
-    <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+    <div
+      data-testid={`operating-model-pack-card-${pack.id}`}
+      className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{pack.name}</p>
             <StatusBadge status={status} label={installed ? status : "Available"} />
-            {installed ? <StatusBadge status={role} label={role} /> : null}
+            {installed ? (
+              <span data-testid="installed-pack-role">
+                <StatusBadge status={role} label={role} />
+              </span>
+            ) : null}
           </div>
           <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{pack.description}</p>
           <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -1997,7 +2007,10 @@ function ArtifactForm({ controller }: { controller: OperatingModelController }) 
 
 function ArtifactCard({ artifact, controller }: { artifact: WorkArtifactVM; controller: OperatingModelController }) {
   return (
-    <div className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5">
+    <div
+      data-testid={`artifact-card-${artifact.id}`}
+      className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{artifact.title}</p>
         <StatusBadge status={artifact.status} label={`${artifact.revisionCount || 1} rev`} />
@@ -2136,7 +2149,14 @@ function ValidationReworkPanel({ controller }: { controller: OperatingModelContr
 
 function CurrentStatePanel({ controller }: { controller: OperatingModelController }) {
   return (
-    <div className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8 xl:col-span-1">
+    <div
+      data-testid={
+        controller.currentProjection
+          ? `state-projection-card-${controller.currentProjection.id}`
+          : "state-projection-card-empty"
+      }
+      className="rounded-[1.35rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8 xl:col-span-1"
+    >
       <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
         <BookCheck className="size-4" />
         <p className="text-sm font-semibold">{controller.currentProjection?.label ?? "Current State"}</p>

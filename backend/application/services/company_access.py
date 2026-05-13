@@ -7,6 +7,8 @@ company policy or hold an active company assignment.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 
@@ -56,11 +58,11 @@ def accessible_company_queryset(
 
     tenant_id = getattr(user, "default_organization_id", None)
     if not tenant_id:
-        return Graph.objects.filter(owner=user)
+        return cast(QuerySet[Graph], Graph.objects.filter(owner=user))
 
     membership = get_membership(user, str(tenant_id))
     if membership is None:
-        return Graph.objects.none()
+        return cast(QuerySet[Graph], Graph.objects.none())
 
     required_rank = COMPANY_ROLE_RANK.get(minimum_role, COMPANY_ROLE_RANK["viewer"])
     if _org_role_satisfies_company_role(membership.role, minimum_role):
@@ -70,29 +72,26 @@ def accessible_company_queryset(
                 access_policy__assignment_required=True,
                 access_policy__org_admin_access_enabled=True,
             )
-        assigned_company_ids = CompanyAssignment.objects.filter(
+        assigned_company_ids = _active_company_assignment_ids(
             user=user,
-            organization_id=tenant_id,
-            status="active",
-        ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
-        assigned_company_ids = assigned_company_ids.filter(
-            role__in=_roles_at_or_above(required_rank)
-        ).values("company_id")
-        return Graph.objects.filter(
-            Q(organization_id=tenant_id, organization__isnull=False) & unrestricted
-            | Q(id__in=assigned_company_ids)
-            | Q(organization__isnull=True, owner__default_organization_id=tenant_id)
-        ).distinct()
+            tenant_id=tenant_id,
+            required_rank=required_rank,
+        )
+        return cast(
+            QuerySet[Graph],
+            Graph.objects.filter(
+                Q(organization_id=tenant_id, organization__isnull=False) & unrestricted
+                | Q(id__in=assigned_company_ids)
+                | Q(organization__isnull=True, owner__default_organization_id=tenant_id)
+            ).distinct(),
+        )
 
-    assigned_company_ids = CompanyAssignment.objects.filter(
+    assigned_company_ids = _active_company_assignment_ids(
         user=user,
-        organization_id=tenant_id,
-        status="active",
-    ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
-    assigned_company_ids = assigned_company_ids.filter(
-        role__in=_roles_at_or_above(required_rank)
-    ).values("company_id")
-    return Graph.objects.filter(id__in=assigned_company_ids)
+        tenant_id=tenant_id,
+        required_rank=required_rank,
+    )
+    return cast(QuerySet[Graph], Graph.objects.filter(id__in=assigned_company_ids))
 
 
 def ensure_default_company_access_policy(company: Graph) -> CompanyAccessPolicy | None:
@@ -132,6 +131,24 @@ def _active_assignment(user: User, company: Graph) -> CompanyAssignment | None:
     )
 
 
+def _active_company_assignment_ids(
+    *,
+    user: User,
+    tenant_id: Any,
+    required_rank: int,
+) -> QuerySet[CompanyAssignment, Any]:
+    return (
+        CompanyAssignment.objects.filter(
+            user=user,
+            organization_id=tenant_id,
+            status="active",
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
+        .filter(role__in=_roles_at_or_above(required_rank))
+        .values_list("company_id", flat=True)
+    )
+
+
 def _org_role_satisfies_company_role(org_role: str, company_role: str) -> bool:
     org_rank = ROLE_RANK.get(org_role, 0)
     required_rank = COMPANY_ROLE_RANK.get(company_role, COMPANY_ROLE_RANK["viewer"])
@@ -139,8 +156,4 @@ def _org_role_satisfies_company_role(org_role: str, company_role: str) -> bool:
 
 
 def _roles_at_or_above(required_rank: int) -> list[str]:
-    return [
-        role
-        for role, rank in COMPANY_ROLE_RANK.items()
-        if rank >= required_rank
-    ]
+    return [role for role, rank in COMPANY_ROLE_RANK.items() if rank >= required_rank]

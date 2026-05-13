@@ -1150,32 +1150,7 @@ def _markdown_to_html(markdown: str) -> str:
     body: list[str] = []
     in_list = False
     for raw_line in markdown.splitlines():
-        line = raw_line.rstrip()
-        if not line:
-            if in_list:
-                body.append("</ul>")
-                in_list = False
-            continue
-        if line.startswith("# "):
-            if in_list:
-                body.append("</ul>")
-                in_list = False
-            body.append(f"<h1>{html.escape(line[2:])}</h1>")
-        elif line.startswith("## "):
-            if in_list:
-                body.append("</ul>")
-                in_list = False
-            body.append(f"<h2>{html.escape(line[3:])}</h2>")
-        elif line.startswith("- "):
-            if not in_list:
-                body.append("<ul>")
-                in_list = True
-            body.append(f"<li>{_inline_markdown_to_html(line[2:])}</li>")
-        else:
-            if in_list:
-                body.append("</ul>")
-                in_list = False
-            body.append(f"<p>{_inline_markdown_to_html(line)}</p>")
+        in_list = _append_html_line(body, raw_line.rstrip(), in_list)
     if in_list:
         body.append("</ul>")
     return "\n".join(
@@ -1196,6 +1171,33 @@ def _markdown_to_html(markdown: str) -> str:
             "</html>",
         ]
     )
+
+
+def _append_html_line(body: list[str], line: str, in_list: bool) -> bool:
+    if not line:
+        return _close_html_list(body, in_list)
+    if line.startswith("# "):
+        _close_html_list(body, in_list)
+        body.append(f"<h1>{html.escape(line[2:])}</h1>")
+        return False
+    if line.startswith("## "):
+        _close_html_list(body, in_list)
+        body.append(f"<h2>{html.escape(line[3:])}</h2>")
+        return False
+    if line.startswith("- "):
+        if not in_list:
+            body.append("<ul>")
+        body.append(f"<li>{_inline_markdown_to_html(line[2:])}</li>")
+        return True
+    _close_html_list(body, in_list)
+    body.append(f"<p>{_inline_markdown_to_html(line)}</p>")
+    return False
+
+
+def _close_html_list(body: list[str], in_list: bool) -> bool:
+    if in_list:
+        body.append("</ul>")
+    return False
 
 
 def _inline_markdown_to_html(text: str) -> str:

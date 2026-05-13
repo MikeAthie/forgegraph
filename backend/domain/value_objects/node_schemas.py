@@ -232,310 +232,140 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[st
     if not schema:
         return []  # Unknown type, skip validation
 
-    errors = []
+    errors: list[dict[str, Any]] = []
 
     for field_name, field_schema in schema.items():
-        value = config.get(field_name)
-        is_required = field_schema.get("required", False)
-        field_type = field_schema.get("type", "any")
+        errors.extend(_validate_schema_field(field_name, field_schema, config))
 
-        # Check required fields
-        if is_required and value is None:
+    _validate_node_type_config(errors, node_type, config)
+
+    return errors
+
+
+def _validate_schema_field(
+    field_name: str,
+    field_schema: dict[str, Any],
+    config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    value = config.get(field_name)
+    if field_schema.get("required", False) and value is None:
+        return [
+            {
+                "field": field_name,
+                "message": f"Required field '{field_name}' is missing",
+                "suggestion": f"Add a value for '{field_name}'",
+            }
+        ]
+    if value is None:
+        return []
+
+    type_error = _validate_type(field_name, value, field_schema)
+    if type_error:
+        return [type_error]
+
+    field_type = field_schema.get("type", "any")
+    errors: list[dict[str, Any]] = []
+    if field_type in ("number", "integer"):
+        _validate_number_constraints(errors, field_name, value, field_schema)
+    if field_type == "string":
+        _validate_string_constraints(errors, field_name, value, field_schema)
+    if field_type == "array":
+        _validate_array_constraints(errors, field_name, value, field_schema)
+    if "enum" in field_schema and value not in field_schema["enum"]:
+        errors.append(
+            {
+                "field": field_name,
+                "message": f"'{field_name}' must be one of: {', '.join(field_schema['enum'])}",
+                "suggestion": f"Use one of the allowed values: {', '.join(field_schema['enum'])}",
+            }
+        )
+    return errors
+
+
+def _validate_number_constraints(
+    errors: list[dict[str, Any]],
+    field_name: str,
+    value: Any,
+    field_schema: dict[str, Any],
+) -> None:
+    if "min" in field_schema and value < field_schema["min"]:
+        errors.append(
+            {
+                "field": field_name,
+                "message": f"'{field_name}' must be at least {field_schema['min']}",
+                "suggestion": f"Set '{field_name}' to {field_schema['min']} or higher",
+            }
+        )
+    if "max" in field_schema and value > field_schema["max"]:
+        errors.append(
+            {
+                "field": field_name,
+                "message": f"'{field_name}' must be at most {field_schema['max']}",
+                "suggestion": f"Set '{field_name}' to {field_schema['max']} or lower",
+            }
+        )
+
+
+def _validate_string_constraints(
+    errors: list[dict[str, Any]],
+    field_name: str,
+    value: Any,
+    field_schema: dict[str, Any],
+) -> None:
+    if "min_length" in field_schema and len(value) < field_schema["min_length"]:
+        errors.append(
+            {
+                "field": field_name,
+                "message": f"'{field_name}' is too short",
+                "suggestion": f"Provide a longer value for '{field_name}'",
+            }
+        )
+
+
+def _validate_array_constraints(
+    errors: list[dict[str, Any]],
+    field_name: str,
+    value: Any,
+    field_schema: dict[str, Any],
+) -> None:
+    if "min_items" in field_schema and len(value) < field_schema["min_items"]:
+        errors.append(
+            {
+                "field": field_name,
+                "message": f"'{field_name}' must contain at least {field_schema['min_items']} item(s)",
+                "suggestion": f"Add at least {field_schema['min_items']} item(s) to '{field_name}'",
+            }
+        )
+    if "items_type" not in field_schema:
+        return
+    expected_item_type = field_schema["items_type"]
+    for item in value:
+        if _validate_type(field_name, item, {"type": expected_item_type}):
             errors.append(
                 {
                     "field": field_name,
-                    "message": f"Required field '{field_name}' is missing",
-                    "suggestion": f"Add a value for '{field_name}'",
+                    "message": f"All items in '{field_name}' must be {expected_item_type} values",
+                    "suggestion": f"Only include {expected_item_type} values in '{field_name}'",
                 }
             )
-            continue
+            return
 
-        # Skip validation if value is not present and not required
-        if value is None:
-            continue
 
-        # Type validation
-        type_error = _validate_type(field_name, value, field_schema)
-        if type_error:
-            errors.append(type_error)
-            continue
-
-        # Min/max validation for numbers
-        if field_type in ("number", "integer"):
-            if "min" in field_schema and value < field_schema["min"]:
-                errors.append(
-                    {
-                        "field": field_name,
-                        "message": f"'{field_name}' must be at least {field_schema['min']}",
-                        "suggestion": f"Set '{field_name}' to {field_schema['min']} or higher",
-                    }
-                )
-            if "max" in field_schema and value > field_schema["max"]:
-                errors.append(
-                    {
-                        "field": field_name,
-                        "message": f"'{field_name}' must be at most {field_schema['max']}",
-                        "suggestion": f"Set '{field_name}' to {field_schema['max']} or lower",
-                    }
-                )
-
-        # Min length validation for strings
-        if field_type == "string" and "min_length" in field_schema:
-            if len(value) < field_schema["min_length"]:
-                errors.append(
-                    {
-                        "field": field_name,
-                        "message": f"'{field_name}' is too short",
-                        "suggestion": f"Provide a longer value for '{field_name}'",
-                    }
-                )
-
-        # Minimum items validation for arrays
-        if field_type == "array" and "min_items" in field_schema:
-            if len(value) < field_schema["min_items"]:
-                errors.append(
-                    {
-                        "field": field_name,
-                        "message": f"'{field_name}' must contain at least {field_schema['min_items']} item(s)",
-                        "suggestion": f"Add at least {field_schema['min_items']} item(s) to '{field_name}'",
-                    }
-                )
-
-        if field_type == "array" and "items_type" in field_schema:
-            expected_item_type = field_schema["items_type"]
-            for item in value:
-                item_error = _validate_type(field_name, item, {"type": expected_item_type})
-                if item_error:
-                    errors.append(
-                        {
-                            "field": field_name,
-                            "message": f"All items in '{field_name}' must be {expected_item_type} values",
-                            "suggestion": f"Only include {expected_item_type} values in '{field_name}'",
-                        }
-                    )
-                    break
-
-        # Enum validation
-        if "enum" in field_schema and value not in field_schema["enum"]:
-            errors.append(
-                {
-                    "field": field_name,
-                    "message": f"'{field_name}' must be one of: {', '.join(field_schema['enum'])}",
-                    "suggestion": f"Use one of the allowed values: {', '.join(field_schema['enum'])}",
-                }
-            )
-
+def _validate_node_type_config(
+    errors: list[dict[str, Any]],
+    node_type: str,
+    config: dict[str, Any],
+) -> None:
     if node_type == NodeType.PROMPT.value:
-        prompt_template = config.get("prompt_template")
-        prompt_id = config.get("prompt_id")
-        has_prompt_template = isinstance(prompt_template, str) and bool(prompt_template.strip())
-        has_prompt_id = isinstance(prompt_id, str) and bool(prompt_id.strip())
-        if not has_prompt_template and not has_prompt_id:
-            errors.append(
-                {
-                    "field": "prompt_template",
-                    "message": "Prompt node requires either 'prompt_template' or 'prompt_id'",
-                    "suggestion": "Set a prompt template directly or reference a prompt by id",
-                }
-            )
-
+        _validate_prompt_config(errors, config)
     if node_type == NodeType.AGENT.value:
-        tools = config.get("tools")
-        tool_selection = config.get("tool_selection")
-        if not isinstance(tools, list) and not isinstance(tool_selection, dict):
-            errors.append(
-                {
-                    "field": "tools",
-                    "message": "Agent node requires either 'tools' or 'tool_selection'",
-                    "suggestion": "Provide explicit tools or a tool_selection object",
-                }
-            )
-        if isinstance(tools, list):
-            normalized_tools = [
-                tool.strip() for tool in tools if isinstance(tool, str) and tool.strip()
-            ]
-
-            if len(normalized_tools) != len(tools):
-                errors.append(
-                    {
-                        "field": "tools",
-                        "message": "Agent tools must be non-empty strings",
-                        "suggestion": "Provide one or more tool names as non-empty strings",
-                    }
-                )
-
-            approval_required_tools = config.get("approval_required_tools")
-            if isinstance(approval_required_tools, list):
-                invalid_tools = [
-                    tool
-                    for tool in approval_required_tools
-                    if not isinstance(tool, str) or tool.strip() not in normalized_tools
-                ]
-                if invalid_tools:
-                    errors.append(
-                        {
-                            "field": "approval_required_tools",
-                            "message": "Approval-required tools must be included in 'tools'",
-                            "suggestion": "Only require approval for tools already listed in 'tools'",
-                        }
-                    )
-        else:
-            approval_required_tools = config.get("approval_required_tools")
-            if not isinstance(approval_required_tools, list):
-                approval_required_tools = None
-        if isinstance(approval_required_tools, list):
-            invalid_tools = [
-                tool
-                for tool in approval_required_tools
-                if not isinstance(tool, str) or not tool.strip()
-            ]
-            if invalid_tools:
-                errors.append(
-                    {
-                        "field": "approval_required_tools",
-                        "message": "Approval-required tools must be non-empty strings",
-                        "suggestion": "Only include non-empty tool names in 'approval_required_tools'",
-                    }
-                )
-
-        if isinstance(tool_selection, dict):
-            categories = tool_selection.get("categories")
-            names = tool_selection.get("names")
-            exclude_names = tool_selection.get("exclude_names")
-            max_tools = tool_selection.get("max_tools")
-
-            for field_name, value in (
-                ("categories", categories),
-                ("names", names),
-                ("exclude_names", exclude_names),
-            ):
-                if value is None:
-                    continue
-                if not isinstance(value, list):
-                    errors.append(
-                        {
-                            "field": "tool_selection",
-                            "message": f"tool_selection.{field_name} must contain non-empty strings",
-                            "suggestion": f"Only include non-empty strings in tool_selection.{field_name}",
-                        }
-                    )
-                    continue
-                if any(not isinstance(item, str) or not item.strip() for item in value):
-                    errors.append(
-                        {
-                            "field": "tool_selection",
-                            "message": f"tool_selection.{field_name} must contain non-empty strings",
-                            "suggestion": f"Only include non-empty strings in tool_selection.{field_name}",
-                        }
-                    )
-                    break
-
-            if max_tools is not None and (
-                not isinstance(max_tools, int) or isinstance(max_tools, bool) or max_tools < 1
-            ):
-                errors.append(
-                    {
-                        "field": "tool_selection",
-                        "message": "tool_selection.max_tools must be an integer >= 1",
-                        "suggestion": "Set tool_selection.max_tools to a positive integer",
-                    }
-                )
-
-        max_steps = config.get("max_steps")
-        max_tool_calls = config.get("max_tool_calls")
-        if (
-            isinstance(max_steps, int)
-            and isinstance(max_tool_calls, int)
-            and max_tool_calls > max_steps
-        ):
-            errors.append(
-                {
-                    "field": "max_tool_calls",
-                    "message": "'max_tool_calls' cannot exceed 'max_steps'",
-                    "suggestion": "Set 'max_tool_calls' to a value less than or equal to 'max_steps'",
-                }
-            )
-
+        _validate_agent_config(errors, config)
     if node_type == NodeType.OBSERVATION_SAVE.value:
-        _validate_exactly_one_source(
-            errors,
-            config,
-            field="content",
-            source_fields=["content", "content_path", "content_template"],
-            suggestion="Set exactly one of 'content', 'content_path', or 'content_template'",
-        )
-        _validate_at_most_one_source(
-            errors,
-            config,
-            field="title",
-            source_fields=["title", "title_path", "title_template"],
-        )
-        _validate_at_most_one_source(
-            errors,
-            config,
-            field="topic_key",
-            source_fields=["topic_key", "topic_key_path"],
-        )
-        _validate_at_most_one_source(
-            errors,
-            config,
-            field="tool_name",
-            source_fields=["tool_name", "tool_name_path"],
-        )
-        _validate_at_most_one_source(
-            errors,
-            config,
-            field="agent_id",
-            source_fields=["agent_id", "agent_id_path"],
-        )
-
-        if config.get("update_topic") is True and not _has_any_value(
-            config, ["topic_key", "topic_key_path"]
-        ):
-            errors.append(
-                {
-                    "field": "topic_key",
-                    "message": "'update_topic' requires 'topic_key' or 'topic_key_path'",
-                    "suggestion": "Set a topic key source before enabling 'update_topic'",
-                }
-            )
-
+        _validate_observation_save_config(errors, config)
     if node_type == NodeType.OBSERVATION_SEARCH.value:
-        _validate_exactly_one_source(
-            errors,
-            config,
-            field="query",
-            source_fields=["query", "query_path", "query_template"],
-            suggestion="Set exactly one of 'query', 'query_path', or 'query_template'",
-        )
-        _validate_at_most_one_source(
-            errors,
-            config,
-            field="topic_key",
-            source_fields=["topic_key", "topic_key_path"],
-        )
-        _validate_at_most_one_source(
-            errors,
-            config,
-            field="agent_id",
-            source_fields=["agent_id", "agent_id_path"],
-        )
-
+        _validate_observation_search_config(errors, config)
     if node_type == NodeType.OBSERVATION_CONTEXT.value:
-        _validate_exactly_one_source(
-            errors,
-            config,
-            field="query",
-            source_fields=["query", "query_path", "query_template"],
-            suggestion="Set exactly one of 'query', 'query_path', or 'query_template'",
-        )
-        _validate_at_most_one_source(
-            errors,
-            config,
-            field="agent_id",
-            source_fields=["agent_id", "agent_id_path"],
-        )
-
+        _validate_observation_context_config(errors, config)
     if node_type == NodeType.OBSERVATION_TIMELINE.value:
         _validate_at_most_one_source(
             errors,
@@ -544,7 +374,214 @@ def validate_node_config(node_type: str, config: dict[str, Any]) -> list[dict[st
             source_fields=["agent_id", "agent_id_path"],
         )
 
-    return errors
+
+def _validate_prompt_config(errors: list[dict[str, Any]], config: dict[str, Any]) -> None:
+    prompt_template = config.get("prompt_template")
+    prompt_id = config.get("prompt_id")
+    has_prompt_template = isinstance(prompt_template, str) and bool(prompt_template.strip())
+    has_prompt_id = isinstance(prompt_id, str) and bool(prompt_id.strip())
+    if has_prompt_template or has_prompt_id:
+        return
+    errors.append(
+        {
+            "field": "prompt_template",
+            "message": "Prompt node requires either 'prompt_template' or 'prompt_id'",
+            "suggestion": "Set a prompt template directly or reference a prompt by id",
+        }
+    )
+
+
+def _validate_agent_config(errors: list[dict[str, Any]], config: dict[str, Any]) -> None:
+    tools = config.get("tools")
+    tool_selection = config.get("tool_selection")
+    if not isinstance(tools, list) and not isinstance(tool_selection, dict):
+        errors.append(
+            {
+                "field": "tools",
+                "message": "Agent node requires either 'tools' or 'tool_selection'",
+                "suggestion": "Provide explicit tools or a tool_selection object",
+            }
+        )
+    approval_required_tools = _validate_agent_tools(errors, tools, config)
+    _validate_agent_tool_selection(errors, tool_selection)
+    _validate_agent_step_limits(errors, config)
+    _validate_approval_required_tools(errors, approval_required_tools)
+
+
+def _validate_agent_tools(
+    errors: list[dict[str, Any]],
+    tools: Any,
+    config: dict[str, Any],
+) -> list[Any] | None:
+    approval_required_tools = config.get("approval_required_tools")
+    if not isinstance(tools, list):
+        return approval_required_tools if isinstance(approval_required_tools, list) else None
+
+    normalized_tools = [tool.strip() for tool in tools if isinstance(tool, str) and tool.strip()]
+    if len(normalized_tools) != len(tools):
+        errors.append(
+            {
+                "field": "tools",
+                "message": "Agent tools must be non-empty strings",
+                "suggestion": "Provide one or more tool names as non-empty strings",
+            }
+        )
+    if isinstance(approval_required_tools, list):
+        invalid_tools = [
+            tool
+            for tool in approval_required_tools
+            if not isinstance(tool, str) or tool.strip() not in normalized_tools
+        ]
+        if invalid_tools:
+            errors.append(
+                {
+                    "field": "approval_required_tools",
+                    "message": "Approval-required tools must be included in 'tools'",
+                    "suggestion": "Only require approval for tools already listed in 'tools'",
+                }
+            )
+    return approval_required_tools if isinstance(approval_required_tools, list) else None
+
+
+def _validate_approval_required_tools(
+    errors: list[dict[str, Any]], approval_required_tools: list[Any] | None
+) -> None:
+    if not isinstance(approval_required_tools, list):
+        return
+    invalid_tools = [
+        tool for tool in approval_required_tools if not isinstance(tool, str) or not tool.strip()
+    ]
+    if invalid_tools:
+        errors.append(
+            {
+                "field": "approval_required_tools",
+                "message": "Approval-required tools must be non-empty strings",
+                "suggestion": "Only include non-empty tool names in 'approval_required_tools'",
+            }
+        )
+
+
+def _validate_agent_tool_selection(errors: list[dict[str, Any]], tool_selection: Any) -> None:
+    if not isinstance(tool_selection, dict):
+        return
+    for field_name in ("categories", "names", "exclude_names"):
+        _validate_tool_selection_strings(errors, field_name, tool_selection.get(field_name))
+
+    max_tools = tool_selection.get("max_tools")
+    if max_tools is not None and (
+        not isinstance(max_tools, int) or isinstance(max_tools, bool) or max_tools < 1
+    ):
+        errors.append(
+            {
+                "field": "tool_selection",
+                "message": "tool_selection.max_tools must be an integer >= 1",
+                "suggestion": "Set tool_selection.max_tools to a positive integer",
+            }
+        )
+
+
+def _validate_tool_selection_strings(
+    errors: list[dict[str, Any]], field_name: str, value: Any
+) -> None:
+    if value is None:
+        return
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        errors.append(
+            {
+                "field": "tool_selection",
+                "message": f"tool_selection.{field_name} must contain non-empty strings",
+                "suggestion": f"Only include non-empty strings in tool_selection.{field_name}",
+            }
+        )
+
+
+def _validate_agent_step_limits(errors: list[dict[str, Any]], config: dict[str, Any]) -> None:
+    max_steps = config.get("max_steps")
+    max_tool_calls = config.get("max_tool_calls")
+    if not (
+        isinstance(max_steps, int)
+        and isinstance(max_tool_calls, int)
+        and max_tool_calls > max_steps
+    ):
+        return
+    errors.append(
+        {
+            "field": "max_tool_calls",
+            "message": "'max_tool_calls' cannot exceed 'max_steps'",
+            "suggestion": "Set 'max_tool_calls' to a value less than or equal to 'max_steps'",
+        }
+    )
+
+
+def _validate_observation_save_config(errors: list[dict[str, Any]], config: dict[str, Any]) -> None:
+    _validate_exactly_one_source(
+        errors,
+        config,
+        field="content",
+        source_fields=["content", "content_path", "content_template"],
+        suggestion="Set exactly one of 'content', 'content_path', or 'content_template'",
+    )
+    for field, source_fields in (
+        ("title", ["title", "title_path", "title_template"]),
+        ("topic_key", ["topic_key", "topic_key_path"]),
+        ("tool_name", ["tool_name", "tool_name_path"]),
+        ("agent_id", ["agent_id", "agent_id_path"]),
+    ):
+        _validate_at_most_one_source(errors, config, field=field, source_fields=source_fields)
+    if config.get("update_topic") is True and not _has_any_value(
+        config, ["topic_key", "topic_key_path"]
+    ):
+        errors.append(
+            {
+                "field": "topic_key",
+                "message": "'update_topic' requires 'topic_key' or 'topic_key_path'",
+                "suggestion": "Set a topic key source before enabling 'update_topic'",
+            }
+        )
+
+
+def _validate_observation_search_config(
+    errors: list[dict[str, Any]], config: dict[str, Any]
+) -> None:
+    _validate_exactly_one_source(
+        errors,
+        config,
+        field="query",
+        source_fields=["query", "query_path", "query_template"],
+        suggestion="Set exactly one of 'query', 'query_path', or 'query_template'",
+    )
+    _validate_at_most_one_source(
+        errors,
+        config,
+        field="topic_key",
+        source_fields=["topic_key", "topic_key_path"],
+    )
+    _validate_at_most_one_source(
+        errors,
+        config,
+        field="agent_id",
+        source_fields=["agent_id", "agent_id_path"],
+    )
+
+
+def _validate_observation_context_config(
+    errors: list[dict[str, Any]], config: dict[str, Any]
+) -> None:
+    _validate_exactly_one_source(
+        errors,
+        config,
+        field="query",
+        source_fields=["query", "query_path", "query_template"],
+        suggestion="Set exactly one of 'query', 'query_path', or 'query_template'",
+    )
+    _validate_at_most_one_source(
+        errors,
+        config,
+        field="agent_id",
+        source_fields=["agent_id", "agent_id_path"],
+    )
 
 
 def _validate_type(field_name: str, value: Any, schema: dict[str, Any]) -> dict[str, Any] | None:

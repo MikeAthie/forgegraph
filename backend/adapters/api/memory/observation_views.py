@@ -218,6 +218,25 @@ class MemoryObservationListCreateView(APIView):
                 return processed_response
 
         service = MemoryObservationService()
+        return self._create_observation_with_retries(
+            user=user,
+            tenant_id=tenant_id,
+            validated_data=validated_data,
+            service=service,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+        )
+
+    def _create_observation_with_retries(
+        self,
+        *,
+        user: User,
+        tenant_id: UUID,
+        validated_data: dict[str, Any],
+        service: MemoryObservationService,
+        idempotency_key: str,
+        request_hash: str,
+    ) -> Response:
         for attempt in range(_DEADLOCK_RETRY_ATTEMPTS):
             try:
                 return self._create_observation_response(

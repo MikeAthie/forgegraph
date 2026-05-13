@@ -149,20 +149,65 @@ class Command(BaseCommand):
 
     def _process_entry(self, entry: RunQueueEntry, queue_settings: Any) -> None:
         run = entry.run
-        if run.status in TERMINAL_RUN_STATUSES:
-            logger.info(
-                "Skipping stale run queue entry %s for terminal run %s (%s).",
-                entry.id,
-                run.id,
-                run.status,
-            )
-            mark_completed(entry)
-            return
-
         user = run.owner
         tenant_id = get_tenant_id_for_user(user)
         session_id = str(run.thread_id) if run.thread_id else None
         graph_version = run.graph_version
+
+        if self._complete_terminal_queue_entry(entry, run):
+            return
+        if not self._claim_lifecycle_tasks(entry, run, queue_settings):
+            return
+
+        prepared_graph = self._prepare_graph_for_entry(entry, run, graph_version, user)
+        if prepared_graph is None:
+            return
+        outbound_graph = self._prepare_outbound_graph_for_entry(entry, run, prepared_graph)
+        if outbound_graph is None:
+            return
+        llm_access = self._resolve_llm_access_for_entry(entry, run, prepared_graph, user)
+        if llm_access is None:
+            return
+        engine_instance_id = self._dispatch_entry_to_engine(
+            entry=entry,
+            run=run,
+            graph_version=graph_version,
+            user=user,
+            tenant_id=tenant_id,
+            session_id=session_id,
+            outbound_graph=outbound_graph,
+            prepared_graph=prepared_graph,
+            llm_access=llm_access,
+        )
+        if engine_instance_id is None:
+            return
+
+        should_mark_tasks_queued = self._complete_engine_dispatch(
+            entry=entry,
+            run=run,
+            engine_instance_id=engine_instance_id,
+        )
+        if should_mark_tasks_queued:
+            self._mark_lifecycle_tasks_engine_queued(entry, run)
+
+    def _complete_terminal_queue_entry(self, entry: RunQueueEntry, run: Any) -> bool:
+        if run.status not in TERMINAL_RUN_STATUSES:
+            return False
+        logger.info(
+            "Skipping stale run queue entry %s for terminal run %s (%s).",
+            entry.id,
+            run.id,
+            run.status,
+        )
+        mark_completed(entry)
+        return True
+
+    def _claim_lifecycle_tasks(
+        self,
+        entry: RunQueueEntry,
+        run: Any,
+        queue_settings: Any,
+    ) -> bool:
         for lifecycle_task in run.task_lifecycle_records.exclude(
             status__in=["completed", "failed", "dead_lettered", "cancelled"]
         ):
@@ -197,9 +242,16 @@ class Command(BaseCommand):
                     retryable=True,
                     settings_override=queue_settings,
                 )
-                return
+                return False
+        return True
 
-        checkpoint = None
+    def _prepare_graph_for_entry(
+        self,
+        entry: RunQueueEntry,
+        run: Any,
+        graph_version: Any,
+        user: Any,
+    ) -> dict[str, Any] | None:
         try:
             checkpoint = run.checkpoint
         except Exception:
@@ -207,23 +259,27 @@ class Command(BaseCommand):
 
         checkpoint_graph_json = checkpoint.graph_json if checkpoint is not None else None
         if isinstance(checkpoint_graph_json, dict):
-            prepared_graph = copy.deepcopy(checkpoint_graph_json)
-        elif isinstance(run.dispatch_graph_json, dict):
-            prepared_graph = copy.deepcopy(run.dispatch_graph_json)
-        else:
-            try:
-                prepared_graph = prepare_graph_for_engine(
-                    graph_version.graph_json,
-                    user,
-                    company_id=graph_version.graph_id,
-                )
-            except PromptTemplateResolutionError as exc:
-                self._fail_run(entry, run, f"Invalid prompt configuration: {exc}")
-                return
-            except (SubgraphResolutionError, ValueError) as exc:
-                self._fail_run(entry, run, f"Invalid subgraph: {exc}")
-                return
+            return copy.deepcopy(checkpoint_graph_json)
+        if isinstance(run.dispatch_graph_json, dict):
+            return copy.deepcopy(run.dispatch_graph_json)
+        try:
+            return prepare_graph_for_engine(
+                graph_version.graph_json,
+                user,
+                company_id=graph_version.graph_id,
+            )
+        except PromptTemplateResolutionError as exc:
+            self._fail_run(entry, run, f"Invalid prompt configuration: {exc}")
+        except (SubgraphResolutionError, ValueError) as exc:
+            self._fail_run(entry, run, f"Invalid subgraph: {exc}")
+        return None
 
+    def _prepare_outbound_graph_for_entry(
+        self,
+        entry: RunQueueEntry,
+        run: Any,
+        prepared_graph: dict[str, Any],
+    ) -> dict[str, Any] | None:
         try:
             outbound_graph = prepare_tool_executions_for_dispatch(
                 run=run,
@@ -235,16 +291,24 @@ class Command(BaseCommand):
                     outbound_graph=outbound_graph,
                 )
                 run.save(update_fields=["dispatch_graph_json"])
-                outbound_graph = outbound_with_context or outbound_graph
+                return outbound_with_context or outbound_graph
+            return outbound_graph
         except ToolExecutionDispatchBlocked as exc:
             self._fail_run(entry, run, f"Tool execution dispatch blocked: {exc}")
-            return
+            return None
 
+    def _resolve_llm_access_for_entry(
+        self,
+        entry: RunQueueEntry,
+        run: Any,
+        prepared_graph: dict[str, Any],
+        user: Any,
+    ) -> Any | None:
         try:
             llm_access = engine_llm_access_from_graph(prepared_graph, user)
         except LLMAccessValidationError as exc:
             self._fail_run(entry, run, f"LLM access is invalid: {exc.details}")
-            return
+            return None
 
         credential_errors = validate_prompt_credentials(
             prepared_graph,
@@ -253,8 +317,22 @@ class Command(BaseCommand):
         )
         if credential_errors:
             self._fail_run(entry, run, "Prompt credentials are missing or invalid.")
-            return
+            return None
+        return llm_access
 
+    def _dispatch_entry_to_engine(
+        self,
+        *,
+        entry: RunQueueEntry,
+        run: Any,
+        graph_version: Any,
+        user: Any,
+        tenant_id: str,
+        session_id: str | None,
+        outbound_graph: dict[str, Any],
+        prepared_graph: dict[str, Any],
+        llm_access: Any,
+    ) -> str | None:
         callback_url = resolve_engine_callback_url(run_id=str(run.id))
         memory_config_json = build_memory_config_json(
             graph_version.graph, user, session_id=session_id
@@ -281,20 +359,14 @@ class Command(BaseCommand):
         except EngineConnectionError as exc:
             logger.error("Engine connection failed for run %s: %s", run.id, exc)
             self._fail_run(entry, run, f"Engine connection failed: {exc}", retryable=True)
-            return
+            return None
         except EngineExecutionError as exc:
             logger.error("Engine rejected run %s: %s", run.id, exc)
             self._fail_run(entry, run, f"Engine rejected run: {exc}")
-            return
+            return None
+        return target.engine_id
 
-        should_mark_tasks_queued = self._complete_engine_dispatch(
-            entry=entry,
-            run=run,
-            engine_instance_id=target.engine_id,
-        )
-        if not should_mark_tasks_queued:
-            return
-
+    def _mark_lifecycle_tasks_engine_queued(self, entry: RunQueueEntry, run: Any) -> None:
         for lifecycle_task in run.task_lifecycle_records.exclude(
             status__in=["completed", "failed", "dead_lettered", "cancelled"]
         ):

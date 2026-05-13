@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from django.db import OperationalError, transaction
@@ -49,6 +49,18 @@ class ProjectionWorkerResult:
 _DEADLOCK_RETRY_ATTEMPTS = 3
 
 
+@dataclass(slots=True)
+class ProjectionPassState:
+    processed: int = 0
+    skipped: int = 0
+    noop: int = 0
+    deadlettered: int = 0
+    events_selected: int = 0
+    max_lag_seconds: float = 0.0
+    projection_durations: dict[str, float] = field(default_factory=dict)
+    projection_counts: dict[str, int] = field(default_factory=dict)
+
+
 def process_pending_projection_events(
     *,
     organization_id: UUID | str | None = None,
@@ -57,122 +69,188 @@ def process_pending_projection_events(
 ) -> ProjectionWorkerResult:
     started_at = time.perf_counter()
     names = tuple(projection_names)
-    processed = 0
-    skipped = 0
-    noop = 0
-    deadlettered = 0
-    events_selected = 0
-    projection_durations = dict.fromkeys(names, 0.0)
-    projection_counts = dict.fromkeys(names, 0)
+    state = ProjectionPassState(
+        projection_durations=dict.fromkeys(names, 0.0),
+        projection_counts=dict.fromkeys(names, 0),
+    )
     organizations = _organizations_with_pending_events(
         organization_id=organization_id,
         projection_names=names,
     )
     remaining_batch = max(int(batch_size or 1), 1)
-    max_lag_seconds = 0.0
     projection_recovery_cache: dict[UUID, bool] = {}
     run_cache: dict[str, Run | None] = {}
     for organization in organizations:
         if remaining_batch <= 0:
             break
-        events = _pending_events_for_organization(
+        selected = _process_pending_events_for_organization(
             organization=organization,
             projection_names=names,
             batch_size=remaining_batch,
+            state=state,
+            projection_recovery_cache=projection_recovery_cache,
+            run_cache=run_cache,
         )
-        remaining_batch -= len(events)
-        events_selected += len(events)
-        if events:
-            _ensure_projection_cursors(organization=organization, projection_names=names)
-        noop_cursor_targets: dict[str, DomainEvent] = {}
-        for event in events:
-            event_processed = False
-            event_deadlettered = False
-            relevant_projection_names = tuple(
-                name for name in projection_names_for_event(event) if name in names
-            )
-            noop_projection_names = tuple(
-                name for name in names if name not in relevant_projection_names
-            )
-            notification_required = bool(_projection_notifications_for(event))
-            for projection_name in relevant_projection_names:
-                projection_started_at = time.perf_counter()
-                outcome = _process_event_for_projection(
-                    event_id=event.id,
-                    projection_name=projection_name,
-                )
-                projection_durations[projection_name] += time.perf_counter() - projection_started_at
-                projection_counts[projection_name] += 1
-                if outcome == "processed":
-                    processed += 1
-                    event_processed = True
-                    max_lag_seconds = max(
-                        max_lag_seconds,
-                        max(0.0, (timezone.now() - event.occurred_at).total_seconds()),
-                    )
-                elif outcome == "deadlettered":
-                    deadlettered += 1
-                    event_processed = True
-                    event_deadlettered = True
-                else:
-                    skipped += 1
-            if noop_projection_names:
-                noop += len(noop_projection_names)
-                for projection_name in noop_projection_names:
-                    noop_cursor_targets[projection_name] = event
-            if event_processed:
-                _record_projection_update(event, run_cache=run_cache)
-            if (event_processed or notification_required) and not event_deadlettered:
-                _record_organization_projection_notifications(
-                    event,
-                    recovery_cache=projection_recovery_cache,
-                )
-            if event_deadlettered:
-                break
-        if noop_cursor_targets:
-            _advance_noop_cursors(
-                organization=organization,
-                cursor_targets=noop_cursor_targets,
-            )
+        remaining_batch -= selected
     duration_seconds = time.perf_counter() - started_at
     result = ProjectionWorkerResult(
-        processed=processed,
-        skipped=skipped,
-        noop=noop,
-        deadlettered=deadlettered,
+        processed=state.processed,
+        skipped=state.skipped,
+        noop=state.noop,
+        deadlettered=state.deadlettered,
         organizations=len(organizations),
-        events_selected=events_selected,
+        events_selected=state.events_selected,
         duration_seconds=duration_seconds,
-        projection_durations=projection_durations,
+        projection_durations=state.projection_durations,
     )
-    if processed or skipped or noop or deadlettered:
+    if state.processed or state.skipped or state.noop or state.deadlettered:
         logger.info(
             "os_projection_worker_pass_completed",
             extra={
                 "organizations": len(organizations),
-                "events_selected": events_selected,
-                "processed": processed,
-                "skipped": skipped,
-                "noop": noop,
-                "deadlettered": deadlettered,
+                "events_selected": state.events_selected,
+                "processed": state.processed,
+                "skipped": state.skipped,
+                "noop": state.noop,
+                "deadlettered": state.deadlettered,
                 "duration_seconds": round(duration_seconds, 6),
                 "projection_durations": {
-                    name: round(value, 6) for name, value in projection_durations.items()
+                    name: round(value, 6) for name, value in state.projection_durations.items()
                 },
-                "projection_counts": projection_counts,
+                "projection_counts": state.projection_counts,
             },
         )
         _record_pass_metrics(
             duration_seconds=duration_seconds,
-            events_selected=events_selected,
-            processed=processed,
-            skipped=skipped,
-            noop=noop,
-            deadlettered=deadlettered,
-            projection_durations=projection_durations,
-            max_lag_seconds=max_lag_seconds,
+            events_selected=state.events_selected,
+            processed=state.processed,
+            skipped=state.skipped,
+            noop=state.noop,
+            deadlettered=state.deadlettered,
+            projection_durations=state.projection_durations,
+            max_lag_seconds=state.max_lag_seconds,
         )
     return result
+
+
+def _process_pending_events_for_organization(
+    *,
+    organization: Organization,
+    projection_names: tuple[str, ...],
+    batch_size: int,
+    state: ProjectionPassState,
+    projection_recovery_cache: dict[UUID, bool],
+    run_cache: dict[str, Run | None],
+) -> int:
+    events = _pending_events_for_organization(
+        organization=organization,
+        projection_names=projection_names,
+        batch_size=batch_size,
+    )
+    state.events_selected += len(events)
+    if events:
+        _ensure_projection_cursors(organization=organization, projection_names=projection_names)
+
+    noop_cursor_targets: dict[str, DomainEvent] = {}
+    for event in events:
+        event_deadlettered = _process_projection_event(
+            event=event,
+            projection_names=projection_names,
+            state=state,
+            noop_cursor_targets=noop_cursor_targets,
+            projection_recovery_cache=projection_recovery_cache,
+            run_cache=run_cache,
+        )
+        if event_deadlettered:
+            break
+    if noop_cursor_targets:
+        _advance_noop_cursors(organization=organization, cursor_targets=noop_cursor_targets)
+    return len(events)
+
+
+def _process_projection_event(
+    *,
+    event: DomainEvent,
+    projection_names: tuple[str, ...],
+    state: ProjectionPassState,
+    noop_cursor_targets: dict[str, DomainEvent],
+    projection_recovery_cache: dict[UUID, bool],
+    run_cache: dict[str, Run | None],
+) -> bool:
+    event_processed = False
+    event_deadlettered = False
+    relevant_projection_names = tuple(
+        name for name in projection_names_for_event(event) if name in projection_names
+    )
+    noop_projection_names = tuple(
+        name for name in projection_names if name not in relevant_projection_names
+    )
+    for projection_name in relevant_projection_names:
+        outcome = _process_relevant_projection(event, projection_name, state)
+        event_processed = event_processed or outcome in {"processed", "deadlettered"}
+        event_deadlettered = event_deadlettered or outcome == "deadlettered"
+    _record_noop_projection_targets(event, noop_projection_names, noop_cursor_targets, state)
+    _record_projection_side_effects(
+        event=event,
+        event_processed=event_processed,
+        event_deadlettered=event_deadlettered,
+        projection_recovery_cache=projection_recovery_cache,
+        run_cache=run_cache,
+    )
+    return event_deadlettered
+
+
+def _process_relevant_projection(
+    event: DomainEvent,
+    projection_name: str,
+    state: ProjectionPassState,
+) -> str:
+    projection_started_at = time.perf_counter()
+    outcome = _process_event_for_projection(event_id=event.id, projection_name=projection_name)
+    state.projection_durations[projection_name] += time.perf_counter() - projection_started_at
+    state.projection_counts[projection_name] += 1
+    if outcome == "processed":
+        state.processed += 1
+        state.max_lag_seconds = max(
+            state.max_lag_seconds,
+            max(0.0, (timezone.now() - event.occurred_at).total_seconds()),
+        )
+    elif outcome == "deadlettered":
+        state.deadlettered += 1
+    else:
+        state.skipped += 1
+    return outcome
+
+
+def _record_noop_projection_targets(
+    event: DomainEvent,
+    noop_projection_names: tuple[str, ...],
+    noop_cursor_targets: dict[str, DomainEvent],
+    state: ProjectionPassState,
+) -> None:
+    if not noop_projection_names:
+        return
+    state.noop += len(noop_projection_names)
+    for projection_name in noop_projection_names:
+        noop_cursor_targets[projection_name] = event
+
+
+def _record_projection_side_effects(
+    *,
+    event: DomainEvent,
+    event_processed: bool,
+    event_deadlettered: bool,
+    projection_recovery_cache: dict[UUID, bool],
+    run_cache: dict[str, Run | None],
+) -> None:
+    if event_processed:
+        _record_projection_update(event, run_cache=run_cache)
+    notification_required = bool(_projection_notifications_for(event))
+    if (event_processed or notification_required) and not event_deadlettered:
+        _record_organization_projection_notifications(
+            event,
+            recovery_cache=projection_recovery_cache,
+        )
 
 
 def _process_event_for_projection(*, event_id: UUID, projection_name: str) -> str:

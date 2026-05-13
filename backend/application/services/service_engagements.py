@@ -156,7 +156,13 @@ def update_service_catalog_item(
     }
     for input_key, attr in field_map.items():
         if input_key in data:
-            setattr(item, attr, str(data[input_key]).strip() if input_key in {"slug", "title"} else str(data[input_key] or ""))
+            setattr(
+                item,
+                attr,
+                str(data[input_key]).strip()
+                if input_key in {"slug", "title"}
+                else str(data[input_key] or ""),
+            )
             update_fields.append(attr)
     json_fields = {
         "required_pack_ids": ("required_pack_ids_json", list),
@@ -214,22 +220,45 @@ def update_service_engagement(
     data: dict[str, Any],
 ) -> ServiceEngagement:
     update_fields = ["updated_at"]
-    if "status" in data:
-        engagement.status = str(data["status"])
-        update_fields.append("status")
-        now = timezone.now()
-        if engagement.status == "in_progress" and engagement.started_at is None:
-            engagement.started_at = now
-            update_fields.append("started_at")
-        if engagement.status == "delivered" and engagement.delivered_at is None:
-            engagement.delivered_at = now
-            update_fields.append("delivered_at")
-        if engagement.status == "completed" and engagement.completed_at is None:
-            engagement.completed_at = now
-            update_fields.append("completed_at")
+    _apply_service_engagement_status(engagement, data, update_fields)
     if "customer_status" in data:
         engagement.customer_status = str(data["customer_status"])
         update_fields.append("customer_status")
+    _apply_service_engagement_json_fields(engagement, data, update_fields)
+    _apply_service_engagement_text_fields(engagement, data, update_fields)
+    if "assigned_operator" in data:
+        engagement.assigned_operator = data["assigned_operator"]
+        update_fields.append("assigned_operator")
+    engagement.save(update_fields=sorted(set(update_fields)))
+    return engagement
+
+
+def _apply_service_engagement_status(
+    engagement: ServiceEngagement,
+    data: dict[str, Any],
+    update_fields: list[str],
+) -> None:
+    if "status" not in data:
+        return
+    engagement.status = str(data["status"])
+    update_fields.append("status")
+    now = timezone.now()
+    if engagement.status == "in_progress" and engagement.started_at is None:
+        engagement.started_at = now
+        update_fields.append("started_at")
+    if engagement.status == "delivered" and engagement.delivered_at is None:
+        engagement.delivered_at = now
+        update_fields.append("delivered_at")
+    if engagement.status == "completed" and engagement.completed_at is None:
+        engagement.completed_at = now
+        update_fields.append("completed_at")
+
+
+def _apply_service_engagement_json_fields(
+    engagement: ServiceEngagement,
+    data: dict[str, Any],
+    update_fields: list[str],
+) -> None:
     for input_key, attr in {
         "intake_data": "intake_data_json",
         "required_pack_ids": "required_pack_ids_json",
@@ -244,6 +273,13 @@ def update_service_engagement(
                 _json_id_list(value) if input_key.endswith("_ids") else dict(value),
             )
             update_fields.append(attr)
+
+
+def _apply_service_engagement_text_fields(
+    engagement: ServiceEngagement,
+    data: dict[str, Any],
+    update_fields: list[str],
+) -> None:
     for input_key, attr in {
         "public_summary": "public_summary",
         "internal_notes": "internal_notes",
@@ -252,11 +288,6 @@ def update_service_engagement(
         if input_key in data:
             setattr(engagement, attr, str(data.get(input_key) or ""))
             update_fields.append(attr)
-    if "assigned_operator" in data:
-        engagement.assigned_operator = data["assigned_operator"]
-        update_fields.append("assigned_operator")
-    engagement.save(update_fields=sorted(set(update_fields)))
-    return engagement
 
 
 def create_service_deliverable(

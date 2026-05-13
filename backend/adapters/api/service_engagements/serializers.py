@@ -113,7 +113,9 @@ class ServiceEngagementCreateSerializer(serializers.Serializer[Any]):
         child=serializers.CharField(max_length=160),
         required=False,
     )
-    operation_ids = serializers.ListField(child=serializers.UUIDField(), required=False, default=list)
+    operation_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list
+    )
     assigned_operator_id = serializers.UUIDField(required=False, allow_null=True)
     metadata = serializers.JSONField(required=False, default=dict)
 
@@ -152,7 +154,9 @@ class ServiceEngagementPatchSerializer(ServiceEngagementCreateSerializer):
 
 class ServiceDeliverableCreateSerializer(serializers.Serializer[Any]):
     title = serializers.CharField(max_length=255)
-    deliverable_type = serializers.CharField(max_length=80, required=False, allow_blank=True, default="")
+    deliverable_type = serializers.CharField(
+        max_length=80, required=False, allow_blank=True, default=""
+    )
     status = serializers.ChoiceField(
         choices=["draft", "in_review", "ready", "delivered", "accepted", "archived"],
         required=False,

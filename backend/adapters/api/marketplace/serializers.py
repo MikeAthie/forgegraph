@@ -128,36 +128,30 @@ class MarketplaceReleaseCreateSerializer(serializers.Serializer[Any]):
             "transform": "runtime_transform",
         }[execution_node_type]
 
-    def _validate_runtime_tool_manifest(
-        self,
+    @staticmethod
+    def _validate_runtime_tool_identity(
         runtime_manifest: dict[str, Any],
         release_version: str,
-        config_defaults: dict[str, Any],
-        manifest_version: int,
-    ) -> None:
-        if manifest_version < 2:
-            raise serializers.ValidationError(
-                {"manifest_version": ["New runtime tool releases must use manifest_version 2."]}
-            )
-
+    ) -> str:
         name = str(runtime_manifest.get("name") or "").strip()
         if not name:
             raise serializers.ValidationError(
                 {"runtime_manifest": ["Runtime tool manifest requires a non-empty name."]}
             )
-
         runtime_manifest_version = str(runtime_manifest.get("version") or "").strip()
         if runtime_manifest_version and runtime_manifest_version != release_version:
             raise serializers.ValidationError(
                 {"runtime_manifest": ["runtime_manifest.version must match the release version."]}
             )
-
         category = str(runtime_manifest.get("category") or "").strip()
         if not category:
             raise serializers.ValidationError(
                 {"runtime_manifest": ["Runtime tool manifest requires a non-empty category."]}
             )
+        return name
 
+    @staticmethod
+    def _validate_runtime_tool_schemas(runtime_manifest: dict[str, Any]) -> None:
         input_schema = runtime_manifest.get("input_schema")
         if not isinstance(input_schema, dict):
             raise serializers.ValidationError(
@@ -169,17 +163,8 @@ class MarketplaceReleaseCreateSerializer(serializers.Serializer[Any]):
                 {"runtime_manifest": ["runtime_manifest.output_schema must be an object."]}
             )
 
-        execution = runtime_manifest.get("execution")
-        if not isinstance(execution, dict):
-            raise serializers.ValidationError(
-                {"runtime_manifest": ["Runtime tool manifests require an execution object."]}
-            )
-        execution_type = str(execution.get("type") or "").strip().lower()
-        if execution_type not in {"http", "local"}:
-            raise serializers.ValidationError(
-                {"runtime_manifest": ["Runtime tool execution.type must be 'http' or 'local'."]}
-            )
-
+    @staticmethod
+    def _validate_runtime_tool_side_effects(runtime_manifest: dict[str, Any]) -> None:
         side_effects = runtime_manifest.get("side_effects")
         if not isinstance(side_effects, dict):
             raise serializers.ValidationError(
@@ -195,20 +180,35 @@ class MarketplaceReleaseCreateSerializer(serializers.Serializer[Any]):
                 {"runtime_manifest": ["side_effects.idempotent must be a boolean."]}
             )
 
-        visibility = runtime_manifest.get("visibility")
-        if visibility is not None and str(visibility).strip().lower() not in {"public", "internal"}:
+    @staticmethod
+    def _validate_runtime_tool_execution(runtime_manifest: dict[str, Any]) -> None:
+        execution = runtime_manifest.get("execution")
+        if not isinstance(execution, dict):
             raise serializers.ValidationError(
-                {"runtime_manifest": ["visibility must be 'public' or 'internal' when provided."]}
+                {"runtime_manifest": ["Runtime tool manifests require an execution object."]}
             )
+        execution_type = str(execution.get("type") or "").strip().lower()
+        if execution_type not in {"http", "local"}:
+            raise serializers.ValidationError(
+                {"runtime_manifest": ["Runtime tool execution.type must be 'http' or 'local'."]}
+            )
+        MarketplaceReleaseCreateSerializer._validate_runtime_tool_execution_config(
+            execution,
+            execution_type,
+        )
 
+    @staticmethod
+    def _validate_runtime_tool_execution_config(
+        execution: dict[str, Any],
+        execution_type: str,
+    ) -> None:
         if execution_type == "http":
             http_config = execution.get("http")
             if not isinstance(http_config, dict):
                 raise serializers.ValidationError(
                     {"runtime_manifest": ["HTTP runtime tool manifests require execution.http."]}
                 )
-            url = str(http_config.get("url") or "").strip()
-            if not url:
+            if not str(http_config.get("url") or "").strip():
                 raise serializers.ValidationError(
                     {
                         "runtime_manifest": [
@@ -216,15 +216,13 @@ class MarketplaceReleaseCreateSerializer(serializers.Serializer[Any]):
                         ]
                     }
                 )
-
         if execution_type == "local":
             local_config = execution.get("local")
             if not isinstance(local_config, dict):
                 raise serializers.ValidationError(
                     {"runtime_manifest": ["Local runtime tool manifests require execution.local."]}
                 )
-            handler = str(local_config.get("handler") or "").strip()
-            if not handler:
+            if not str(local_config.get("handler") or "").strip():
                 raise serializers.ValidationError(
                     {
                         "runtime_manifest": [
@@ -232,6 +230,29 @@ class MarketplaceReleaseCreateSerializer(serializers.Serializer[Any]):
                         ]
                     }
                 )
+
+    def _validate_runtime_tool_manifest(
+        self,
+        runtime_manifest: dict[str, Any],
+        release_version: str,
+        config_defaults: dict[str, Any],
+        manifest_version: int,
+    ) -> None:
+        if manifest_version < 2:
+            raise serializers.ValidationError(
+                {"manifest_version": ["New runtime tool releases must use manifest_version 2."]}
+            )
+
+        name = self._validate_runtime_tool_identity(runtime_manifest, release_version)
+        self._validate_runtime_tool_schemas(runtime_manifest)
+        self._validate_runtime_tool_execution(runtime_manifest)
+        self._validate_runtime_tool_side_effects(runtime_manifest)
+
+        visibility = runtime_manifest.get("visibility")
+        if visibility is not None and str(visibility).strip().lower() not in {"public", "internal"}:
+            raise serializers.ValidationError(
+                {"runtime_manifest": ["visibility must be 'public' or 'internal' when provided."]}
+            )
 
         tool_name = str(config_defaults.get("tool") or "").strip()
         if tool_name and tool_name != name:

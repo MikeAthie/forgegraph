@@ -811,31 +811,44 @@ def _ensure_attempt(
         },
     )
     update_fields: list[str] = []
-    if node_run is not None and attempt.node_run_id != node_run.id:
-        attempt.node_run = node_run
-        update_fields.append("node_run")
-    if status and attempt.status != status:
-        attempt.status = status
-        update_fields.append("status")
-    if owner_component and attempt.owner_component != owner_component:
-        attempt.owner_component = owner_component
-        update_fields.append("owner_component")
+    if node_run is not None:
+        _set_if_changed(attempt, "node_run", node_run, update_fields)
+    if status:
+        _set_if_changed(attempt, "status", status, update_fields)
+    if owner_component:
+        _set_if_changed(attempt, "owner_component", owner_component, update_fields)
     if status == "running" and attempt.started_at is None:
         attempt.started_at = event_time
         update_fields.append("started_at")
     if status in {"completed", "failed", "dead_lettered", "cancelled"} and attempt.ended_at is None:
         attempt.ended_at = event_time
         update_fields.append("ended_at")
-    if reason and status in {"retry_scheduled", "failed", "dead_lettered"}:
-        if attempt.retry_reason != reason and status == "retry_scheduled":
-            attempt.retry_reason = reason
-            update_fields.append("retry_reason")
-        if attempt.last_error != reason and status in {"failed", "dead_lettered"}:
-            attempt.last_error = reason
-            update_fields.append("last_error")
+    _apply_attempt_reason(attempt, status=status, reason=reason, update_fields=update_fields)
     if update_fields:
         attempt.save(update_fields=sorted(set(update_fields + ["updated_at"])))
     return attempt
+
+
+def _apply_attempt_reason(
+    attempt: TaskAttemptRecord,
+    *,
+    status: str,
+    reason: str,
+    update_fields: list[str],
+) -> None:
+    if not reason:
+        return
+    if status == "retry_scheduled":
+        _set_if_changed(attempt, "retry_reason", reason, update_fields)
+    if status in {"failed", "dead_lettered"}:
+        _set_if_changed(attempt, "last_error", reason, update_fields)
+
+
+def _set_if_changed(instance: Any, field_name: str, value: Any, update_fields: list[str]) -> None:
+    if getattr(instance, field_name) == value:
+        return
+    setattr(instance, field_name, value)
+    update_fields.append(field_name)
 
 
 def _attempt_for_number(
@@ -860,18 +873,12 @@ def _apply_task_transition(
     payload: dict[str, Any],
 ) -> None:
     update_fields: list[str] = []
-    if task.status != to_status:
-        task.status = to_status
-        update_fields.append("status")
-    if task.current_attempt != max(int(attempt_number or 1), 1):
-        task.current_attempt = max(int(attempt_number or 1), 1)
-        update_fields.append("current_attempt")
-    if node_run is not None and task.current_node_run_id != node_run.id:
-        task.current_node_run = node_run
-        update_fields.append("current_node_run")
-    if decision is not None and task.current_decision_id != decision.id:
-        task.current_decision = decision
-        update_fields.append("current_decision")
+    _set_if_changed(task, "status", to_status, update_fields)
+    _set_if_changed(task, "current_attempt", max(int(attempt_number or 1), 1), update_fields)
+    if node_run is not None:
+        _set_if_changed(task, "current_node_run", node_run, update_fields)
+    if decision is not None:
+        _set_if_changed(task, "current_decision", decision, update_fields)
     if to_status == "running" and task.started_at is None:
         task.started_at = event_time
         update_fields.append("started_at")
@@ -890,15 +897,11 @@ def _apply_task_transition(
     elif to_status in {"failed"} and reason:
         task.unresolved_error = reason
         update_fields.append("unresolved_error")
-    if task.priority != _priority_for_task_status(to_status):
-        task.priority = _priority_for_task_status(to_status)
-        update_fields.append("priority")
+    _set_if_changed(task, "priority", _priority_for_task_status(to_status), update_fields)
     summary = _summary_for_status(
         run=task.run, node_id=task.source_node_id, status=to_status, reason=reason
     )
-    if task.summary != summary:
-        task.summary = summary
-        update_fields.append("summary")
+    _set_if_changed(task, "summary", summary, update_fields)
     task.last_transition_at = event_time
     update_fields.append("last_transition_at")
     if update_fields:

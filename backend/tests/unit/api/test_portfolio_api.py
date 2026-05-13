@@ -212,7 +212,9 @@ def test_credential_health_never_exposes_secret_material(authenticated_client, u
     response = authenticated_client.get("/api/credential-health")
     assert response.status_code == 200
     payload = response.data["data"]
-    company_health = next(item for item in payload["companies"] if item["company_id"] == str(company.id))
+    company_health = next(
+        item for item in payload["companies"] if item["company_id"] == str(company.id)
+    )
     assert company_health["status"] == "healthy"
     serialized = str(payload)
     assert "sk-test-secret" not in serialized

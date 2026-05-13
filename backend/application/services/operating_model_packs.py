@@ -477,9 +477,11 @@ def update_pack_installation(
 
 
 def operating_model_payload(company: Graph) -> dict[str, Any]:
-    installations = CompanyOperatingModelInstallation.objects.filter(
-        company=company
-    ).exclude(status__in=["archived", "removed"]).select_related("pack_release")
+    installations = (
+        CompanyOperatingModelInstallation.objects.filter(company=company)
+        .exclude(status__in=["archived", "removed"])
+        .select_related("pack_release")
+    )
     return {
         "company_id": str(company.id),
         "installed_packs": [installation_payload(item) for item in installations],
@@ -509,7 +511,9 @@ def installation_payload(installation: CompanyOperatingModelInstallation) -> dic
         "config": copy.deepcopy(installation.config_json),
         "public_config": copy.deepcopy(installation.public_config_json),
         "dashboard": copy.deepcopy(installation.dashboard_json),
-        "active_since": installation.active_since.isoformat() if installation.active_since else None,
+        "active_since": installation.active_since.isoformat()
+        if installation.active_since
+        else None,
         "archived_at": installation.archived_at.isoformat() if installation.archived_at else None,
         "config_revision_count": int(config_revision_count),
         "namespace_claim_count": int(namespace_claim_count),
@@ -672,6 +676,11 @@ def _claim_pack_namespace(
     duplicate_claims: list[dict[str, str]] = []
     for claim in claims:
         namespaced_id = claim["namespaced_id"]
+        _validate_pack_namespace_claim(
+            pack_id=definition.pack_id,
+            object_id=claim["object_id"],
+            namespaced_id=namespaced_id,
+        )
         if namespaced_id in seen:
             duplicate_claims.append(claim)
         seen.add(namespaced_id)
@@ -722,6 +731,28 @@ def _claim_pack_namespace(
                 "source_checksum": definition.checksum,
                 "metadata_json": {"source": "operating_model_pack"},
             },
+        )
+
+
+def _validate_pack_namespace_claim(
+    *,
+    pack_id: str,
+    object_id: str,
+    namespaced_id: str,
+) -> None:
+    expected_prefix = f"{pack_id}."
+    if not namespaced_id.startswith(expected_prefix):
+        raise OperatingModelPackError(
+            "invalid_pack_namespace",
+            "Pack-defined object namespaced_id must start with the owning pack id plus a dot.",
+            details=[
+                {
+                    "pack_id": pack_id,
+                    "object_id": object_id,
+                    "namespaced_id": namespaced_id,
+                    "expected_prefix": expected_prefix,
+                }
+            ],
         )
 
 

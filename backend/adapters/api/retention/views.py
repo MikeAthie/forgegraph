@@ -29,6 +29,18 @@ from infrastructure.orm.models import (
 
 from .serializers import TenantRetentionPolicySerializer
 
+_EXPORT_TYPE_ALIASES = {
+    "runs": "runs",
+    "run_events": "run_events",
+    "logs": "run_events",
+    "node_runs": "node_runs",
+    "audit_logs": "audit_logs",
+    "audit": "audit_logs",
+    "usage": "usage",
+    "llm_usage": "usage",
+    "memory_usage": "memory_usage",
+}
+
 
 def _run_scope_filter(tenant_uuid: UUID, prefix: str = "") -> Q:
     return Q(**{f"{prefix}organization_id": tenant_uuid}) | Q(
@@ -316,18 +328,7 @@ class RetentionExportView(APIView):
             return tenant_id
 
         export_type_param = (request.query_params.get("type") or "runs").lower()
-        export_type = {
-            "runs": "runs",
-            "run_events": "run_events",
-            "logs": "run_events",
-            "node_runs": "node_runs",
-            "audit_logs": "audit_logs",
-            "audit": "audit_logs",
-            "usage": "usage",
-            "llm_usage": "usage",
-            "memory_usage": "memory_usage",
-        }.get(export_type_param)
-
+        export_type = _EXPORT_TYPE_ALIASES.get(export_type_param)
         if not export_type:
             return error_response(
                 code="VALIDATION_ERROR",
@@ -358,168 +359,191 @@ class RetentionExportView(APIView):
             },
         )
 
-        if export_type == "runs":
-            run_qs = (
-                Run.objects.select_related("graph_version", "graph_version__graph")
-                .filter(_run_scope_filter(tenant_uuid))
-                .order_by("-started_at")
-            )
-            if date_range:
-                start_date, end_date = date_range
-                run_qs = run_qs.filter(
-                    started_at__date__gte=start_date,
-                    started_at__date__lte=end_date,
-                )
+        exporters = {
+            "runs": self._export_runs,
+            "run_events": self._export_run_events,
+            "node_runs": self._export_node_runs,
+            "audit_logs": self._export_audit_logs,
+            "memory_usage": self._export_memory_usage,
+            "usage": self._export_llm_usage,
+        }
+        return exporters[export_type](tenant_uuid, date_range, limit, offset)
 
-            run_count = run_qs.count()
-            run_page = run_qs[offset : offset + limit]
-            data = [
-                {
-                    "id": str(run.id),
-                    "graph_id": str(run.graph_version.graph_id),
-                    "graph_version_id": str(run.graph_version_id),
-                    "graph_version": run.graph_version.version,
-                    "status": run.status,
-                    "thread_id": str(run.thread_id) if run.thread_id else None,
-                    "started_at": run.started_at.isoformat() if run.started_at else None,
-                    "ended_at": run.ended_at.isoformat() if run.ended_at else None,
-                    "input_json": redact_payload(run.input_json),
-                    "output_json": redact_payload(run.output_json),
-                    "error_message": redact_payload(run.error_message),
-                }
-                for run in run_page
-            ]
-            return paginated_response(
-                data=data,
-                page=(offset // limit) + 1,
-                page_size=limit,
-                total_count=run_count,
+    def _export_runs(
+        self,
+        tenant_uuid: UUID,
+        date_range: tuple[date, date] | None,
+        limit: int,
+        offset: int,
+    ) -> Response:
+        run_qs = (
+            Run.objects.select_related("graph_version", "graph_version__graph")
+            .filter(_run_scope_filter(tenant_uuid))
+            .order_by("-started_at")
+        )
+        if date_range:
+            start_date, end_date = date_range
+            run_qs = run_qs.filter(
+                started_at__date__gte=start_date,
+                started_at__date__lte=end_date,
             )
 
-        if export_type == "run_events":
-            run_events_qs = RunEvent.objects.filter(
-                _run_scope_filter(tenant_uuid, prefix="run__")
-            ).order_by("-created_at")
-            if date_range:
-                start_date, end_date = date_range
-                run_events_qs = run_events_qs.filter(
-                    created_at__date__gte=start_date, created_at__date__lte=end_date
-                )
+        run_count = run_qs.count()
+        run_page = run_qs[offset : offset + limit]
+        data = [
+            {
+                "id": str(run.id),
+                "graph_id": str(run.graph_version.graph_id),
+                "graph_version_id": str(run.graph_version_id),
+                "graph_version": run.graph_version.version,
+                "status": run.status,
+                "thread_id": str(run.thread_id) if run.thread_id else None,
+                "started_at": run.started_at.isoformat() if run.started_at else None,
+                "ended_at": run.ended_at.isoformat() if run.ended_at else None,
+                "input_json": redact_payload(run.input_json),
+                "output_json": redact_payload(run.output_json),
+                "error_message": redact_payload(run.error_message),
+            }
+            for run in run_page
+        ]
+        return _export_page(data=data, offset=offset, limit=limit, total_count=run_count)
 
-            event_count = run_events_qs.count()
-            event_page = run_events_qs[offset : offset + limit]
-            data = [
-                {
-                    "id": str(event.id),
-                    "run_id": str(event.run_id),
-                    "event_type": event.event_type,
-                    "payload": redact_payload(event.payload),
-                    "created_at": event.created_at.isoformat(),
-                }
-                for event in event_page
-            ]
-            return paginated_response(
-                data=data,
-                page=(offset // limit) + 1,
-                page_size=limit,
-                total_count=event_count,
+    def _export_run_events(
+        self,
+        tenant_uuid: UUID,
+        date_range: tuple[date, date] | None,
+        limit: int,
+        offset: int,
+    ) -> Response:
+        run_events_qs = RunEvent.objects.filter(
+            _run_scope_filter(tenant_uuid, prefix="run__")
+        ).order_by("-created_at")
+        if date_range:
+            start_date, end_date = date_range
+            run_events_qs = run_events_qs.filter(
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
             )
 
-        if export_type == "node_runs":
-            node_runs_qs = NodeRun.objects.filter(
-                _run_scope_filter(tenant_uuid, prefix="run__")
-            ).order_by("-started_at")
-            if date_range:
-                start_date, end_date = date_range
-                node_runs_qs = node_runs_qs.filter(
-                    Q(started_at__date__gte=start_date) | Q(started_at__isnull=True),
-                    Q(started_at__date__lte=end_date) | Q(started_at__isnull=True),
-                )
+        event_count = run_events_qs.count()
+        event_page = run_events_qs[offset : offset + limit]
+        data = [
+            {
+                "id": str(event.id),
+                "run_id": str(event.run_id),
+                "event_type": event.event_type,
+                "payload": redact_payload(event.payload),
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in event_page
+        ]
+        return _export_page(data=data, offset=offset, limit=limit, total_count=event_count)
 
-            node_run_count = node_runs_qs.count()
-            node_run_page = node_runs_qs[offset : offset + limit]
-            data = [
-                {
-                    "id": str(node_run.id),
-                    "run_id": str(node_run.run_id),
-                    "node_id": node_run.node_id,
-                    "node_type": node_run.node_type,
-                    "status": node_run.status,
-                    "attempt": node_run.attempt,
-                    "started_at": node_run.started_at.isoformat() if node_run.started_at else None,
-                    "ended_at": node_run.ended_at.isoformat() if node_run.ended_at else None,
-                    "input_json": redact_payload(node_run.input_json),
-                    "output_json": redact_payload(node_run.output_json),
-                    "error_json": redact_payload(node_run.error_json),
-                }
-                for node_run in node_run_page
-            ]
-            return paginated_response(
-                data=data,
-                page=(offset // limit) + 1,
-                page_size=limit,
-                total_count=node_run_count,
+    def _export_node_runs(
+        self,
+        tenant_uuid: UUID,
+        date_range: tuple[date, date] | None,
+        limit: int,
+        offset: int,
+    ) -> Response:
+        node_runs_qs = NodeRun.objects.filter(
+            _run_scope_filter(tenant_uuid, prefix="run__")
+        ).order_by("-started_at")
+        if date_range:
+            start_date, end_date = date_range
+            node_runs_qs = node_runs_qs.filter(
+                Q(started_at__date__gte=start_date) | Q(started_at__isnull=True),
+                Q(started_at__date__lte=end_date) | Q(started_at__isnull=True),
             )
 
-        if export_type == "audit_logs":
-            audit_logs_qs = AuditLog.objects.filter(tenant_id=tenant_uuid).order_by("-created_at")
-            if date_range:
-                start_date, end_date = date_range
-                audit_logs_qs = audit_logs_qs.filter(
-                    created_at__date__gte=start_date, created_at__date__lte=end_date
-                )
+        node_run_count = node_runs_qs.count()
+        node_run_page = node_runs_qs[offset : offset + limit]
+        data = [
+            {
+                "id": str(node_run.id),
+                "run_id": str(node_run.run_id),
+                "node_id": node_run.node_id,
+                "node_type": node_run.node_type,
+                "status": node_run.status,
+                "attempt": node_run.attempt,
+                "started_at": node_run.started_at.isoformat() if node_run.started_at else None,
+                "ended_at": node_run.ended_at.isoformat() if node_run.ended_at else None,
+                "input_json": redact_payload(node_run.input_json),
+                "output_json": redact_payload(node_run.output_json),
+                "error_json": redact_payload(node_run.error_json),
+            }
+            for node_run in node_run_page
+        ]
+        return _export_page(data=data, offset=offset, limit=limit, total_count=node_run_count)
 
-            audit_count = audit_logs_qs.count()
-            audit_page = audit_logs_qs[offset : offset + limit]
-            data = [
-                {
-                    "id": str(log.id),
-                    "actor_id": str(log.actor_id) if log.actor_id else None,
-                    "action": log.action,
-                    "resource_type": log.resource_type,
-                    "resource_id": log.resource_id,
-                    "metadata": redact_payload(log.metadata),
-                    "created_at": log.created_at.isoformat(),
-                }
-                for log in audit_page
-            ]
-            return paginated_response(
-                data=data,
-                page=(offset // limit) + 1,
-                page_size=limit,
-                total_count=audit_count,
+    def _export_audit_logs(
+        self,
+        tenant_uuid: UUID,
+        date_range: tuple[date, date] | None,
+        limit: int,
+        offset: int,
+    ) -> Response:
+        audit_logs_qs = AuditLog.objects.filter(tenant_id=tenant_uuid).order_by("-created_at")
+        if date_range:
+            start_date, end_date = date_range
+            audit_logs_qs = audit_logs_qs.filter(
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
             )
 
-        if export_type == "memory_usage":
-            memory_usage_qs = MemoryUsage.objects.filter(tenant_id=tenant_uuid).order_by(
-                "-usage_date"
-            )
-            if date_range:
-                start_date, end_date = date_range
-                memory_usage_qs = memory_usage_qs.filter(
-                    usage_date__gte=start_date, usage_date__lte=end_date
-                )
+        audit_count = audit_logs_qs.count()
+        audit_page = audit_logs_qs[offset : offset + limit]
+        data = [
+            {
+                "id": str(log.id),
+                "actor_id": str(log.actor_id) if log.actor_id else None,
+                "action": log.action,
+                "resource_type": log.resource_type,
+                "resource_id": log.resource_id,
+                "metadata": redact_payload(log.metadata),
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in audit_page
+        ]
+        return _export_page(data=data, offset=offset, limit=limit, total_count=audit_count)
 
-            memory_count = memory_usage_qs.count()
-            memory_page = memory_usage_qs[offset : offset + limit]
-            data = [
-                {
-                    "id": str(row.id),
-                    "usage_date": row.usage_date.isoformat(),
-                    "summarization_prompt_tokens": row.summarization_prompt_tokens,
-                    "summarization_completion_tokens": row.summarization_completion_tokens,
-                    "summarization_total_tokens": row.summarization_total_tokens,
-                    "summarization_cost_usd": float(row.summarization_cost_usd),
-                }
-                for row in memory_page
-            ]
-            return paginated_response(
-                data=data,
-                page=(offset // limit) + 1,
-                page_size=limit,
-                total_count=memory_count,
+    def _export_memory_usage(
+        self,
+        tenant_uuid: UUID,
+        date_range: tuple[date, date] | None,
+        limit: int,
+        offset: int,
+    ) -> Response:
+        memory_usage_qs = MemoryUsage.objects.filter(tenant_id=tenant_uuid).order_by("-usage_date")
+        if date_range:
+            start_date, end_date = date_range
+            memory_usage_qs = memory_usage_qs.filter(
+                usage_date__gte=start_date,
+                usage_date__lte=end_date,
             )
 
+        memory_count = memory_usage_qs.count()
+        memory_page = memory_usage_qs[offset : offset + limit]
+        data = [
+            {
+                "id": str(row.id),
+                "usage_date": row.usage_date.isoformat(),
+                "summarization_prompt_tokens": row.summarization_prompt_tokens,
+                "summarization_completion_tokens": row.summarization_completion_tokens,
+                "summarization_total_tokens": row.summarization_total_tokens,
+                "summarization_cost_usd": float(row.summarization_cost_usd),
+            }
+            for row in memory_page
+        ]
+        return _export_page(data=data, offset=offset, limit=limit, total_count=memory_count)
+
+    def _export_llm_usage(
+        self,
+        tenant_uuid: UUID,
+        date_range: tuple[date, date] | None,
+        limit: int,
+        offset: int,
+    ) -> Response:
         llm_usage_qs = LLMUsage.objects.filter(tenant_id=tenant_uuid).order_by("-created_at")
         if date_range:
             start_date, end_date = date_range
@@ -544,9 +568,19 @@ class RetentionExportView(APIView):
             }
             for usage in usage_page
         ]
-        return paginated_response(
-            data=data,
-            page=(offset // limit) + 1,
-            page_size=limit,
-            total_count=usage_count,
-        )
+        return _export_page(data=data, offset=offset, limit=limit, total_count=usage_count)
+
+
+def _export_page(
+    *,
+    data: list[dict[str, object]],
+    offset: int,
+    limit: int,
+    total_count: int,
+) -> Response:
+    return paginated_response(
+        data=data,
+        page=(offset // limit) + 1,
+        page_size=limit,
+        total_count=total_count,
+    )

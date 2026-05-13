@@ -609,33 +609,41 @@ def _threshold_level(*, metric: dict[str, Any], value: float) -> str:
     thresholds = _dict_value(metric.get("thresholds")) or metric
     direction = str(metric.get("direction") or "higher_is_better")
     if direction == "target_band":
-        target_min = _number_value(thresholds.get("target_min"))
-        target_max = _number_value(thresholds.get("target_max"))
-        warning_min = _number_value(thresholds.get("warning_min"))
-        warning_max = _number_value(thresholds.get("warning_max"))
-        if target_min is not None and target_max is not None and target_min <= value <= target_max:
-            return "good"
-        if (
-            warning_min is not None
-            and warning_max is not None
-            and warning_min <= value <= warning_max
-        ):
-            return "acceptable"
-        return "bad_or_risky"
+        return _target_band_threshold_level(thresholds, value)
     if direction == "lower_is_better":
-        bad_gte = _number_value(thresholds.get("bad_gte"))
-        bad_gt = _number_value(thresholds.get("bad_gt"))
-        good_lte = _number_value(thresholds.get("good_lte"))
-        good_lt = _number_value(thresholds.get("good_lt"))
-        if bad_gte is not None and value >= bad_gte:
-            return "bad_or_risky"
-        if bad_gt is not None and value > bad_gt:
-            return "bad_or_risky"
-        if good_lte is not None and value <= good_lte:
-            return "good"
-        if good_lt is not None and value < good_lt:
-            return "good"
+        return _lower_is_better_threshold_level(thresholds, value)
+    return _higher_is_better_threshold_level(thresholds, value)
+
+
+def _target_band_threshold_level(thresholds: dict[str, Any], value: float) -> str:
+    target_min = _number_value(thresholds.get("target_min"))
+    target_max = _number_value(thresholds.get("target_max"))
+    warning_min = _number_value(thresholds.get("warning_min"))
+    warning_max = _number_value(thresholds.get("warning_max"))
+    if target_min is not None and target_max is not None and target_min <= value <= target_max:
+        return "good"
+    if warning_min is not None and warning_max is not None and warning_min <= value <= warning_max:
         return "acceptable"
+    return "bad_or_risky"
+
+
+def _lower_is_better_threshold_level(thresholds: dict[str, Any], value: float) -> str:
+    bad_gte = _number_value(thresholds.get("bad_gte"))
+    bad_gt = _number_value(thresholds.get("bad_gt"))
+    good_lte = _number_value(thresholds.get("good_lte"))
+    good_lt = _number_value(thresholds.get("good_lt"))
+    if bad_gte is not None and value >= bad_gte:
+        return "bad_or_risky"
+    if bad_gt is not None and value > bad_gt:
+        return "bad_or_risky"
+    if good_lte is not None and value <= good_lte:
+        return "good"
+    if good_lt is not None and value < good_lt:
+        return "good"
+    return "acceptable"
+
+
+def _higher_is_better_threshold_level(thresholds: dict[str, Any], value: float) -> str:
     bad_lte = _number_value(thresholds.get("bad_lte"))
     bad_lt = _number_value(thresholds.get("bad_lt"))
     good_gte = _number_value(thresholds.get("good_gte"))

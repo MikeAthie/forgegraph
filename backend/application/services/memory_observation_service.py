@@ -510,31 +510,44 @@ class MemoryObservationService:
     ) -> set[str]:
         changed_fields: set[str] = set()
         if type is not None:
-            normalized_type = self._normalize_type(type)
-            if observation.type != normalized_type:
-                observation.type = normalized_type
-                changed_fields.add("type")
+            self._update_observation_field(
+                observation, "type", self._normalize_type(type), changed_fields
+            )
         if title is not None:
-            normalized_title = self._normalize_title(title)
-            if observation.title != normalized_title:
-                observation.title = normalized_title
-                changed_fields.add("title")
+            self._update_observation_field(
+                observation, "title", self._normalize_title(title), changed_fields
+            )
         if content is not None:
-            normalized_content = self._normalize_content(content)
-            if observation.content != normalized_content:
-                observation.content = normalized_content
-                changed_fields.add("content")
+            self._update_observation_field(
+                observation, "content", self._normalize_content(content), changed_fields
+            )
         if topic_key is not None:
-            normalized_topic = self._normalize_topic_key(topic_key)
-            if observation.topic_key != normalized_topic:
-                observation.topic_key = normalized_topic
-                changed_fields.add("topic_key")
+            self._update_observation_field(
+                observation,
+                "topic_key",
+                self._normalize_topic_key(topic_key),
+                changed_fields,
+            )
         if tool_name is not None:
-            normalized_tool = self._normalize_tool_name(tool_name)
-            if observation.tool_name != normalized_tool:
-                observation.tool_name = normalized_tool
-                changed_fields.add("tool_name")
+            self._update_observation_field(
+                observation,
+                "tool_name",
+                self._normalize_tool_name(tool_name),
+                changed_fields,
+            )
         return changed_fields
+
+    def _update_observation_field(
+        self,
+        observation: MemoryObservation,
+        field_name: str,
+        value: object,
+        changed_fields: set[str],
+    ) -> None:
+        if getattr(observation, field_name) == value:
+            return
+        setattr(observation, field_name, value)
+        changed_fields.add(field_name)
 
     def _apply_metadata(
         self,

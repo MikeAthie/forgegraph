@@ -174,6 +174,25 @@ def _ensure_graph_uses_gemini_credential(
     metadata = graph_json.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
+    _apply_gemini_metadata(metadata, credential)
+    graph_json["metadata"] = metadata
+
+    _apply_gemini_node_credentials(graph_json, credential)
+
+    incoming_checksum = _graph_checksum(graph_json)
+    if latest.checksum == incoming_checksum:
+        return latest, False
+
+    version = GraphVersion.objects.create(
+        graph=graph,
+        version=latest.version + 1,
+        graph_json=graph_json,
+    )
+    graph.save()
+    return version, True
+
+
+def _apply_gemini_metadata(metadata: dict[str, Any], credential: APIKey) -> None:
     metadata["llm_access"] = llm_access_storage_payload(
         LLMAccessConfig(
             llm_mode="byok",
@@ -199,8 +218,9 @@ def _ensure_graph_uses_gemini_credential(
         "api_key_present": True,
         "durable_secret_owner": "backend_api_key_store",
     }
-    graph_json["metadata"] = metadata
 
+
+def _apply_gemini_node_credentials(graph_json: dict[str, Any], credential: APIKey) -> None:
     for node in graph_json.get("nodes", []):
         if not isinstance(node, dict):
             continue
@@ -210,18 +230,6 @@ def _ensure_graph_uses_gemini_credential(
         if str(config.get("provider") or "").strip().lower() == "google":
             config["credential_id"] = str(credential.id)
             config.setdefault("model", DEFAULT_GEMINI_MODEL)
-
-    incoming_checksum = _graph_checksum(graph_json)
-    if latest.checksum == incoming_checksum:
-        return latest, False
-
-    version = GraphVersion.objects.create(
-        graph=graph,
-        version=latest.version + 1,
-        graph_json=graph_json,
-    )
-    graph.save()
-    return version, True
 
 
 def safe_json_dump(payload: dict[str, Any]) -> str:

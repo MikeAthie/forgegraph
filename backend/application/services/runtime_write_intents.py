@@ -473,25 +473,12 @@ def apply_pause_run_intent(
             "prompt_message": decision_payload["prompt_message"],
             "required_fields": decision_payload["required_fields"],
         }
-        approval_task, created = ApprovalTask.objects.get_or_create(
+        _upsert_pause_approval_task(
             run=run,
             node_id=node_id,
-            status="pending",
-            defaults={
-                "assignee": run.owner,
-                "payload": approval_payload,
-                "task_lifecycle": lifecycle_result.lifecycle_task,
-            },
+            approval_payload=approval_payload,
+            lifecycle_task=lifecycle_result.lifecycle_task,
         )
-        approval_update_fields: list[str] = []
-        if not created and approval_task.payload != approval_payload:
-            approval_task.payload = approval_payload
-            approval_update_fields.append("payload")
-        if approval_task.task_lifecycle_id != lifecycle_result.lifecycle_task.id:
-            approval_task.task_lifecycle = lifecycle_result.lifecycle_task
-            approval_update_fields.append("task_lifecycle")
-        if approval_update_fields:
-            approval_task.save(update_fields=sorted(set(approval_update_fields)))
 
         _upsert_run_projection(
             run=run,
@@ -537,6 +524,34 @@ def apply_pause_run_intent(
         broadcast_run_updated(run)
         broadcast_decision_required(run=run, payload=decision_payload)
     return "processed"
+
+
+def _upsert_pause_approval_task(
+    *,
+    run: Run,
+    node_id: str,
+    approval_payload: dict[str, Any],
+    lifecycle_task: Any,
+) -> None:
+    approval_task, created = ApprovalTask.objects.get_or_create(
+        run=run,
+        node_id=node_id,
+        status="pending",
+        defaults={
+            "assignee": run.owner,
+            "payload": approval_payload,
+            "task_lifecycle": lifecycle_task,
+        },
+    )
+    approval_update_fields: list[str] = []
+    if not created and approval_task.payload != approval_payload:
+        approval_task.payload = approval_payload
+        approval_update_fields.append("payload")
+    if approval_task.task_lifecycle_id != lifecycle_task.id:
+        approval_task.task_lifecycle = lifecycle_task
+        approval_update_fields.append("task_lifecycle")
+    if approval_update_fields:
+        approval_task.save(update_fields=sorted(set(approval_update_fields)))
 
 
 def apply_ack_run_resumed_intent(
@@ -810,32 +825,36 @@ def apply_set_run_status_intent(
         )
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
         if run.status in {"succeeded", "failed", "canceled"}:
-            if run.status == "failed":
-                mark_run_tasks_terminal(
-                    run=run,
-                    status_value="failed",
-                    source="runtime_intent",
-                    reason=str(run.error_message or "run failed"),
-                )
-            elif run.status == "canceled":
-                mark_run_tasks_terminal(
-                    run=run,
-                    status_value="cancelled",
-                    source="runtime_intent",
-                    reason=str(run.error_message or "run cancelled"),
-                )
-            run_id = run.id
-
-            def delete_completed_run_snapshot() -> None:
-                safe_delete_snapshot(run_id)
-
-            transaction.on_commit(delete_completed_run_snapshot)
-            if run.status == "succeeded":
-                _schedule_deliverable_archive(run_id=run.id)
+            _handle_terminal_run_status(run)
 
     if run is not None:
         broadcast_run_updated(run)
     return "processed"
+
+
+def _handle_terminal_run_status(run: Run) -> None:
+    if run.status == "failed":
+        mark_run_tasks_terminal(
+            run=run,
+            status_value="failed",
+            source="runtime_intent",
+            reason=str(run.error_message or "run failed"),
+        )
+    elif run.status == "canceled":
+        mark_run_tasks_terminal(
+            run=run,
+            status_value="cancelled",
+            source="runtime_intent",
+            reason=str(run.error_message or "run cancelled"),
+        )
+    run_id = run.id
+
+    def delete_completed_run_snapshot() -> None:
+        safe_delete_snapshot(run_id)
+
+    transaction.on_commit(delete_completed_run_snapshot)
+    if run.status == "succeeded":
+        _schedule_deliverable_archive(run_id=run.id)
 
 
 def apply_tool_execution_status_intent(
@@ -999,11 +1018,9 @@ def apply_upsert_node_run_intent(
             occurred_at=intent.timestamp,
             allow_late=bool(intent.payload.get("allow_late")),
         )
-        if lifecycle_result.outcome not in {"accepted", "duplicate"}:
-            if lifecycle_result.outcome == "invalid":
-                return "invalid"
-            if lifecycle_result.outcome in {"stale", "late"}:
-                return "ignored"
+        intent_result = _task_lifecycle_intent_result(lifecycle_result.outcome)
+        if intent_result is not None:
+            return intent_result
         _record_processed_intent(intent=intent, run=run, stream_message_id=stream_message_id)
         if node_run.status == "succeeded":
             _schedule_deliverable_archive(run_id=run.id, node_run_id=node_run.id)
@@ -1011,6 +1028,16 @@ def apply_upsert_node_run_intent(
     if run is not None and node_run is not None:
         broadcast_node_run_updated(run=run, node_run=node_run)
     return "processed"
+
+
+def _task_lifecycle_intent_result(outcome: str) -> IntentProcessResult | None:
+    if outcome in {"accepted", "duplicate"}:
+        return None
+    if outcome == "invalid":
+        return "invalid"
+    if outcome in {"stale", "late"}:
+        return "ignored"
+    return None
 
 
 def apply_task_lifecycle_transition_intent(
@@ -1390,34 +1417,17 @@ def _update_run_fields(
         transition = apply_run_status_transition(run, str(status))
         update_fields.extend(transition.update_fields)
     if trace_id is not _UNSET:
-        next_trace_id = str(trace_id or "")
-        if run.trace_id != next_trace_id:
-            run.trace_id = next_trace_id
-            update_fields.append("trace_id")
-    if started_at is not _UNSET and run.started_at != started_at:
-        run.started_at = cast(datetime | None, started_at)
-        update_fields.append("started_at")
-    if ended_at is not _UNSET and run.ended_at != ended_at:
-        run.ended_at = cast(datetime | None, ended_at)
-        update_fields.append("ended_at")
-    if output_json is not _UNSET and run.output_json != output_json:
-        run.output_json = output_json
-        update_fields.append("output_json")
+        _set_if_changed(run, "trace_id", str(trace_id or ""), update_fields)
+    _set_if_changed(run, "started_at", started_at, update_fields)
+    _set_if_changed(run, "ended_at", ended_at, update_fields)
+    _set_if_changed(run, "output_json", output_json, update_fields)
     if error_message is not _UNSET and run.error_message != error_message:
         run.error_message = str(error_message)
         update_fields.append("error_message")
-    if paused_node_id is not _UNSET and run.paused_node_id != paused_node_id:
-        run.paused_node_id = cast(str | None, paused_node_id)
-        update_fields.append("paused_node_id")
-    if pause_state_json is not _UNSET and run.pause_state_json != pause_state_json:
-        run.pause_state_json = pause_state_json
-        update_fields.append("pause_state_json")
-    if resume_requested_at is not _UNSET and run.resume_requested_at != resume_requested_at:
-        run.resume_requested_at = cast(datetime | None, resume_requested_at)
-        update_fields.append("resume_requested_at")
-    if resume_attempt_id is not _UNSET and run.resume_attempt_id != resume_attempt_id:
-        run.resume_attempt_id = cast(UUID | None, resume_attempt_id)
-        update_fields.append("resume_attempt_id")
+    _set_if_changed(run, "paused_node_id", paused_node_id, update_fields)
+    _set_if_changed(run, "pause_state_json", pause_state_json, update_fields)
+    _set_if_changed(run, "resume_requested_at", resume_requested_at, update_fields)
+    _set_if_changed(run, "resume_attempt_id", resume_attempt_id, update_fields)
 
     update_fields.extend(
         touch_run_liveness(
@@ -1427,6 +1437,18 @@ def _update_run_fields(
         )
     )
     run.save(update_fields=sorted(set(update_fields)))
+
+
+def _set_if_changed(
+    instance: Any,
+    field_name: str,
+    value: Any,
+    update_fields: list[str],
+) -> None:
+    if value is _UNSET or getattr(instance, field_name) == value:
+        return
+    setattr(instance, field_name, value)
+    update_fields.append(field_name)
 
 
 def _upsert_checkpoint(
@@ -1505,27 +1527,13 @@ def _upsert_node_run(
     )
 
     update_fields: list[str] = []
-    if node_run.node_type != node_type:
-        node_run.node_type = node_type
-        update_fields.append("node_type")
-    if node_run.status != status:
-        node_run.status = status
-        update_fields.append("status")
-    if started_at is not _UNSET and node_run.started_at != started_at:
-        node_run.started_at = cast(datetime | None, started_at)
-        update_fields.append("started_at")
-    if ended_at is not _UNSET and node_run.ended_at != ended_at:
-        node_run.ended_at = cast(datetime | None, ended_at)
-        update_fields.append("ended_at")
-    if input_json is not _UNSET and node_run.input_json != input_json:
-        node_run.input_json = input_json
-        update_fields.append("input_json")
-    if output_json is not _UNSET and node_run.output_json != output_json:
-        node_run.output_json = output_json
-        update_fields.append("output_json")
-    if error_json is not _UNSET and node_run.error_json != error_json:
-        node_run.error_json = error_json
-        update_fields.append("error_json")
+    _set_if_changed(node_run, "node_type", node_type, update_fields)
+    _set_if_changed(node_run, "status", status, update_fields)
+    _set_if_changed(node_run, "started_at", started_at, update_fields)
+    _set_if_changed(node_run, "ended_at", ended_at, update_fields)
+    _set_if_changed(node_run, "input_json", input_json, update_fields)
+    _set_if_changed(node_run, "output_json", output_json, update_fields)
+    _set_if_changed(node_run, "error_json", error_json, update_fields)
     if trace_id and node_run.trace_id != trace_id:
         node_run.trace_id = trace_id
         update_fields.append("trace_id")
@@ -1563,39 +1571,20 @@ def _upsert_run_projection(
         },
     )
     update_fields: list[str] = []
-    if projection.status != status:
-        projection.status = status
-        update_fields.append("status")
-    if paused_node_id is not _UNSET and projection.paused_node_id != paused_node_id:
-        projection.paused_node_id = cast(str | None, paused_node_id)
-        update_fields.append("paused_node_id")
-    if pause_state_json is not _UNSET and projection.pause_state_json != pause_state_json:
-        projection.pause_state_json = pause_state_json
-        update_fields.append("pause_state_json")
-    if started_at is not _UNSET and projection.started_at != started_at:
-        projection.started_at = cast(datetime | None, started_at)
-        update_fields.append("started_at")
-    if ended_at is not _UNSET and projection.ended_at != ended_at:
-        projection.ended_at = cast(datetime | None, ended_at)
-        update_fields.append("ended_at")
-    if output_json is not _UNSET and projection.output_json != output_json:
-        projection.output_json = output_json
-        update_fields.append("output_json")
-    if error_message is not _UNSET and projection.error_message != error_message:
-        projection.error_message = str(error_message)
-        update_fields.append("error_message")
+    _set_if_changed(projection, "status", status, update_fields)
+    _set_if_changed(projection, "paused_node_id", paused_node_id, update_fields)
+    _set_if_changed(projection, "pause_state_json", pause_state_json, update_fields)
+    _set_if_changed(projection, "started_at", started_at, update_fields)
+    _set_if_changed(projection, "ended_at", ended_at, update_fields)
+    _set_if_changed(projection, "output_json", output_json, update_fields)
+    if error_message is not _UNSET:
+        _set_if_changed(projection, "error_message", str(error_message), update_fields)
     if trace_id and projection.trace_id != trace_id:
         projection.trace_id = trace_id
         update_fields.append("trace_id")
-    if projection.last_event_type != event_type:
-        projection.last_event_type = event_type
-        update_fields.append("last_event_type")
-    if projection.last_event_id != event_id:
-        projection.last_event_id = event_id
-        update_fields.append("last_event_id")
-    if projection.last_event_at != event_time:
-        projection.last_event_at = event_time
-        update_fields.append("last_event_at")
+    _set_if_changed(projection, "last_event_type", event_type, update_fields)
+    _set_if_changed(projection, "last_event_id", event_id, update_fields)
+    _set_if_changed(projection, "last_event_at", event_time, update_fields)
     if update_fields:
         projection.save(update_fields=sorted(set(update_fields)))
 
@@ -1632,39 +1621,21 @@ def _upsert_node_projection(
         },
     )
     update_fields: list[str] = []
-    if projection.node_type != node_type:
-        projection.node_type = node_type
-        update_fields.append("node_type")
-    if projection.status != status:
-        projection.status = status
-        update_fields.append("status")
-    if started_at is not _UNSET and projection.started_at != started_at:
-        projection.started_at = cast(datetime | None, started_at)
-        update_fields.append("started_at")
-    if ended_at is not _UNSET and projection.ended_at != ended_at:
-        projection.ended_at = cast(datetime | None, ended_at)
-        update_fields.append("ended_at")
-    if output_json is not _UNSET and projection.output_json != output_json:
-        projection.output_json = output_json
-        update_fields.append("output_json")
-    if error_json is not _UNSET and projection.error_json != error_json:
-        projection.error_json = error_json
-        update_fields.append("error_json")
+    _set_if_changed(projection, "node_type", node_type, update_fields)
+    _set_if_changed(projection, "status", status, update_fields)
+    _set_if_changed(projection, "started_at", started_at, update_fields)
+    _set_if_changed(projection, "ended_at", ended_at, update_fields)
+    _set_if_changed(projection, "output_json", output_json, update_fields)
+    _set_if_changed(projection, "error_json", error_json, update_fields)
     if trace_id and projection.trace_id != trace_id:
         projection.trace_id = trace_id
         update_fields.append("trace_id")
     if span_id and projection.span_id != span_id:
         projection.span_id = span_id
         update_fields.append("span_id")
-    if projection.last_event_type != event_type:
-        projection.last_event_type = event_type
-        update_fields.append("last_event_type")
-    if projection.last_event_id != event_id:
-        projection.last_event_id = event_id
-        update_fields.append("last_event_id")
-    if projection.last_event_at != event_time:
-        projection.last_event_at = event_time
-        update_fields.append("last_event_at")
+    _set_if_changed(projection, "last_event_type", event_type, update_fields)
+    _set_if_changed(projection, "last_event_id", event_id, update_fields)
+    _set_if_changed(projection, "last_event_at", event_time, update_fields)
     if update_fields:
         projection.save(update_fields=sorted(set(update_fields)))
 

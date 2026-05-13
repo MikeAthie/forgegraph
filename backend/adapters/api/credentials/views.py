@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import secrets
-from datetime import timedelta
-from typing import cast
+from datetime import datetime, timedelta
+from typing import Any, cast
 from uuid import UUID
 
 from django.db import IntegrityError
@@ -468,26 +468,26 @@ class CredentialOAuthStartView(APIView):
 class CredentialOAuthCallbackView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request) -> Response:
+    def _validated_callback_data(self, request: Request) -> dict[str, Any] | Response:
         serializer = CredentialOAuthCallbackSerializer(data=request.data)
-        if not serializer.is_valid():
-            return error_response(
-                code="VALIDATION_ERROR",
-                message="The request contains invalid fields",
-                status=400,
-                details=[
-                    {"field": field, "issue": ", ".join(errors)}
-                    for field, errors in serializer.errors.items()
-                ],
-            )
+        if serializer.is_valid():
+            return dict(serializer.validated_data)
+        return error_response(
+            code="VALIDATION_ERROR",
+            message="The request contains invalid fields",
+            status=400,
+            details=[
+                {"field": field, "issue": ", ".join(errors)}
+                for field, errors in serializer.errors.items()
+            ],
+        )
 
-        user = cast(User, request.user)
-        denied = _ensure_credential_admin(user)
-        if denied:
-            return denied
-
-        code = serializer.validated_data["code"]
-        state = serializer.validated_data["state"]
+    def _verified_callback_state(
+        self,
+        *,
+        state: str,
+        user: User,
+    ) -> dict[str, Any] | Response:
         try:
             state_payload = verify_state(state, max_age=900, salt="credential-oauth")
         except ValueError as exc:
@@ -510,7 +510,9 @@ class CredentialOAuthCallbackView(APIView):
                 message="OAuth state is invalid for this user or organization.",
                 status=400,
             )
+        return state_payload
 
+    def _oauth_callback_config(self, user: User, provider: str) -> tuple[Any, list[str]] | Response:
         try:
             config, missing_fields = get_oauth_provider_config(
                 get_tenant_id_for_user(user), provider
@@ -519,9 +521,45 @@ class CredentialOAuthCallbackView(APIView):
             return error_response(code="VALIDATION_ERROR", message=str(exc), status=400)
         if config is None:
             return _oauth_missing_config_error(provider, missing_fields)
+        return config, missing_fields
+
+    def _token_expiry(self, token_response: dict[str, Any]) -> datetime | None:
+        raw_expires_in = token_response.get("expires_in")
+        if raw_expires_in is None:
+            return None
+        try:
+            expires_in = int(raw_expires_in)
+        except (TypeError, ValueError):
+            return None
+        if expires_in <= 0:
+            return None
+        return timezone.now() + timedelta(seconds=expires_in)
+
+    def post(self, request: Request) -> Response:
+        callback_data = self._validated_callback_data(request)
+        if isinstance(callback_data, Response):
+            return callback_data
+
+        user = cast(User, request.user)
+        denied = _ensure_credential_admin(user)
+        if denied:
+            return denied
+
+        state_payload = self._verified_callback_state(
+            state=callback_data["state"],
+            user=user,
+        )
+        if isinstance(state_payload, Response):
+            return state_payload
+        provider = str(state_payload.get("provider") or "").strip().lower()
+
+        config_response = self._oauth_callback_config(user, provider)
+        if isinstance(config_response, Response):
+            return config_response
+        config, _ = config_response
 
         try:
-            token_response = exchange_code_for_tokens(config, code=code)
+            token_response = exchange_code_for_tokens(config, code=callback_data["code"])
         except ValueError as exc:
             return error_response(
                 code="OAUTH_EXCHANGE_FAILED",
@@ -537,15 +575,7 @@ class CredentialOAuthCallbackView(APIView):
                 status=400,
             )
         refresh_token = str(token_response.get("refresh_token") or "").strip()
-        raw_expires_in = token_response.get("expires_in")
-        expires_at = None
-        if raw_expires_in is not None:
-            try:
-                expires_in = int(raw_expires_in)
-                if expires_in > 0:
-                    expires_at = timezone.now() + timedelta(seconds=expires_in)
-            except (TypeError, ValueError):
-                expires_at = None
+        expires_at = self._token_expiry(token_response)
 
         base_name = str(state_payload.get("name") or "").strip() or f"{provider}-oauth"
         organization = user.default_organization

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import SupportsInt, cast
+from typing import Any, SupportsInt, cast
 from uuid import UUID
 
 from django.conf import settings
@@ -64,63 +64,71 @@ def _parse_expires_at(token_payload: dict[str, object]) -> datetime | None:
     return None
 
 
-def _refresh_oauth_access_token_if_needed(key: APIKey, tenant_id: str) -> APIKey:
+def _oauth_refresh_due(key: APIKey) -> bool:
     if not is_oauth_provider(key.provider):
-        return key
+        return False
     if key.encrypted_refresh_token is None:
-        return key
+        return False
     if key.token_expires_at is None:
-        return key
-    if key.token_expires_at > timezone.now() + _REFRESH_SKEW:
+        return False
+    return key.token_expires_at <= timezone.now() + _REFRESH_SKEW
+
+
+def _refresh_oauth_access_token_if_needed(key: APIKey, tenant_id: str) -> APIKey:
+    if not _oauth_refresh_due(key):
         return key
 
     with transaction.atomic():
         locked = APIKey.objects.select_for_update().get(id=key.id)
-        if locked.encrypted_refresh_token is None:
+        if not _oauth_refresh_due(locked):
             return locked
-        if locked.token_expires_at is None:
-            return locked
-        if locked.token_expires_at > timezone.now() + _REFRESH_SKEW:
-            return locked
+        return _refresh_locked_oauth_access_token(locked, tenant_id)
 
-        refresh_token = decrypt_api_key(bytes(locked.encrypted_refresh_token)).strip()
-        if not refresh_token:
-            return locked
 
-        config, missing_fields = get_oauth_provider_config(tenant_id, locked.provider)
-        if config is None:
-            raise ValueError(
-                f"OAuth provider '{locked.provider}' is not configured ({', '.join(missing_fields)})."
-            )
-
-        refreshed = exchange_refresh_token_for_access_token(
-            config,
-            refresh_token=refresh_token,
-        )
-        new_access_token = str(refreshed.get("access_token") or "").strip()
-        if not new_access_token:
-            raise ValueError("OAuth refresh did not return an access_token.")
-
-        update_fields = ["encrypted_key", "token_expires_at", "token_metadata"]
-        locked.encrypted_key = encrypt_api_key(new_access_token)
-        locked.token_expires_at = _parse_expires_at(refreshed)
-
-        rotated_refresh_token = str(refreshed.get("refresh_token") or "").strip()
-        if rotated_refresh_token:
-            locked.encrypted_refresh_token = encrypt_api_key(rotated_refresh_token)
-            update_fields.append("encrypted_refresh_token")
-
-        metadata = dict(locked.token_metadata) if isinstance(locked.token_metadata, dict) else {}
-        metadata["provider"] = locked.provider
-        token_type = str(refreshed.get("token_type") or "").strip()
-        if token_type:
-            metadata["token_type"] = token_type
-        scope = refreshed.get("scope")
-        if isinstance(scope, str) and scope.strip():
-            metadata["scope"] = scope.strip()
-        locked.token_metadata = metadata
-        locked.save(update_fields=sorted(set(update_fields)))
+def _refresh_locked_oauth_access_token(locked: APIKey, tenant_id: str) -> APIKey:
+    encrypted_refresh_token = locked.encrypted_refresh_token
+    if encrypted_refresh_token is None:
         return locked
+    refresh_token = decrypt_api_key(bytes(encrypted_refresh_token)).strip()
+    if not refresh_token:
+        return locked
+
+    config, missing_fields = get_oauth_provider_config(tenant_id, locked.provider)
+    if config is None:
+        raise ValueError(
+            f"OAuth provider '{locked.provider}' is not configured ({', '.join(missing_fields)})."
+        )
+
+    refreshed = exchange_refresh_token_for_access_token(config, refresh_token=refresh_token)
+    new_access_token = str(refreshed.get("access_token") or "").strip()
+    if not new_access_token:
+        raise ValueError("OAuth refresh did not return an access_token.")
+
+    update_fields = ["encrypted_key", "token_expires_at", "token_metadata"]
+    locked.encrypted_key = encrypt_api_key(new_access_token)
+    locked.token_expires_at = _parse_expires_at(refreshed)
+
+    rotated_refresh_token = str(refreshed.get("refresh_token") or "").strip()
+    if rotated_refresh_token:
+        locked.encrypted_refresh_token = encrypt_api_key(rotated_refresh_token)
+        update_fields.append("encrypted_refresh_token")
+
+    metadata = _oauth_token_metadata(locked, refreshed)
+    locked.token_metadata = metadata
+    locked.save(update_fields=sorted(set(update_fields)))
+    return locked
+
+
+def _oauth_token_metadata(key: APIKey, token_payload: dict[str, object]) -> dict[str, object]:
+    metadata = dict(key.token_metadata) if isinstance(key.token_metadata, dict) else {}
+    metadata["provider"] = key.provider
+    token_type = str(token_payload.get("token_type") or "").strip()
+    if token_type:
+        metadata["token_type"] = token_type
+    scope = token_payload.get("scope")
+    if isinstance(scope, str) and scope.strip():
+        metadata["scope"] = scope.strip()
+    return metadata
 
 
 def _verify_engine_request(request: Request) -> Response | None:
@@ -731,6 +739,75 @@ class EngineRunNodeRunDetailView(APIView):
             )
         return success_response(_serialize_node_run(node_run))
 
+    def _parse_node_run_update_payload(
+        self,
+        payload: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, Response | None]:
+        try:
+            parsed = {
+                "attempt": int(payload.get("attempt") or 1),
+                "node_type": str(payload.get("node_type") or "").strip(),
+                "status": _validate_status(
+                    payload.get("status"),
+                    allowed={"pending", "running", "waiting", "succeeded", "failed", "skipped"},
+                    field="status",
+                ),
+                "started_at": _parse_optional_datetime(payload.get("started_at")),
+                "ended_at": _parse_optional_datetime(payload.get("ended_at")),
+                "node_run_id": None,
+            }
+        except ValueError as exc:
+            return None, error_response(code="VALIDATION_ERROR", message=str(exc), status=400)
+        if not parsed["node_type"]:
+            return None, error_response(
+                code="VALIDATION_ERROR",
+                message="node_type is required",
+                status=400,
+            )
+
+        raw_node_run_id = str(payload.get("id") or "").strip()
+        if raw_node_run_id:
+            try:
+                parsed["node_run_id"] = UUID(raw_node_run_id)
+            except ValueError:
+                parsed["node_run_id"] = None
+        return parsed, None
+
+    def _apply_node_run_update_payload(
+        self,
+        *,
+        node_run: NodeRun,
+        payload: dict[str, Any],
+        parsed: dict[str, Any],
+    ) -> list[str]:
+        update_fields: list[str] = []
+        if node_run.node_type != parsed["node_type"]:
+            node_run.node_type = parsed["node_type"]
+            update_fields.append("node_type")
+        if node_run.status != parsed["status"]:
+            node_run.status = parsed["status"]
+            update_fields.append("status")
+        if parsed["started_at"] is not None or payload.get("started_at") in (None, ""):
+            node_run.started_at = parsed["started_at"]
+            update_fields.append("started_at")
+        if parsed["ended_at"] is not None or payload.get("ended_at") in (None, ""):
+            node_run.ended_at = parsed["ended_at"]
+            update_fields.append("ended_at")
+        for field in ["input_json", "output_json", "error_json"]:
+            if field in payload:
+                raw_value = (
+                    payload.get(field) or {} if field == "input_json" else payload.get(field)
+                )
+                setattr(node_run, field, redact_payload(raw_value))
+                update_fields.append(field)
+        if "trace_id" in payload:
+            node_run.trace_id = str(payload.get("trace_id") or "")
+            update_fields.append("trace_id")
+        if "span_id" in payload:
+            node_run.span_id = str(payload.get("span_id") or "")
+            update_fields.append("span_id")
+        return update_fields
+
     def put(self, request: Request, run_id: UUID, node_id: str) -> Response:
         auth_error = _verify_engine_request(request)
         if auth_error is not None:
@@ -744,80 +821,30 @@ class EngineRunNodeRunDetailView(APIView):
             return run
 
         payload = request.data if isinstance(request.data, dict) else {}
-        try:
-            attempt = int(payload.get("attempt") or 1)
-            node_type = str(payload.get("node_type") or "").strip()
-            status_value = _validate_status(
-                payload.get("status"),
-                allowed={"pending", "running", "waiting", "succeeded", "failed", "skipped"},
-                field="status",
-            )
-            started_at = _parse_optional_datetime(payload.get("started_at"))
-            ended_at = _parse_optional_datetime(payload.get("ended_at"))
-        except ValueError as exc:
-            return error_response(
-                code="VALIDATION_ERROR",
-                message=str(exc),
-                status=400,
-            )
-
-        if not node_type:
-            return error_response(
-                code="VALIDATION_ERROR",
-                message="node_type is required",
-                status=400,
-            )
-
-        node_run_id = None
-        raw_node_run_id = str(payload.get("id") or "").strip()
-        if raw_node_run_id:
-            try:
-                node_run_id = UUID(raw_node_run_id)
-            except ValueError:
-                node_run_id = None
+        parsed, parse_error = self._parse_node_run_update_payload(payload)
+        if parse_error is not None:
+            return parse_error
+        assert parsed is not None
 
         with transaction.atomic():
             defaults: dict[str, object] = {
-                "node_type": node_type,
-                "status": status_value,
+                "node_type": parsed["node_type"],
+                "status": parsed["status"],
             }
-            if node_run_id is not None:
-                defaults["id"] = node_run_id
+            if parsed["node_run_id"] is not None:
+                defaults["id"] = parsed["node_run_id"]
             node_run, _ = NodeRun.objects.get_or_create(
                 run=run,
                 node_id=node_id,
-                attempt=attempt,
+                attempt=parsed["attempt"],
                 defaults=defaults,
             )
 
-            update_fields: list[str] = []
-            if node_run.node_type != node_type:
-                node_run.node_type = node_type
-                update_fields.append("node_type")
-            if node_run.status != status_value:
-                node_run.status = status_value
-                update_fields.append("status")
-            if started_at is not None or payload.get("started_at") in (None, ""):
-                node_run.started_at = started_at
-                update_fields.append("started_at")
-            if ended_at is not None or payload.get("ended_at") in (None, ""):
-                node_run.ended_at = ended_at
-                update_fields.append("ended_at")
-            if "input_json" in payload:
-                node_run.input_json = redact_payload(payload.get("input_json") or {})
-                update_fields.append("input_json")
-            if "output_json" in payload:
-                node_run.output_json = redact_payload(payload.get("output_json"))
-                update_fields.append("output_json")
-            if "error_json" in payload:
-                node_run.error_json = redact_payload(payload.get("error_json"))
-                update_fields.append("error_json")
-            if "trace_id" in payload:
-                node_run.trace_id = str(payload.get("trace_id") or "")
-                update_fields.append("trace_id")
-            if "span_id" in payload:
-                node_run.span_id = str(payload.get("span_id") or "")
-                update_fields.append("span_id")
+            update_fields = self._apply_node_run_update_payload(
+                node_run=node_run,
+                payload=payload,
+                parsed=parsed,
+            )
 
             if update_fields:
                 node_run.save(update_fields=sorted(set(update_fields)))

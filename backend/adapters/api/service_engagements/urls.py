@@ -11,8 +11,16 @@ from adapters.api.service_engagements.views import (
 )
 
 urlpatterns = [
-    path("service-catalog", ServiceCatalogListCreateView.as_view(), name="service-catalog-list-create"),
-    path("service-catalog/<uuid:service_id>", ServiceCatalogDetailView.as_view(), name="service-catalog-detail"),
+    path(
+        "service-catalog",
+        ServiceCatalogListCreateView.as_view(),
+        name="service-catalog-list-create",
+    ),
+    path(
+        "service-catalog/<uuid:service_id>",
+        ServiceCatalogDetailView.as_view(),
+        name="service-catalog-detail",
+    ),
     path(
         "service-engagements",
         ServiceEngagementListCreateView.as_view(),

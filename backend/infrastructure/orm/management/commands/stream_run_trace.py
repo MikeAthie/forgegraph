@@ -63,30 +63,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        try:
-            graph_version_id = UUID(options["graph_version_id"])
-        except ValueError as exc:
-            raise CommandError("graph_version_id must be a valid UUID.") from exc
-
-        try:
-            graph_version = GraphVersion.objects.select_related("graph__owner").get(
-                id=graph_version_id
-            )
-        except GraphVersion.DoesNotExist as exc:
-            raise CommandError(f"GraphVersion '{graph_version_id}' does not exist.") from exc
-
-        owner_email: str | None = options.get("owner_email")
-        owner: User | None
-        if owner_email:
-            owner_email = owner_email.strip().lower()
-            owner = User.objects.filter(email=owner_email).first()
-            if owner is None:
-                raise CommandError(f"No user found with email '{owner_email}'.")
-        else:
-            owner = graph_version.graph.owner
-        if owner is None:
-            raise CommandError("Run owner could not be resolved.")
-
+        graph_version = self._graph_version_from_options(options)
+        owner = self._owner_from_options(options, graph_version)
         run_status: str = options["run_status"]
         fail_node_id: str | None = options.get("fail_node_id")
         fail_message: str = options["fail_message"]
@@ -105,15 +83,11 @@ class Command(BaseCommand):
             str(node.get("id") or f"node_{index}") for index, node in enumerate(node_order)
         ]
 
-        fail_index: int | None = None
-        if run_status == "failed":
-            if fail_node_id is None:
-                fail_node_id = node_ids_in_order[-1]
-            if fail_node_id not in node_ids_in_order:
-                raise CommandError(
-                    f"--fail-node-id '{fail_node_id}' is not present in graph_json.nodes[].id"
-                )
-            fail_index = node_ids_in_order.index(fail_node_id)
+        fail_index = self._fail_index(
+            run_status=run_status,
+            fail_node_id=fail_node_id,
+            node_ids_in_order=node_ids_in_order,
+        )
 
         now = timezone.now()
         run = Run.objects.create(
@@ -201,34 +175,52 @@ class Command(BaseCommand):
         run.save(update_fields=sorted(set(transition.update_fields + ["ended_at", "output_json"])))
         broadcast_run_updated(run)
 
-    def _toposort(self, nodes: list[dict], edges: list[dict]) -> list[dict]:
-        node_by_id: dict[str, dict] = {}
-        for node in nodes:
-            node_id = node.get("id")
-            if not node_id:
-                continue
-            node_by_id[str(node_id)] = node
+    def _graph_version_from_options(self, options: dict) -> GraphVersion:
+        try:
+            graph_version_id = UUID(options["graph_version_id"])
+        except ValueError as exc:
+            raise CommandError("graph_version_id must be a valid UUID.") from exc
 
+        try:
+            return GraphVersion.objects.select_related("graph__owner").get(id=graph_version_id)
+        except GraphVersion.DoesNotExist as exc:
+            raise CommandError(f"GraphVersion '{graph_version_id}' does not exist.") from exc
+
+    def _owner_from_options(self, options: dict, graph_version: GraphVersion) -> User:
+        owner_email: str | None = options.get("owner_email")
+        if owner_email:
+            owner_email = owner_email.strip().lower()
+            owner = User.objects.filter(email=owner_email).first()
+            if owner is None:
+                raise CommandError(f"No user found with email '{owner_email}'.")
+        else:
+            owner = graph_version.graph.owner
+        if owner is None:
+            raise CommandError("Run owner could not be resolved.")
+        return owner
+
+    def _fail_index(
+        self,
+        *,
+        run_status: str,
+        fail_node_id: str | None,
+        node_ids_in_order: list[str],
+    ) -> int | None:
+        if run_status != "failed":
+            return None
+        selected_node_id = fail_node_id or node_ids_in_order[-1]
+        if selected_node_id not in node_ids_in_order:
+            raise CommandError(
+                f"--fail-node-id '{selected_node_id}' is not present in graph_json.nodes[].id"
+            )
+        return node_ids_in_order.index(selected_node_id)
+
+    def _toposort(self, nodes: list[dict], edges: list[dict]) -> list[dict]:
+        node_by_id = self._node_map(nodes)
         if not node_by_id:
             return nodes
 
-        adjacency: dict[str, set[str]] = {node_id: set() for node_id in node_by_id}
-        indegree: dict[str, int] = dict.fromkeys(node_by_id, 0)
-
-        for edge in edges:
-            from_id = edge.get("from")
-            to_id = edge.get("to")
-            if not from_id or not to_id:
-                continue
-            from_id = str(from_id)
-            to_id = str(to_id)
-            if from_id not in node_by_id or to_id not in node_by_id:
-                continue
-            if to_id in adjacency[from_id]:
-                continue
-            adjacency[from_id].add(to_id)
-            indegree[to_id] += 1
-
+        adjacency, indegree = self._edge_graph(node_by_id, edges)
         queue: deque[str] = deque(
             sorted([node_id for node_id, deg in indegree.items() if deg == 0])
         )
@@ -246,3 +238,21 @@ class Command(BaseCommand):
             return nodes
 
         return [node_by_id[node_id] for node_id in ordered]
+
+    def _node_map(self, nodes: list[dict]) -> dict[str, dict]:
+        return {str(node["id"]): node for node in nodes if node.get("id")}
+
+    def _edge_graph(
+        self,
+        node_by_id: dict[str, dict],
+        edges: list[dict],
+    ) -> tuple[dict[str, set[str]], dict[str, int]]:
+        adjacency: dict[str, set[str]] = {node_id: set() for node_id in node_by_id}
+        indegree: dict[str, int] = dict.fromkeys(node_by_id, 0)
+        for edge in edges:
+            from_id = str(edge.get("from") or "")
+            to_id = str(edge.get("to") or "")
+            if from_id in node_by_id and to_id in node_by_id and to_id not in adjacency[from_id]:
+                adjacency[from_id].add(to_id)
+                indegree[to_id] += 1
+        return adjacency, indegree
