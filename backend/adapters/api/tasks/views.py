@@ -29,7 +29,9 @@ class TaskListView(APIView):
         organization = projection_organization_for_user(cast(User, request.user))
         tasks = TaskRecord.objects.filter(
             organization=organization,
-            execution__graph_version__graph__in=accessible_company_queryset(cast(User, request.user)),
+            execution__graph_version__graph__in=accessible_company_queryset(
+                cast(User, request.user)
+            ),
         ).select_related(
             "agent", "execution", "current_step", "current_decision", "lifecycle_task", "judge"
         )

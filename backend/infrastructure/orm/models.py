@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models.signals import post_save
@@ -5710,6 +5711,23 @@ class PackNamespaceClaim(models.Model):
     def __str__(self) -> str:
         return f"{self.namespaced_id} ({self.status})"
 
+    def clean(self) -> None:
+        super().clean()
+        expected_prefix = f"{self.pack_id}."
+        if (
+            self.pack_id
+            and self.namespaced_id
+            and not self.namespaced_id.startswith(expected_prefix)
+        ):
+            raise ValidationError(
+                {
+                    "namespaced_id": (
+                        "Pack namespace claim namespaced_id must start with "
+                        f"the owning pack id plus a dot: {expected_prefix}"
+                    )
+                }
+            )
+
 
 class CompanyAccessPolicy(models.Model):
     """Company-level access defaults layered under organization membership."""
@@ -5737,7 +5755,9 @@ class CompanyAccessPolicy(models.Model):
         db_table = "company_access_policies"
         ordering = ["company_id"]
         indexes = [
-            models.Index(fields=["organization", "assignment_required"], name="company_access_org_req_idx"),
+            models.Index(
+                fields=["organization", "assignment_required"], name="company_access_org_req_idx"
+            ),
         ]
 
     def __str__(self) -> str:
@@ -5962,7 +5982,9 @@ class ServiceEngagement(models.Model):
             models.Index(fields=["organization", "status"], name="svc_eng_org_status_idx"),
             models.Index(fields=["company", "status"], name="svc_eng_company_status_idx"),
             models.Index(fields=["catalog_item", "status"], name="svc_eng_catalog_status_idx"),
-            models.Index(fields=["assigned_operator", "status"], name="svc_eng_operator_status_idx"),
+            models.Index(
+                fields=["assigned_operator", "status"], name="svc_eng_operator_status_idx"
+            ),
         ]
 
     def __str__(self) -> str:

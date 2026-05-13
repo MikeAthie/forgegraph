@@ -20,7 +20,14 @@ from django.utils import timezone
 from application.services.company_archive import ArchiveService
 from application.services.credential_state import is_credential_revoked
 from infrastructure.crypto.encryption import EncryptionError, decrypt_api_key
-from infrastructure.orm.models import APIKey, AssetVersion, Graph, MediaGenerationJob, User
+from infrastructure.orm.models import (
+    APIKey,
+    AssetVersion,
+    Graph,
+    MediaGenerationJob,
+    Organization,
+    User,
+)
 
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 _LONG_NUMBER_RE = re.compile(r"\b(?:\d[\s-]?){8,}\d\b")
@@ -432,35 +439,72 @@ class MediaGenerationService:
             )
 
         idempotency_key = idempotency_key.strip()
-        if idempotency_key:
-            existing = MediaGenerationJob.objects.filter(
-                company=company,
-                idempotency_key=idempotency_key,
-            ).first()
-            if existing is not None:
-                return existing
+        existing = self._find_existing_job(company=company, idempotency_key=idempotency_key)
+        if existing is not None:
+            return existing
 
         sanitized_prompt = sanitize_media_prompt(prompt)
         if not sanitized_prompt:
             raise GeminiMediaError("empty_prompt", "Media prompt is required.")
         selected_model = model.strip() or _default_model(modality, provider=provider)
 
+        job = self._create_pending_job(
+            user=user,
+            company=company,
+            organization=organization,
+            credential=credential,
+            modality=modality,
+            provider=provider,
+            model=selected_model,
+            prompt=sanitized_prompt,
+            idempotency_key=idempotency_key,
+        )
+        if modality == "image":
+            return self._run_image_job(job)
+        return self._start_video_job(job)
+
+    def _find_existing_job(
+        self,
+        *,
+        company: Graph,
+        idempotency_key: str,
+    ) -> MediaGenerationJob | None:
+        if not idempotency_key:
+            return None
+        return MediaGenerationJob.objects.filter(
+            company=company,
+            idempotency_key=idempotency_key,
+        ).first()
+
+    def _create_pending_job(
+        self,
+        *,
+        user: User,
+        company: Graph,
+        organization: Organization,
+        credential: APIKey,
+        modality: str,
+        provider: str,
+        model: str,
+        prompt: str,
+        idempotency_key: str,
+    ) -> MediaGenerationJob:
         try:
-            job = MediaGenerationJob.objects.create(
+            return MediaGenerationJob.objects.create(
                 organization=organization,
                 company=company,
                 requested_by=user,
                 credential=credential,
                 modality=modality,
                 provider=provider,
-                model=selected_model,
-                prompt=sanitized_prompt,
-                prompt_hash=prompt_hash(sanitized_prompt),
+                model=model,
+                prompt=prompt,
+                prompt_hash=prompt_hash(prompt),
                 idempotency_key=idempotency_key,
                 status="pending",
                 request_json={
                     "provider": provider,
-                    "model": selected_model,
+                    "model": model,
                     "modality": modality,
                     "prompt_sanitized": True,
                 },
@@ -474,10 +518,6 @@ class MediaGenerationService:
                 if existing is not None:
                     return existing
             raise
-
-        if modality == "image":
-            return self._run_image_job(job)
-        return self._start_video_job(job)
 
     def create_image_job_with_provider_fallback(
         self,

@@ -46,36 +46,46 @@ class Command(BaseCommand):
         parser.add_argument("--input", required=True)
         parser.add_argument("--json", action="store_true")
 
-    def handle(self, *args: Any, **options: Any) -> None:
-        input_path = Path(str(options["input"]))
+    def _load_payload(self, input_value: object) -> dict[str, Any]:
+        input_path = Path(str(input_value))
         if not input_path.exists():
             raise CommandError(f"Input file not found: {input_path}")
         payload = json.loads(input_path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             raise CommandError("Input payload must be a JSON object.")
+        return payload
 
+    def _fixture_identity(self, payload: dict[str, Any]) -> tuple[str, str]:
         email = str(payload.get("email") or "").strip().lower()
         company_id = str(payload.get("company_id") or "").strip()
         if not email or not company_id:
             raise CommandError("email and company_id are required.")
+        return email, company_id
+
+    def _fixture_context(self, *, email: str, company_id: str) -> tuple[User, Graph, Any]:
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist as exc:
+            raise CommandError(f"User not found: {email}") from exc
+        organization = user.default_organization
+        if organization is None:
+            raise CommandError(f"User {email} does not have a default organization.")
+        try:
+            company = Graph.objects.get(id=company_id, organization=organization)
+        except Graph.DoesNotExist as exc:
+            raise CommandError(f"Company not found for user organization: {company_id}") from exc
+        version = company.versions.order_by("-version").first()
+        if version is None:
+            raise CommandError(f"Company {company_id} does not have a setup version.")
+        return user, company, version
+
+    def handle(self, *args: Any, **options: Any) -> None:
+        payload = self._load_payload(options["input"])
+        email, company_id = self._fixture_identity(payload)
 
         with transaction.atomic():
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist as exc:
-                raise CommandError(f"User not found: {email}") from exc
+            user, company, version = self._fixture_context(email=email, company_id=company_id)
             organization = user.default_organization
-            if organization is None:
-                raise CommandError(f"User {email} does not have a default organization.")
-            try:
-                company = Graph.objects.get(id=company_id, organization=organization)
-            except Graph.DoesNotExist as exc:
-                raise CommandError(
-                    f"Company not found for user organization: {company_id}"
-                ) from exc
-            version = company.versions.order_by("-version").first()
-            if version is None:
-                raise CommandError(f"Company {company_id} does not have a setup version.")
 
             operation_payload = payload.get("operation")
             if not isinstance(operation_payload, dict):

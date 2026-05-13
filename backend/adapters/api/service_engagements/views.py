@@ -71,7 +71,11 @@ class ServiceCatalogListCreateView(APIView):
         if visibility_filter:
             queryset = queryset.filter(visibility=visibility_filter)
         return success_response(
-            {"services": [service_catalog_payload(item) for item in queryset.order_by("title", "slug")]}
+            {
+                "services": [
+                    service_catalog_payload(item) for item in queryset.order_by("title", "slug")
+                ]
+            }
         )
 
     def post(self, request: Request) -> Response:
@@ -190,13 +194,21 @@ class ServiceEngagementListCreateView(APIView):
         serializer = ServiceEngagementCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return _validation_error(serializer.errors)
-        company = _company_for_user(user, serializer.validated_data["company_id"], minimum_role="member")
+        company = _company_for_user(
+            user, serializer.validated_data["company_id"], minimum_role="member"
+        )
         if company is None:
-            return _not_found("Company was not found or you do not have access to create engagements.")
-        catalog_item = _catalog_item_for_engagement(user, serializer.validated_data["catalog_item_id"])
+            return _not_found(
+                "Company was not found or you do not have access to create engagements."
+            )
+        catalog_item = _catalog_item_for_engagement(
+            user, serializer.validated_data["catalog_item_id"]
+        )
         if catalog_item is None:
             return _not_found("Service catalog item was not found.")
-        assigned_operator = _assigned_operator(company, serializer.validated_data.get("assigned_operator_id"))
+        assigned_operator = _assigned_operator(
+            company, serializer.validated_data.get("assigned_operator_id")
+        )
         if isinstance(assigned_operator, Response):
             return assigned_operator
         data = dict(serializer.validated_data)
@@ -336,7 +348,10 @@ class ServiceDeliverableListCreateView(APIView):
             action="service_deliverable.created",
             resource_type="service_deliverable",
             resource_id=str(deliverable.id),
-            metadata={"company_id": str(engagement.company_id), "engagement_id": str(engagement.id)},
+            metadata={
+                "company_id": str(engagement.company_id),
+                "engagement_id": str(engagement.id),
+            },
         )
         return success_response(
             {"deliverable": service_deliverable_payload(deliverable)},

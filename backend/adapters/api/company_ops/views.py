@@ -600,7 +600,9 @@ def _signal_for_user(
     user = cast(User, request.user)
     signal = (
         CompanySignal.objects.select_related("company", "company__organization")
-        .filter(id=signal_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role))
+        .filter(
+            id=signal_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role)
+        )
         .first()
     )
     if signal is None:
@@ -635,7 +637,9 @@ def _publication_draft_for_user(
     user = cast(User, request.user)
     draft = (
         PublicationDraft.objects.select_related("company", "company__organization")
-        .filter(id=draft_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role))
+        .filter(
+            id=draft_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role)
+        )
         .first()
     )
     if draft is None:
@@ -651,7 +655,9 @@ def _procurement_draft_for_user(
     user = cast(User, request.user)
     draft = (
         CommerceProcurementDraft.objects.select_related("company", "company__organization")
-        .filter(id=draft_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role))
+        .filter(
+            id=draft_id, company__in=accessible_company_queryset(user, minimum_role=minimum_role)
+        )
         .first()
     )
     if draft is None:

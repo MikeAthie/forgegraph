@@ -55,6 +55,15 @@ def main() -> int:
         "PLAYWRIGHT_RUNTIME_TOOL_URL",
         f"http://127.0.0.1:{backend_port}/health",
     )
+    playwright_run_id = env.get("PLAYWRIGHT_RUN_ID", "local").strip() or "local"
+    runtime_intent_consumer = env.get(
+        "FORGEGRAPH_RUNTIME_INTENT_CONSUMER_NAME",
+        f"playwright-runtime-intents-{playwright_run_id}",
+    )
+    run_queue_worker_id = env.get(
+        "PLAYWRIGHT_RUN_QUEUE_WORKER_ID",
+        f"playwright-run-queue-{playwright_run_id}",
+    )
 
     env.setdefault("MEMORY_GRPC_HOST", "127.0.0.1")
     env.setdefault("MEMORY_GRPC_PORT", "50052")
@@ -109,7 +118,7 @@ def main() -> int:
             "manage.py",
             "process_runtime_write_intents",
             "--consumer",
-            "playwright-runtime-intents",
+            runtime_intent_consumer,
         ],
         cwd=PROJECT_ROOT,
         env=env,
@@ -135,7 +144,7 @@ def main() -> int:
             "manage.py",
             "process_run_queue",
             "--worker-id",
-            "playwright-run-queue",
+            run_queue_worker_id,
         ],
         cwd=PROJECT_ROOT,
         env=env,

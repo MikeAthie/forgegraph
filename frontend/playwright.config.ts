@@ -87,6 +87,26 @@ const preferredLlmBaseUrl =
   (runtimeTarget === "docker" ? dockerLocalLlmUrl : `${llmMockUrl}/v1`);
 const useLlmMockServer = preferredLlmBaseUrl === `${llmMockUrl}/v1`;
 const playwrightRunId = process.env.PLAYWRIGHT_RUN_ID ?? `${Date.now()}`;
+const configuredRuntimeIntentStream =
+  process.env.FORGEGRAPH_RUNTIME_INTENT_STREAM ?? process.env.ENGINE_RUNTIME_INTENT_STREAM;
+const runtimeIntentStream =
+  configuredRuntimeIntentStream && configuredRuntimeIntentStream !== "forgegraph:runtime:intents"
+    ? configuredRuntimeIntentStream
+    : `forgegraph:runtime:intents:${playwrightRunId}`;
+const configuredRuntimeIntentDeadLetterStream = process.env.FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM;
+const runtimeIntentDeadLetterStream =
+  configuredRuntimeIntentDeadLetterStream &&
+  configuredRuntimeIntentDeadLetterStream !== "forgegraph:runtime:intents:dead"
+    ? configuredRuntimeIntentDeadLetterStream
+    : `${runtimeIntentStream}:dead`;
+const configuredRuntimeIntentConsumerGroup = process.env.FORGEGRAPH_RUNTIME_INTENT_CONSUMER_GROUP;
+const runtimeIntentConsumerGroup =
+  configuredRuntimeIntentConsumerGroup && configuredRuntimeIntentConsumerGroup !== "backend-runtime-writers"
+    ? configuredRuntimeIntentConsumerGroup
+    : `backend-runtime-writers:${playwrightRunId}`;
+const runtimeIntentOutcomeTimeoutMs =
+  process.env.ENGINE_RUNTIME_INTENT_OUTCOME_TIMEOUT_MS ??
+  ((process.env.LIVE_LLM_E2E ?? "").toLowerCase() === "true" ? "60000" : "10000");
 const engineEventSpoolPath =
   process.env.ENGINE_EVENT_SPOOL_PATH ??
   path.join(os.tmpdir(), `forgegraph-playwright-engine-events-${playwrightRunId}-${enginePort}.jsonl`);
@@ -117,6 +137,7 @@ if (!useDockerRuntime) {
   process.env.NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL ?? backendUrl;
 }
 process.env.PLAYWRIGHT_RUNTIME_TARGET = runtimeTarget;
+process.env.PLAYWRIGHT_RUN_ID = playwrightRunId;
 process.env.PLAYWRIGHT_RUNTIME_TENANT_ID = runtimeFixtureTenantId;
 process.env.PLAYWRIGHT_RUNTIME_FIXTURE_EMAIL = runtimeFixtureEmail;
 process.env.PLAYWRIGHT_RUNTIME_FIXTURE_PASSWORD = runtimeFixturePassword;
@@ -126,6 +147,11 @@ process.env.PLAYWRIGHT_RUNTIME_TOOL_NAME = runtimeFixtureToolName;
 process.env.PLAYWRIGHT_RUNTIME_TOOL_URL = runtimeFixtureToolUrl;
 process.env.PLAYWRIGHT_LLM_MOCK_URL = llmMockUrl;
 process.env.OPENAI_BASE_URL = process.env.OPENAI_BASE_URL ?? preferredLlmBaseUrl;
+process.env.FORGEGRAPH_RUNTIME_INTENT_STREAM = runtimeIntentStream;
+process.env.ENGINE_RUNTIME_INTENT_STREAM = runtimeIntentStream;
+process.env.FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM = runtimeIntentDeadLetterStream;
+process.env.FORGEGRAPH_RUNTIME_INTENT_CONSUMER_GROUP = runtimeIntentConsumerGroup;
+process.env.ENGINE_RUNTIME_INTENT_OUTCOME_TIMEOUT_MS = runtimeIntentOutcomeTimeoutMs;
 process.env.TESTING = process.env.TESTING ?? "true";
 process.env.SECRET_KEY = process.env.SECRET_KEY ?? "django-insecure-test-key-change-in-production";
 process.env.ALLOWED_HOSTS = process.env.ALLOWED_HOSTS ?? "127.0.0.1,localhost,testserver";
@@ -139,7 +165,7 @@ process.env.MEMORY_GRPC_PORT = process.env.MEMORY_GRPC_PORT ?? String(memoryGrpc
 
 const workerOverride = process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined;
 const useSqlite = (process.env.USE_SQLITE ?? "false").toLowerCase() === "true";
-const sqliteDbPath = process.env.SQLITE_DB_PATH ?? path.join(os.tmpdir(), "forgegraph-playwright-db.sqlite3");
+const sqliteDbPath = process.env.SQLITE_DB_PATH ?? path.join(os.tmpdir(), `forgegraph-playwright-${playwrightRunId}.sqlite3`);
 
 // Ensure the Playwright test process and any helper subprocesses (e.g. seed_run_trace)
 // point at the same SQLite DB as the Django webServer.
@@ -156,7 +182,13 @@ const workerCount =
 
 export default defineConfig({
   testDir: "./__tests__",
-  testMatch: ["**/e2e/**/*.spec.ts", "**/consulting/specs/*.spec.ts", "**/legacy-ultimate-test/specs/*.spec.ts"],
+  testMatch: [
+    "**/e2e/**/*.spec.ts",
+    "**/product-modes/**/*.spec.ts",
+    "**/product-modes-live/**/*.spec.ts",
+    "**/consulting/specs/*.spec.ts",
+    "**/legacy-ultimate-test/specs/*.spec.ts",
+  ],
   testIgnore: [
     "**/agent-authoring.spec.ts",
     "**/graph-editor.spec.ts",

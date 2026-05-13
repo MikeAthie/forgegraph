@@ -179,7 +179,9 @@ class CompanyAssignmentDetailView(APIView):
             .filter(id=assignment_id)
             .first()
         )
-        if assignment is None or not has_company_access(user, assignment.company, minimum_role="admin"):
+        if assignment is None or not has_company_access(
+            user, assignment.company, minimum_role="admin"
+        ):
             return _not_found("Company assignment was not found.")
         update_fields: list[str] = ["updated_at"]
         if "role" in serializer.validated_data:

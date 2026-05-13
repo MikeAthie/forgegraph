@@ -194,9 +194,10 @@ def test_generic_company_pack_api_installs_details_objects_updates_and_archives(
     assert installation["namespace"] == "digital_marketing_pro.v1"
     assert installation["config_revision_count"] == 1
     assert installation["namespace_claim_count"] > 0
-    assert PackInstallationConfigRevision.objects.filter(
-        installation_id=installation["id"]
-    ).count() == 1
+    assert (
+        PackInstallationConfigRevision.objects.filter(installation_id=installation["id"]).count()
+        == 1
+    )
     assert PackNamespaceClaim.objects.filter(
         company=company,
         status="active",
@@ -207,9 +208,7 @@ def test_generic_company_pack_api_installs_details_objects_updates_and_archives(
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()["data"]["packs"]] == [installation["id"]]
 
-    detail = authenticated_client.get(
-        f"/api/companies/{company.id}/packs/{installation['id']}"
-    )
+    detail = authenticated_client.get(f"/api/companies/{company.id}/packs/{installation['id']}")
     assert detail.status_code == 200
     assert detail.json()["data"]["installation"]["config_revisions"][0]["version"] == 1
 

@@ -189,6 +189,31 @@ def _ensure_graph_uses_openrouter_credential(
     metadata = graph_json.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
+    _apply_openrouter_metadata(metadata, credential, text_model=text_model, image_model=image_model)
+    graph_json["metadata"] = metadata
+
+    _apply_openrouter_node_credentials(graph_json, credential, text_model=text_model)
+
+    incoming_checksum = _graph_checksum(graph_json)
+    if latest.checksum == incoming_checksum:
+        return latest, False
+
+    version = GraphVersion.objects.create(
+        graph=graph,
+        version=latest.version + 1,
+        graph_json=graph_json,
+    )
+    graph.save()
+    return version, True
+
+
+def _apply_openrouter_metadata(
+    metadata: dict[str, Any],
+    credential: APIKey,
+    *,
+    text_model: str,
+    image_model: str,
+) -> None:
     metadata["llm_access"] = llm_access_storage_payload(
         LLMAccessConfig(
             llm_mode="byok",
@@ -215,8 +240,14 @@ def _ensure_graph_uses_openrouter_credential(
         "api_key_present": True,
         "durable_secret_owner": "backend_api_key_store",
     }
-    graph_json["metadata"] = metadata
 
+
+def _apply_openrouter_node_credentials(
+    graph_json: dict[str, Any],
+    credential: APIKey,
+    *,
+    text_model: str,
+) -> None:
     for node in graph_json.get("nodes", []):
         if not isinstance(node, dict):
             continue
@@ -227,15 +258,3 @@ def _ensure_graph_uses_openrouter_credential(
             config["provider"] = "openrouter"
             config["credential_id"] = str(credential.id)
             config["model"] = text_model
-
-    incoming_checksum = _graph_checksum(graph_json)
-    if latest.checksum == incoming_checksum:
-        return latest, False
-
-    version = GraphVersion.objects.create(
-        graph=graph,
-        version=latest.version + 1,
-        graph_json=graph_json,
-    )
-    graph.save()
-    return version, True

@@ -235,6 +235,13 @@ const API_PATHS = {
     companyAssignments: "/api/company-assignments",
     companyAssignment: (assignmentId: string) => `/api/company-assignments/${assignmentId}`,
   },
+  services: {
+    catalog: "/api/service-catalog",
+    catalogItem: (serviceId: string) => `/api/service-catalog/${serviceId}`,
+    engagements: "/api/service-engagements",
+    engagement: (engagementId: string) => `/api/service-engagements/${engagementId}`,
+    deliverables: (engagementId: string) => `/api/service-engagements/${engagementId}/deliverables`,
+  },
   storefront: {
     products: (companySlug: string) => `/api/storefront/${companySlug}/products`,
     checkoutSessions: (companySlug: string) => `/api/storefront/${companySlug}/checkout-sessions`,
@@ -4732,6 +4739,119 @@ export type CompanyAssignmentPatchInput = {
   expires_at?: string | null;
 };
 
+export type ServiceCatalogItemDTO = {
+  id: string;
+  organization_id: string;
+  slug: string;
+  title: string;
+  description: string;
+  status: "draft" | "active" | "disabled" | "archived" | string;
+  visibility: "internal" | "organization" | "customer" | "public" | string;
+  audience: string;
+  required_pack_ids: string[];
+  optional_pack_ids: string[];
+  intake_schema: Record<string, unknown>;
+  deliverables_schema: unknown[];
+  default_operation_templates: string[];
+  default_report_template_id: string;
+  pricing_metadata: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ServiceCatalogInput = {
+  slug: string;
+  title: string;
+  description?: string;
+  status?: "draft" | "active" | "disabled" | "archived";
+  visibility?: "internal" | "organization" | "customer" | "public";
+  audience?: string;
+  required_pack_ids?: string[];
+  optional_pack_ids?: string[];
+  intake_schema?: Record<string, unknown>;
+  deliverables_schema?: unknown[];
+  default_operation_templates?: string[];
+  default_report_template_id?: string;
+  pricing_metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+};
+
+export type ServiceCatalogPatchInput = Partial<ServiceCatalogInput>;
+
+export type ServiceEngagementDTO = {
+  id: string;
+  organization_id: string;
+  company_id: string;
+  company_name: string;
+  catalog_item_id: string;
+  service_slug: string;
+  service_title: string;
+  status: string;
+  customer_status: string;
+  intake_data: Record<string, unknown>;
+  public_summary: string;
+  required_pack_ids: string[];
+  operation_ids: string[];
+  assigned_operator_id: string | null;
+  requested_by_id: string | null;
+  started_at: string | null;
+  delivered_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  internal_notes?: string;
+  source_key?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ServiceEngagementInput = {
+  company_id: string;
+  catalog_item_id: string;
+  status?: string;
+  customer_status?: string;
+  intake_data?: Record<string, unknown>;
+  public_summary?: string;
+  internal_notes?: string;
+  source_key?: string;
+  required_pack_ids?: string[];
+  operation_ids?: string[];
+  assigned_operator_id?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type ServiceEngagementPatchInput = Partial<Omit<ServiceEngagementInput, "company_id" | "catalog_item_id">>;
+
+export type ServiceDeliverableDTO = {
+  id: string;
+  organization_id: string;
+  company_id: string;
+  engagement_id: string;
+  title: string;
+  deliverable_type: string;
+  status: string;
+  visibility: string;
+  artifact_id: string | null;
+  report_run_id: string | null;
+  summary: string;
+  created_by_id: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ServiceDeliverableInput = {
+  title: string;
+  deliverable_type?: string;
+  status?: "draft" | "in_review" | "ready" | "delivered" | "accepted" | "archived";
+  visibility?: "customer" | "operator" | "internal";
+  artifact_id?: string | null;
+  report_run_id?: string | null;
+  summary?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type CompanyBlueprintInput = {
   company_name: string;
   objective: string;
@@ -4830,6 +4950,76 @@ export const portfolioApi = {
       input,
     );
     return response.data.data.assignment;
+  },
+};
+
+export const serviceEngagementsApi = {
+  listCatalog: async (params?: { status?: string; visibility?: string }): Promise<ServiceCatalogItemDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ services: ServiceCatalogItemDTO[] }>>(
+      API_PATHS.services.catalog,
+      { params },
+    );
+    return response.data.data.services;
+  },
+  createCatalogItem: async (input: ServiceCatalogInput): Promise<ServiceCatalogItemDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ service: ServiceCatalogItemDTO }>>(
+      API_PATHS.services.catalog,
+      input,
+    );
+    return response.data.data.service;
+  },
+  getCatalogItem: async (serviceId: string): Promise<ServiceCatalogItemDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ service: ServiceCatalogItemDTO }>>(
+      API_PATHS.services.catalogItem(serviceId),
+    );
+    return response.data.data.service;
+  },
+  patchCatalogItem: async (serviceId: string, input: ServiceCatalogPatchInput): Promise<ServiceCatalogItemDTO> => {
+    const response = await api.patch<ApiSuccessResponse<{ service: ServiceCatalogItemDTO }>>(
+      API_PATHS.services.catalogItem(serviceId),
+      input,
+    );
+    return response.data.data.service;
+  },
+  listEngagements: async (params?: { company_id?: string; status?: string }): Promise<ServiceEngagementDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ engagements: ServiceEngagementDTO[] }>>(
+      API_PATHS.services.engagements,
+      { params },
+    );
+    return response.data.data.engagements;
+  },
+  createEngagement: async (input: ServiceEngagementInput): Promise<ServiceEngagementDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ engagement: ServiceEngagementDTO }>>(
+      API_PATHS.services.engagements,
+      input,
+    );
+    return response.data.data.engagement;
+  },
+  getEngagement: async (engagementId: string): Promise<ServiceEngagementDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ engagement: ServiceEngagementDTO }>>(
+      API_PATHS.services.engagement(engagementId),
+    );
+    return response.data.data.engagement;
+  },
+  patchEngagement: async (engagementId: string, input: ServiceEngagementPatchInput): Promise<ServiceEngagementDTO> => {
+    const response = await api.patch<ApiSuccessResponse<{ engagement: ServiceEngagementDTO }>>(
+      API_PATHS.services.engagement(engagementId),
+      input,
+    );
+    return response.data.data.engagement;
+  },
+  listDeliverables: async (engagementId: string): Promise<ServiceDeliverableDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ deliverables: ServiceDeliverableDTO[] }>>(
+      API_PATHS.services.deliverables(engagementId),
+    );
+    return response.data.data.deliverables;
+  },
+  createDeliverable: async (engagementId: string, input: ServiceDeliverableInput): Promise<ServiceDeliverableDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ deliverable: ServiceDeliverableDTO }>>(
+      API_PATHS.services.deliverables(engagementId),
+      input,
+    );
+    return response.data.data.deliverable;
   },
 };
 

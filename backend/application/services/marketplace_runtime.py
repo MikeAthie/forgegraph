@@ -258,6 +258,33 @@ def _normalize_v2_runtime_tool_manifest(
         return None, "missing_execution"
 
     execution_type = str(execution.get("type") or "").strip().lower()
+    return _normalize_v2_execution_definition(
+        release=release,
+        runtime_manifest=runtime_manifest,
+        category=category,
+        description=description,
+        visibility=visibility,
+        input_schema=input_schema,
+        output_schema=output_schema,
+        config_schema=config_schema,
+        default_config=default_config,
+        execution_type=execution_type,
+    )
+
+
+def _normalize_v2_execution_definition(
+    *,
+    release: NodeRegistryRelease,
+    runtime_manifest: dict[str, Any],
+    category: str,
+    description: str,
+    visibility: str,
+    input_schema: dict[str, Any],
+    output_schema: dict[str, Any] | None,
+    config_schema: dict[str, Any],
+    default_config: dict[str, Any],
+    execution_type: str,
+) -> tuple[dict[str, Any] | None, str]:
     if execution_type == "http":
         definition = _build_v2_http_definition(
             release=release,
@@ -659,23 +686,12 @@ def select_agent_runtime_tools(
         if isinstance(value, str) and value.strip()
     }
     max_tools = _coerce_positive_int(selection.get("max_tools"))
-
-    candidates = [
-        tool
-        for tool in available_tools
-        if _normalize_tool_visibility(tool.get("visibility")) != TOOL_VISIBILITY_INTERNAL
-    ]
-    if include_names:
-        candidates = [tool for tool in candidates if str(tool.get("name") or "") in include_names]
-    if allowed_categories:
-        candidates = [
-            tool for tool in candidates if str(tool.get("category") or "") in allowed_categories
-        ]
-    if exclude_names:
-        candidates = [
-            tool for tool in candidates if str(tool.get("name") or "") not in exclude_names
-        ]
-
+    candidates = _runtime_tool_candidates(
+        available_tools=available_tools,
+        include_names=include_names,
+        allowed_categories=allowed_categories,
+        exclude_names=exclude_names,
+    )
     candidates.sort(key=lambda item: (str(item.get("name") or ""), str(item.get("version") or "")))
     for candidate in candidates:
         candidate_name = str(candidate.get("name") or "").strip()
@@ -695,3 +711,28 @@ def select_agent_runtime_tools(
         },
         "unresolved_explicit_tools": unresolved_explicit_tools,
     }
+
+
+def _runtime_tool_candidates(
+    *,
+    available_tools: list[dict[str, Any]],
+    include_names: set[str],
+    allowed_categories: set[str],
+    exclude_names: set[str],
+) -> list[dict[str, Any]]:
+    candidates = [
+        tool
+        for tool in available_tools
+        if _normalize_tool_visibility(tool.get("visibility")) != TOOL_VISIBILITY_INTERNAL
+    ]
+    if include_names:
+        candidates = [tool for tool in candidates if str(tool.get("name") or "") in include_names]
+    if allowed_categories:
+        candidates = [
+            tool for tool in candidates if str(tool.get("category") or "") in allowed_categories
+        ]
+    if exclude_names:
+        candidates = [
+            tool for tool in candidates if str(tool.get("name") or "") not in exclude_names
+        ]
+    return candidates

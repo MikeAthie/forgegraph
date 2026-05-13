@@ -6,10 +6,12 @@ Clean Architecture: Interface Adapters layer.
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
 from django.db import IntegrityError, transaction
+from django.db.models import QuerySet
 from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiParameter,
@@ -68,17 +70,16 @@ def _graph_checksum(graph_json: dict[str, Any]) -> str:
     return hashlib.sha256(json_str.encode()).hexdigest()
 
 
-def _graphs_for_user(user: User, *, minimum_role: str = "viewer"):
+def _graphs_for_user(user: User, *, minimum_role: str = "viewer") -> QuerySet[Graph]:
     return accessible_company_queryset(user, minimum_role=minimum_role)
 
 
 def _graph_for_user(graph_id: UUID, user: User, *, minimum_role: str = "viewer") -> Graph | None:
-    return cast(
-        Graph | None,
+    return (
         _graphs_for_user(user, minimum_role=minimum_role)
         .filter(id=graph_id)
         .select_related("organization")
-        .first(),
+        .first()
     )
 
 
@@ -114,6 +115,14 @@ def _external_workflow_response_payload(
             }
         ).data,
     )
+
+
+@dataclass(frozen=True)
+class ExternalWorkflowPersistenceResult:
+    graph: Graph
+    version: GraphVersion
+    created_graph: bool
+    created_version: bool
 
 
 class GraphListCreateView(APIView):
@@ -517,6 +526,240 @@ class ExternalWorkflowCreateView(APIView):
             versions = versions.filter(graph__external_ref=external_ref)
         return cast(GraphVersion | None, versions.order_by("-created_at").first())
 
+    def _validated_create_data(self, request: Request) -> dict[str, Any] | Response:
+        request_data: dict[str, Any] = dict(request.data) if isinstance(request.data, dict) else {}
+        header_idempotency_key = (request.headers.get("Idempotency-Key") or "").strip()
+        if header_idempotency_key and not request_data.get("idempotency_key"):
+            request_data["idempotency_key"] = header_idempotency_key
+
+        serializer = ExternalWorkflowCreateSerializer(data=request_data)
+        if serializer.is_valid():
+            return cast(dict[str, Any], serializer.validated_data)
+
+        return error_response(
+            code="VALIDATION_ERROR",
+            message="The request contains invalid fields",
+            status=status.HTTP_400_BAD_REQUEST,
+            details=[
+                {"field": field, "issue": ", ".join(errors)}
+                for field, errors in serializer.errors.items()
+            ],
+        )
+
+    def _idempotent_replay_response(
+        self,
+        *,
+        user: User,
+        external_source: str,
+        external_ref: str,
+        idempotency_key: str,
+    ) -> Response | None:
+        replay_version = self._find_idempotent_version(
+            user=user,
+            external_source=external_source,
+            external_ref=external_ref,
+            idempotency_key=idempotency_key,
+        )
+        if replay_version is None:
+            return None
+
+        payload = _external_workflow_response_payload(
+            graph=replay_version.graph,
+            version=replay_version,
+            external_source=external_source,
+            external_ref=external_ref,
+            idempotency_key=idempotency_key,
+            created_graph=False,
+            created_version=False,
+            idempotent_replay=True,
+            warnings=[],
+        )
+        return success_response(payload)
+
+    def _graph_validation_warnings(
+        self,
+        *,
+        graph_json: dict[str, Any],
+        strict: bool,
+        require_entry_exit: bool,
+    ) -> list[dict[str, Any]] | Response:
+        validator = GraphValidator()
+        try:
+            issues = validator.validate(
+                graph_json,
+                strict=strict,
+                require_entry_exit=require_entry_exit,
+            )
+        except Exception as exc:
+            return error_response(
+                code="GRAPH_VALIDATION_ERROR",
+                message=str(exc),
+                status=status.HTTP_400_BAD_REQUEST,
+                details=getattr(exc, "errors", []),
+            )
+
+        errors = [issue for issue in issues if issue.get("severity") != "warning"]
+        if errors:
+            return error_response(
+                code="GRAPH_VALIDATION_ERROR",
+                message="Graph validation failed",
+                status=status.HTTP_400_BAD_REQUEST,
+                details=errors,
+            )
+        return [issue for issue in issues if issue.get("severity") == "warning"]
+
+    def _persist_external_workflow(
+        self,
+        *,
+        user: User,
+        name: str,
+        description: str,
+        graph_json: dict[str, Any],
+        external_source: str,
+        external_ref: str,
+        idempotency_key: str,
+    ) -> ExternalWorkflowPersistenceResult | Response:
+        incoming_checksum = _graph_checksum(graph_json)
+        with transaction.atomic():
+            graph_result = self._get_or_create_external_graph(
+                user=user,
+                name=name,
+                description=description,
+                external_source=external_source,
+                external_ref=external_ref,
+            )
+            if isinstance(graph_result, Response):
+                return graph_result
+            graph, created_graph = graph_result
+
+            version, created_version = self._get_or_create_external_graph_version(
+                graph=graph,
+                graph_json=graph_json,
+                incoming_checksum=incoming_checksum,
+                idempotency_key=idempotency_key,
+                created_graph=created_graph,
+            )
+        return ExternalWorkflowPersistenceResult(
+            graph=graph,
+            version=version,
+            created_graph=created_graph,
+            created_version=created_version,
+        )
+
+    def _get_or_create_external_graph(
+        self,
+        *,
+        user: User,
+        name: str,
+        description: str,
+        external_source: str,
+        external_ref: str,
+    ) -> tuple[Graph, bool] | Response:
+        if not external_ref:
+            graph = Graph.objects.create(
+                owner=user,
+                organization=user.default_organization,
+                name=name,
+                description=description,
+                external_source=external_source,
+            )
+            _create_graph_memory_config(graph, user)
+            return graph, True
+
+        graph = (
+            Graph.objects.select_for_update()
+            .filter(organization=user.default_organization)
+            .filter(external_source=external_source, external_ref=external_ref)
+            .first()
+        )
+        if graph is None:
+            graph = Graph.objects.create(
+                owner=user,
+                organization=user.default_organization,
+                name=name,
+                description=description,
+                external_source=external_source,
+                external_ref=external_ref,
+            )
+            _create_graph_memory_config(graph, user)
+            return graph, True
+
+        if not has_company_access(user, graph, minimum_role="member"):
+            return error_response(
+                code="NOT_FOUND",
+                message="Workflow not found or you do not have access to it.",
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        self._update_external_graph_metadata(graph, name=name, description=description)
+        return graph, False
+
+    def _update_external_graph_metadata(
+        self,
+        graph: Graph,
+        *,
+        name: str,
+        description: str,
+    ) -> None:
+        graph_update_fields: list[str] = []
+        if graph.name != name:
+            graph.name = name
+            graph_update_fields.append("name")
+        if graph.description != description:
+            graph.description = description
+            graph_update_fields.append("description")
+        if graph_update_fields:
+            graph.save(update_fields=graph_update_fields)
+
+    def _get_or_create_external_graph_version(
+        self,
+        *,
+        graph: Graph,
+        graph_json: dict[str, Any],
+        incoming_checksum: str,
+        idempotency_key: str,
+        created_graph: bool,
+    ) -> tuple[GraphVersion, bool]:
+        latest = graph.versions.order_by("-version").first()
+        if latest and latest.checksum == incoming_checksum:
+            if idempotency_key and not latest.external_idempotency_key:
+                latest.external_idempotency_key = idempotency_key
+                latest.save(update_fields=["external_idempotency_key"])
+            return latest, False
+
+        next_version = (latest.version + 1) if latest else 1
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=next_version,
+            graph_json=graph_json,
+            external_idempotency_key=idempotency_key,
+        )
+        if not created_graph:
+            graph.save()
+        return version, True
+
+    def _external_workflow_conflict_response(
+        self,
+        *,
+        user: User,
+        external_source: str,
+        external_ref: str,
+        idempotency_key: str,
+    ) -> Response:
+        replay_response = self._idempotent_replay_response(
+            user=user,
+            external_source=external_source,
+            external_ref=external_ref,
+            idempotency_key=idempotency_key,
+        )
+        if replay_response is not None:
+            return replay_response
+        return error_response(
+            code="CONFLICT",
+            message="External workflow import conflicted with an existing resource.",
+            status=status.HTTP_409_CONFLICT,
+        )
+
     @extend_schema(
         tags=["graphs"],
         operation_id="graphs_external_workflow_create",
@@ -608,184 +851,69 @@ class ExternalWorkflowCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        request_data: dict[str, Any] = dict(request.data) if isinstance(request.data, dict) else {}
-        header_idempotency_key = (request.headers.get("Idempotency-Key") or "").strip()
-        if header_idempotency_key and not request_data.get("idempotency_key"):
-            request_data["idempotency_key"] = header_idempotency_key
+        validated_data = self._validated_create_data(request)
+        if isinstance(validated_data, Response):
+            return validated_data
 
-        serializer = ExternalWorkflowCreateSerializer(data=request_data)
-        if not serializer.is_valid():
-            return error_response(
-                code="VALIDATION_ERROR",
-                message="The request contains invalid fields",
-                status=status.HTTP_400_BAD_REQUEST,
-                details=[
-                    {"field": field, "issue": ", ".join(errors)}
-                    for field, errors in serializer.errors.items()
-                ],
-            )
+        name = validated_data["name"]
+        description = validated_data.get("description", "")
+        graph_json = validated_data["graph_json"]
+        external_source = validated_data["external_source"]
+        external_ref = validated_data.get("external_ref", "")
+        idempotency_key = validated_data.get("idempotency_key", "")
 
-        name = serializer.validated_data["name"]
-        description = serializer.validated_data.get("description", "")
-        graph_json = serializer.validated_data["graph_json"]
-        external_source = serializer.validated_data["external_source"]
-        external_ref = serializer.validated_data.get("external_ref", "")
-        idempotency_key = serializer.validated_data.get("idempotency_key", "")
-        strict = serializer.validated_data["strict"]
-        require_entry_exit = serializer.validated_data["require_entry_exit"]
-
-        replay_version = self._find_idempotent_version(
+        replay_response = self._idempotent_replay_response(
             user=user,
             external_source=external_source,
             external_ref=external_ref,
             idempotency_key=idempotency_key,
         )
-        if replay_version is not None:
-            payload = _external_workflow_response_payload(
-                graph=replay_version.graph,
-                version=replay_version,
+        if replay_response is not None:
+            return replay_response
+
+        warnings = self._graph_validation_warnings(
+            graph_json=graph_json,
+            strict=validated_data["strict"],
+            require_entry_exit=validated_data["require_entry_exit"],
+        )
+        if isinstance(warnings, Response):
+            return warnings
+
+        try:
+            persistence = self._persist_external_workflow(
+                user=user,
+                name=name,
+                description=description,
+                graph_json=graph_json,
                 external_source=external_source,
                 external_ref=external_ref,
                 idempotency_key=idempotency_key,
-                created_graph=False,
-                created_version=False,
-                idempotent_replay=True,
-                warnings=[],
             )
-            return success_response(payload)
-
-        validator = GraphValidator()
-        try:
-            issues = validator.validate(
-                graph_json,
-                strict=strict,
-                require_entry_exit=require_entry_exit,
-            )
-        except Exception as e:
-            return error_response(
-                code="GRAPH_VALIDATION_ERROR",
-                message=str(e),
-                status=status.HTTP_400_BAD_REQUEST,
-                details=getattr(e, "errors", []),
-            )
-
-        errors = [issue for issue in issues if issue.get("severity") != "warning"]
-        warnings = [issue for issue in issues if issue.get("severity") == "warning"]
-        if errors:
-            return error_response(
-                code="GRAPH_VALIDATION_ERROR",
-                message="Graph validation failed",
-                status=status.HTTP_400_BAD_REQUEST,
-                details=errors,
-            )
-
-        incoming_checksum = _graph_checksum(graph_json)
-        try:
-            with transaction.atomic():
-                created_graph = False
-                created_version = False
-
-                if external_ref:
-                    graph = (
-                        Graph.objects.select_for_update()
-                        .filter(organization=user.default_organization)
-                        .filter(external_source=external_source, external_ref=external_ref)
-                        .first()
-                    )
-                    if graph is None:
-                        graph = Graph.objects.create(
-                            owner=user,
-                            organization=user.default_organization,
-                            name=name,
-                            description=description,
-                            external_source=external_source,
-                            external_ref=external_ref,
-                        )
-                        _create_graph_memory_config(graph, user)
-                        created_graph = True
-                    elif not has_company_access(user, graph, minimum_role="member"):
-                        return error_response(
-                            code="NOT_FOUND",
-                            message="Workflow not found or you do not have access to it.",
-                            status=status.HTTP_404_NOT_FOUND,
-                        )
-                    else:
-                        graph_update_fields: list[str] = []
-                        if graph.name != name:
-                            graph.name = name
-                            graph_update_fields.append("name")
-                        if graph.description != description:
-                            graph.description = description
-                            graph_update_fields.append("description")
-                        if graph_update_fields:
-                            graph.save(update_fields=graph_update_fields)
-                else:
-                    graph = Graph.objects.create(
-                        owner=user,
-                        organization=user.default_organization,
-                        name=name,
-                        description=description,
-                        external_source=external_source,
-                    )
-                    _create_graph_memory_config(graph, user)
-                    created_graph = True
-
-                latest = graph.versions.order_by("-version").first()
-                if latest and latest.checksum == incoming_checksum:
-                    version = latest
-                    if idempotency_key and not version.external_idempotency_key:
-                        version.external_idempotency_key = idempotency_key
-                        version.save(update_fields=["external_idempotency_key"])
-                else:
-                    next_version = (latest.version + 1) if latest else 1
-                    version = GraphVersion.objects.create(
-                        graph=graph,
-                        version=next_version,
-                        graph_json=graph_json,
-                        external_idempotency_key=idempotency_key,
-                    )
-                    created_version = True
-                    if not created_graph:
-                        graph.save()  # Trigger updated_at on graph when a new version is added.
         except IntegrityError:
-            replay_version = self._find_idempotent_version(
+            return self._external_workflow_conflict_response(
                 user=user,
                 external_source=external_source,
                 external_ref=external_ref,
                 idempotency_key=idempotency_key,
             )
-            if replay_version is None:
-                return error_response(
-                    code="CONFLICT",
-                    message="External workflow import conflicted with an existing resource.",
-                    status=status.HTTP_409_CONFLICT,
-                )
-            payload = _external_workflow_response_payload(
-                graph=replay_version.graph,
-                version=replay_version,
-                external_source=external_source,
-                external_ref=external_ref,
-                idempotency_key=idempotency_key,
-                created_graph=False,
-                created_version=False,
-                idempotent_replay=True,
-                warnings=[],
-            )
-            return success_response(payload)
+        if isinstance(persistence, Response):
+            return persistence
 
         payload = _external_workflow_response_payload(
-            graph=graph,
-            version=version,
+            graph=persistence.graph,
+            version=persistence.version,
             external_source=external_source,
             external_ref=external_ref,
             idempotency_key=idempotency_key,
-            created_graph=created_graph,
-            created_version=created_version,
+            created_graph=persistence.created_graph,
+            created_version=persistence.created_version,
             idempotent_replay=False,
             warnings=warnings,
         )
         response_status = (
-            status.HTTP_201_CREATED if (created_graph or created_version) else status.HTTP_200_OK
+            status.HTTP_201_CREATED
+            if (persistence.created_graph or persistence.created_version)
+            else status.HTTP_200_OK
         )
         return success_response(payload, status=response_status)
 

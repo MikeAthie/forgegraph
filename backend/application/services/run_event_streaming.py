@@ -24,6 +24,37 @@ EVENT_LEVELS = (
 DEFAULT_EVENT_LEVEL = EVENT_LEVEL_DEFAULT
 STREAM_SUMMARY_EVENT_TYPE = "node_stream.summary"
 
+_MINIMAL_TRANSPORT_TYPES = {
+    "run.updated",
+    "node_run.updated",
+    "connection_established",
+    "heartbeat",
+    "run_started",
+    "run_completed",
+    "run_failed",
+    "run_paused",
+    "run_resumed",
+    "run_canceled",
+    "decision_required",
+    "decision_resolved",
+    "error",
+}
+_DEFAULT_TRANSPORT_TYPES = {
+    "run.schema_validation",
+    STREAM_SUMMARY_EVENT_TYPE,
+    "cost_update",
+}
+_VERBOSE_TRANSPORT_TYPES = {
+    "node_stream.chunk",
+    "node_stream_chunk",
+    "node_stream_end",
+}
+_NODE_STATUS_TRANSPORT_TYPES = {
+    "node_started",
+    "node_completed",
+    "node_failed",
+}
+
 _EVENT_LEVEL_RANK = {
     EVENT_LEVEL_MINIMAL: 0,
     EVENT_LEVEL_DEFAULT: 1,
@@ -63,49 +94,23 @@ def classify_transport_event_level(
     normalized_type = str(event_type or "").strip()
     normalized_payload = payload if isinstance(payload, dict) else {}
 
-    if normalized_type == "run.updated":
-        return EVENT_LEVEL_MINIMAL
-    if normalized_type == "run.schema_validation":
-        return EVENT_LEVEL_DEFAULT
-    if normalized_type == "node_run.updated":
-        return EVENT_LEVEL_MINIMAL
     if normalized_type == STREAM_SUMMARY_EVENT_TYPE:
         if bool(normalized_payload.get("final")):
             return EVENT_LEVEL_MINIMAL
         return EVENT_LEVEL_DEFAULT
-    if normalized_type == "node_stream.chunk":
-        return EVENT_LEVEL_VERBOSE
-    if normalized_type.startswith("agent."):
+    if normalized_type in _MINIMAL_TRANSPORT_TYPES:
+        return EVENT_LEVEL_MINIMAL
+    if normalized_type in _DEFAULT_TRANSPORT_TYPES:
+        return EVENT_LEVEL_DEFAULT
+    if normalized_type in _VERBOSE_TRANSPORT_TYPES or normalized_type.startswith("agent."):
         return EVENT_LEVEL_VERBOSE
     if "error" in normalized_type or "decision" in normalized_type:
         return EVENT_LEVEL_MINIMAL
-    if normalized_type in {
-        "connection_established",
-        "heartbeat",
-        "run.updated",
-        "run_started",
-        "run_completed",
-        "run_failed",
-        "run_paused",
-        "run_resumed",
-        "run_canceled",
-    }:
-        return EVENT_LEVEL_MINIMAL
-    if normalized_type == "run.schema_validation":
-        return EVENT_LEVEL_MINIMAL
-    if normalized_type in {"node_run.updated", "node_started", "node_completed", "node_failed"}:
+    if normalized_type in _NODE_STATUS_TRANSPORT_TYPES:
         status = str(normalized_payload.get("status") or "").strip().lower()
         if status in {"failed", "waiting"}:
             return EVENT_LEVEL_MINIMAL
         return EVENT_LEVEL_DEFAULT
-    if normalized_type in {"decision_required", "decision_resolved", "error"}:
-        return EVENT_LEVEL_MINIMAL
-    if normalized_type in {STREAM_SUMMARY_EVENT_TYPE, "cost_update"}:
-        return EVENT_LEVEL_DEFAULT
-    if normalized_type in {"node_stream.chunk", "node_stream_chunk", "node_stream_end"}:
-        return EVENT_LEVEL_VERBOSE
-    if normalized_type.startswith("agent."):
-        return EVENT_LEVEL_VERBOSE
     return EVENT_LEVEL_DEFAULT
 
 

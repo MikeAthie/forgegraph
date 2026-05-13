@@ -38,50 +38,18 @@ def describe_audit_log(
 ) -> str:
     safe_metadata = metadata or {}
 
-    if action == "memory.observation_created":
-        return _describe_memory_observation(
-            verb="Created",
-            metadata=safe_metadata,
-            fallback_id=resource_id,
-        )
-    if action == "memory.observation_updated":
-        changed_fields = safe_metadata.get("changed_fields")
-        changed_suffix = ""
-        if isinstance(changed_fields, list) and changed_fields:
-            changed_suffix = (
-                f" Updated fields: {', '.join(str(field) for field in changed_fields)}."
-            )
-        return (
-            _describe_memory_observation(
-                verb="Updated",
-                metadata=safe_metadata,
-                fallback_id=resource_id,
-            )
-            + changed_suffix
-        )
-    if action == "memory.observation_deleted":
-        return _describe_memory_observation(
-            verb="Deleted",
-            metadata=safe_metadata,
-            fallback_id=resource_id,
-        )
-    if action == "credential.created":
-        provider = safe_metadata.get("provider")
-        name = safe_metadata.get("name")
-        if provider and name:
-            return f"Created {provider} credential '{name}'."
-    if action == "credential.deleted":
-        provider = safe_metadata.get("provider")
-        name = safe_metadata.get("name")
-        if provider and name:
-            return f"Deleted {provider} credential '{name}'."
-    if action == "run.started":
-        return f"Started run {resource_id}."
-    if action == "run.replayed":
-        source_run_id = safe_metadata.get("source_run_id")
-        if source_run_id:
-            return f"Replayed run {resource_id} from source run {source_run_id}."
-        return f"Replayed run {resource_id}."
+    memory_description = _describe_memory_action(action, safe_metadata, resource_id)
+    if memory_description:
+        return memory_description
+
+    credential_description = _describe_credential_action(action, safe_metadata)
+    if credential_description:
+        return credential_description
+
+    run_description = _describe_run_action(action, safe_metadata, resource_id)
+    if run_description:
+        return run_description
+
     if action == "run.policy_denied":
         return f"Blocked run-related action for {resource_id} because a policy denied it."
     if action == "retention_policy_updated":
@@ -92,6 +60,62 @@ def describe_audit_log(
 
     resource_label = resource_type.replace("_", " ")
     return f"{_prettify_action(action)} on {resource_label} {resource_id}."
+
+
+def _describe_memory_action(
+    action: str,
+    metadata: dict[str, Any],
+    resource_id: str,
+) -> str:
+    verbs = {
+        "memory.observation_created": "Created",
+        "memory.observation_updated": "Updated",
+        "memory.observation_deleted": "Deleted",
+    }
+    verb = verbs.get(action)
+    if not verb:
+        return ""
+
+    description = _describe_memory_observation(
+        verb=verb,
+        metadata=metadata,
+        fallback_id=resource_id,
+    )
+    if action != "memory.observation_updated":
+        return description
+
+    changed_fields = metadata.get("changed_fields")
+    if isinstance(changed_fields, list) and changed_fields:
+        return f"{description} Updated fields: {', '.join(str(field) for field in changed_fields)}."
+    return description
+
+
+def _describe_credential_action(action: str, metadata: dict[str, Any]) -> str:
+    verbs = {
+        "credential.created": "Created",
+        "credential.deleted": "Deleted",
+    }
+    verb = verbs.get(action)
+    provider = metadata.get("provider")
+    name = metadata.get("name")
+    if verb and provider and name:
+        return f"{verb} {provider} credential '{name}'."
+    return ""
+
+
+def _describe_run_action(
+    action: str,
+    metadata: dict[str, Any],
+    resource_id: str,
+) -> str:
+    if action == "run.started":
+        return f"Started run {resource_id}."
+    if action != "run.replayed":
+        return ""
+    source_run_id = metadata.get("source_run_id")
+    if source_run_id:
+        return f"Replayed run {resource_id} from source run {source_run_id}."
+    return f"Replayed run {resource_id}."
 
 
 def _describe_memory_observation(

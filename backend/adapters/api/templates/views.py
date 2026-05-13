@@ -49,38 +49,50 @@ def _apply_prompt_overrides(
     credential_id: UUID | None,
 ) -> dict[str, Any]:
     data = copy.deepcopy(graph_json)
-
-    def _walk(nodes: list[dict[str, Any]]) -> None:
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            node_type = node.get("type")
-            config = node.get("config")
-            if not isinstance(config, dict):
-                config = {}
-
-            if node_type == "prompt":
-                if provider:
-                    config["provider"] = provider
-                if model:
-                    config["model"] = model
-                if credential_id:
-                    config["credential_id"] = str(credential_id)
-                node["config"] = config
-                continue
-
-            if node_type == "subgraph" and isinstance(config.get("graph_json"), dict):
-                subgraph_json = config["graph_json"]
-                sub_nodes = subgraph_json.get("nodes")
-                if isinstance(sub_nodes, list):
-                    _walk(sub_nodes)
-                config["graph_json"] = subgraph_json
-                node["config"] = config
-
     nodes = data.get("nodes")
     if isinstance(nodes, list):
-        _walk(nodes)
+        _apply_prompt_overrides_to_nodes(nodes, provider, model, credential_id)
     return data
+
+
+def _apply_prompt_overrides_to_nodes(
+    nodes: list[dict[str, Any]],
+    provider: str | None,
+    model: str | None,
+    credential_id: UUID | None,
+) -> None:
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        raw_config = node.get("config")
+        config: dict[str, Any] = raw_config if isinstance(raw_config, dict) else {}
+        if node.get("type") == "prompt":
+            _apply_prompt_config_overrides(config, provider, model, credential_id)
+            node["config"] = config
+            continue
+
+        if node.get("type") != "subgraph" or not isinstance(config.get("graph_json"), dict):
+            continue
+        subgraph_json = cast(dict[str, Any], config["graph_json"])
+        sub_nodes = subgraph_json.get("nodes")
+        if isinstance(sub_nodes, list):
+            _apply_prompt_overrides_to_nodes(sub_nodes, provider, model, credential_id)
+        config["graph_json"] = subgraph_json
+        node["config"] = config
+
+
+def _apply_prompt_config_overrides(
+    config: dict[str, Any],
+    provider: str | None,
+    model: str | None,
+    credential_id: UUID | None,
+) -> None:
+    if provider:
+        config["provider"] = provider
+    if model:
+        config["model"] = model
+    if credential_id:
+        config["credential_id"] = str(credential_id)
 
 
 def _template_queryset_for_user(user: User) -> models.QuerySet[GraphTemplate]:

@@ -296,11 +296,14 @@ def apply_event(brief: OperatingBrief, event: InteractionEvent) -> OperatingBrie
 
     updated = copy.deepcopy(brief)
     delta = event.delta
-    set_delta = _dict_value(delta, "set")
-    append_delta = _dict_value(delta, "append")
-    remove_delta = _dict_value(delta, "remove")
-    priority_delta = _dict_value(delta, "priority_frame")
+    _apply_set_delta(updated, _dict_value(delta, "set"))
+    _apply_append_delta(updated, _dict_value(delta, "append"), event)
+    _apply_remove_delta(updated, _dict_value(delta, "remove"))
+    _apply_priority_delta(updated, _dict_value(delta, "priority_frame"))
+    return updated
 
+
+def _apply_set_delta(updated: OperatingBrief, set_delta: dict[str, Any]) -> None:
     for field_name, value in set_delta.items():
         if field_name == "objective":
             updated.objective = _nullable_string(value)
@@ -309,6 +312,12 @@ def apply_event(brief: OperatingBrief, event: InteractionEvent) -> OperatingBrie
         elif field_name == "autonomy_mode":
             updated.autonomy_mode = _autonomy_mode_value(value)
 
+
+def _apply_append_delta(
+    updated: OperatingBrief,
+    append_delta: dict[str, Any],
+    event: InteractionEvent,
+) -> None:
     for field_name, values in append_delta.items():
         if field_name in {"constraints", "success_criteria", "stakeholders", "dependencies"}:
             current = cast(list[str], getattr(updated, field_name))
@@ -324,21 +333,24 @@ def apply_event(brief: OperatingBrief, event: InteractionEvent) -> OperatingBrie
                 [_clarification_from_payload(item) for item in _dict_list(values)],
             )
 
+
+def _apply_remove_delta(updated: OperatingBrief, remove_delta: dict[str, Any]) -> None:
     for field_name, values in remove_delta.items():
         if field_name in {"constraints", "success_criteria", "stakeholders", "dependencies"}:
             current = cast(list[str], getattr(updated, field_name))
             setattr(updated, field_name, _remove_strings(current, _string_list(values)))
 
-    if priority_delta:
-        current_priority = updated.priority_frame
-        updated.priority_frame = PriorityFrame(
-            speed=float(priority_delta.get("speed", current_priority.speed)),
-            cost=float(priority_delta.get("cost", current_priority.cost)),
-            quality=float(priority_delta.get("quality", current_priority.quality)),
-            risk=float(priority_delta.get("risk", current_priority.risk)),
-        ).normalized()
 
-    return updated
+def _apply_priority_delta(updated: OperatingBrief, priority_delta: dict[str, Any]) -> None:
+    if not priority_delta:
+        return
+    current_priority = updated.priority_frame
+    updated.priority_frame = PriorityFrame(
+        speed=float(priority_delta.get("speed", current_priority.speed)),
+        cost=float(priority_delta.get("cost", current_priority.cost)),
+        quality=float(priority_delta.get("quality", current_priority.quality)),
+        risk=float(priority_delta.get("risk", current_priority.risk)),
+    ).normalized()
 
 
 def get_current_brief_record(

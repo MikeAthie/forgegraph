@@ -335,34 +335,17 @@ def execute_periodic_review(
     )
     blockers = metric_input_blockers(review=review, metric_values=effective_metrics)
     if blockers:
-        blocker_signal = None
-        if not dry_run:
-            blocker_signal = _upsert_metric_input_required_signal(
-                review=review,
-                period=period,
-                user=user,
-                blockers=blockers,
-            )
-        return PeriodicReviewExecutionSummary(
-            review_definition_id=str(review.id),
-            period_start=period.period_start.isoformat(),
-            period_end=period.period_end.isoformat(),
-            metric_snapshot_id=str(snapshot.id) if snapshot is not None else "",
-            signal_ids=(str(blocker_signal.id),) if blocker_signal is not None else (),
-            blockers=tuple(blockers),
+        return _blocked_review_summary(
+            review=review,
+            period=period,
+            user=user,
+            snapshot=snapshot,
+            blockers=blockers,
             dry_run=dry_run,
-            status="blocked",
         )
 
     if dry_run:
-        return PeriodicReviewExecutionSummary(
-            review_definition_id=str(review.id),
-            period_start=period.period_start.isoformat(),
-            period_end=period.period_end.isoformat(),
-            metric_snapshot_id=str(snapshot.id) if snapshot is not None else "",
-            dry_run=True,
-            status="dry_run_ready",
-        )
+        return _dry_run_review_summary(review=review, period=period, snapshot=snapshot)
 
     if snapshot is None:
         snapshot = create_metric_snapshot(
@@ -425,6 +408,51 @@ def execute_periodic_review(
         period=period,
         history_projection_id=str(history_projection.id) if history_projection else "",
         status="completed",
+    )
+
+
+def _blocked_review_summary(
+    *,
+    review: PeriodicReviewDefinition,
+    period: ReviewPeriod,
+    user: User,
+    snapshot: MetricSnapshot | None,
+    blockers: list[dict[str, Any]],
+    dry_run: bool,
+) -> PeriodicReviewExecutionSummary:
+    blocker_signal = None
+    if not dry_run:
+        blocker_signal = _upsert_metric_input_required_signal(
+            review=review,
+            period=period,
+            user=user,
+            blockers=blockers,
+        )
+    return PeriodicReviewExecutionSummary(
+        review_definition_id=str(review.id),
+        period_start=period.period_start.isoformat(),
+        period_end=period.period_end.isoformat(),
+        metric_snapshot_id=str(snapshot.id) if snapshot is not None else "",
+        signal_ids=(str(blocker_signal.id),) if blocker_signal is not None else (),
+        blockers=tuple(blockers),
+        dry_run=dry_run,
+        status="blocked",
+    )
+
+
+def _dry_run_review_summary(
+    *,
+    review: PeriodicReviewDefinition,
+    period: ReviewPeriod,
+    snapshot: MetricSnapshot | None,
+) -> PeriodicReviewExecutionSummary:
+    return PeriodicReviewExecutionSummary(
+        review_definition_id=str(review.id),
+        period_start=period.period_start.isoformat(),
+        period_end=period.period_end.isoformat(),
+        metric_snapshot_id=str(snapshot.id) if snapshot is not None else "",
+        dry_run=True,
+        status="dry_run_ready",
     )
 
 
@@ -828,66 +856,83 @@ def metric_input_blockers(
     blockers: list[dict[str, Any]] = []
     empty_values = not metric_values
     for metric in metrics:
-        metric_id = _safe_key(metric.get("id"))
-        if not metric_id:
-            continue
-        raw_value = metric_values.get(metric_id)
-        label = _safe_text(metric.get("label") or metric_id.replace("_", " ").title(), 160)
-        if metric_id not in metric_values:
-            if empty_values or metric.get("required") is True:
-                blockers.append(
-                    _metric_blocker(
-                        metric_id=metric_id,
-                        label=label,
-                        reason="metric_value_missing",
-                        missing=["value"],
-                    )
-                )
-            continue
-        mode = str(metric.get("mode") or "threshold").strip().lower()
-        if mode == "contextual":
-            missing = _missing_contextual_inputs(metric=metric, raw_value=raw_value)
-            if missing:
-                blockers.append(
-                    _metric_blocker(
-                        metric_id=metric_id,
-                        label=label,
-                        reason="metric_context_missing",
-                        missing=missing,
-                    )
-                )
-            continue
-        if mode == "qualitative_manual" and not _manual_level(raw_value):
-            blockers.append(
-                _metric_blocker(
-                    metric_id=metric_id,
-                    label=label,
-                    reason="manual_level_missing",
-                    missing=["level"],
-                )
-            )
-            continue
-        if mode == "threshold_or_manual":
-            if _number_value(raw_value) is None and not _manual_level(raw_value):
-                blockers.append(
-                    _metric_blocker(
-                        metric_id=metric_id,
-                        label=label,
-                        reason="metric_value_or_manual_level_missing",
-                        missing=["value", "level"],
-                    )
-                )
-            continue
-        if _number_value(raw_value) is None:
-            blockers.append(
-                _metric_blocker(
-                    metric_id=metric_id,
-                    label=label,
-                    reason="metric_value_not_numeric",
-                    missing=["numeric_value"],
-                )
-            )
+        blocker = _metric_input_blocker(
+            metric=metric, metric_values=metric_values, empty=empty_values
+        )
+        if blocker is not None:
+            blockers.append(blocker)
     return blockers
+
+
+def _metric_input_blocker(
+    *,
+    metric: dict[str, Any],
+    metric_values: dict[str, Any],
+    empty: bool,
+) -> dict[str, Any] | None:
+    metric_id = _safe_key(metric.get("id"))
+    if not metric_id:
+        return None
+    raw_value = metric_values.get(metric_id)
+    label = _safe_text(metric.get("label") or metric_id.replace("_", " ").title(), 160)
+    if metric_id not in metric_values:
+        if empty or metric.get("required") is True:
+            return _metric_blocker(
+                metric_id=metric_id,
+                label=label,
+                reason="metric_value_missing",
+                missing=["value"],
+            )
+        return None
+    return _present_metric_input_blocker(
+        metric=metric, metric_id=metric_id, label=label, raw_value=raw_value
+    )
+
+
+def _present_metric_input_blocker(
+    *,
+    metric: dict[str, Any],
+    metric_id: str,
+    label: str,
+    raw_value: Any,
+) -> dict[str, Any] | None:
+    mode = str(metric.get("mode") or "threshold").strip().lower()
+    if mode == "contextual":
+        missing = _missing_contextual_inputs(metric=metric, raw_value=raw_value)
+        if missing:
+            return _metric_blocker(
+                metric_id=metric_id,
+                label=label,
+                reason="metric_context_missing",
+                missing=missing,
+            )
+        return None
+    if mode == "qualitative_manual" and not _manual_level(raw_value):
+        return _metric_blocker(
+            metric_id=metric_id,
+            label=label,
+            reason="manual_level_missing",
+            missing=["level"],
+        )
+    if (
+        mode == "threshold_or_manual"
+        and _number_value(raw_value) is None
+        and not _manual_level(raw_value)
+    ):
+        return _metric_blocker(
+            metric_id=metric_id,
+            label=label,
+            reason="metric_value_or_manual_level_missing",
+            missing=["value", "level"],
+        )
+    if mode == "threshold" and _number_value(raw_value) is None:
+        return _metric_blocker(
+            metric_id=metric_id,
+            label=label,
+            reason="metric_value_not_numeric",
+            missing=["numeric_value"],
+        )
+    return None
 
 
 def _metric_blocker(

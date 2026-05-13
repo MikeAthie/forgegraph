@@ -393,6 +393,15 @@ def backfill_domain_events_for_organization(organization: Organization) -> int:
     """Create missing baseline projection events from backend canonical tables."""
 
     before = DomainEvent.objects.filter(organization=organization).count()
+    _backfill_graph_version_domain_events(organization)
+    run_ids = _backfill_run_domain_events(organization)
+    _backfill_run_child_domain_events(run_ids)
+    _backfill_organization_domain_events(organization, run_ids)
+    after = DomainEvent.objects.filter(organization=organization).count()
+    return max(after - before, 0)
+
+
+def _backfill_graph_version_domain_events(organization: Organization) -> None:
     for graph_version in GraphVersion.objects.filter(
         graph__organization=organization,
     ).select_related("graph", "graph__owner__default_organization"):
@@ -402,6 +411,9 @@ def backfill_domain_events_for_organization(organization: Organization) -> int:
         graph__owner__default_organization=organization,
     ).select_related("graph", "graph__owner__default_organization"):
         record_graph_version_domain_event(graph_version)
+
+
+def _backfill_run_domain_events(organization: Organization) -> list[UUID]:
     for run in Run.objects.filter(organization=organization).select_related(
         "organization", "owner__default_organization"
     ):
@@ -419,10 +431,17 @@ def backfill_domain_events_for_organization(organization: Organization) -> int:
             owner__default_organization=organization,
         ).values_list("id", flat=True)
     )
+    return run_ids
+
+
+def _backfill_run_child_domain_events(run_ids: list[UUID]) -> None:
     for run_event in RunEvent.objects.filter(run_id__in=run_ids).select_related("run"):
         record_run_event_domain_event(run_event)
     for node_run in NodeRun.objects.filter(run_id__in=run_ids).select_related("run"):
         record_node_run_domain_event(node_run, created=True)
+
+
+def _backfill_organization_domain_events(organization: Organization, run_ids: list[UUID]) -> None:
     for task_event in TaskLifecycleEvent.objects.filter(organization=organization).select_related(
         "organization"
     ):
@@ -437,8 +456,6 @@ def backfill_domain_events_for_organization(organization: Organization) -> int:
         record_memory_observation_domain_event(observation, created=True)
     for audit_log in AuditLog.objects.filter(tenant_id=organization.id, action__icontains="review"):
         record_audit_review_domain_event(audit_log)
-    after = DomainEvent.objects.filter(organization=organization).count()
-    return max(after - before, 0)
 
 
 def organization_for_run(run: Run) -> Organization | None:

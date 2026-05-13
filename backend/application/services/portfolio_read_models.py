@@ -52,9 +52,13 @@ def portfolio_health_payload(user: User) -> dict[str, Any]:
         "company_id",
     )
     metric_gaps = _metric_gap_count_by_company(company_ids)
-    pending_approvals = _count_by_company(_approval_queryset(user, company_ids), "run__graph_version__graph_id")
+    pending_approvals = _count_by_company(
+        _approval_queryset(user, company_ids), "run__graph_version__graph_id"
+    )
     pending_decisions = _decision_count_by_company(user, company_ids)
-    pending_tasks = _count_by_company(_task_queryset(user, company_ids), "execution__graph_version__graph_id")
+    pending_tasks = _count_by_company(
+        _task_queryset(user, company_ids), "execution__graph_version__graph_id"
+    )
     active_runs = _count_by_company(
         Run.objects.filter(
             graph_version__graph_id__in=company_ids,
@@ -84,7 +88,11 @@ def portfolio_health_payload(user: User) -> dict[str, Any]:
     for company in companies:
         company_id = company.id
         blockers = int(metric_gaps[company_id]) + int(pending_approvals[company_id])
-        attention = int(pending_tasks[company_id]) + int(pending_decisions[company_id]) + int(failed_runs[company_id])
+        attention = (
+            int(pending_tasks[company_id])
+            + int(pending_decisions[company_id])
+            + int(failed_runs[company_id])
+        )
         credential_status = credential_health[str(company_id)]["status"]
         if credential_status in {"missing", "expired", "revoked"}:
             blockers += 1
@@ -284,7 +292,9 @@ def _signal_summary_by_company(company_ids: list[UUID]) -> defaultdict[UUID, dic
     summary: defaultdict[UUID, dict[str, Any]] = defaultdict(
         lambda: {"total": 0, "new": 0, "qualified": 0, "latest_at": None}
     )
-    signals = CompanySignal.objects.filter(company_id__in=company_ids).order_by("company_id", "-occurred_at")
+    signals = CompanySignal.objects.filter(company_id__in=company_ids).order_by(
+        "company_id", "-occurred_at"
+    )
     for signal in signals.only("company_id", "status", "occurred_at"):
         bucket = summary[signal.company_id]
         bucket["total"] += 1
@@ -297,7 +307,9 @@ def _signal_summary_by_company(company_ids: list[UUID]) -> defaultdict[UUID, dic
 
 def _latest_report_by_company(company_ids: list[UUID]) -> dict[UUID, dict[str, Any]]:
     latest: dict[UUID, dict[str, Any]] = {}
-    reports = ReportRun.objects.filter(company_id__in=company_ids).order_by("company_id", "-created_at")
+    reports = ReportRun.objects.filter(company_id__in=company_ids).order_by(
+        "company_id", "-created_at"
+    )
     for report in reports.only(
         "id",
         "company_id",
@@ -350,10 +362,7 @@ def _credential_health_by_company(user: User, company_ids: list[UUID]) -> dict[s
         "revoked_count": revoked,
         "provider_counts": dict(provider_counts),
     }
-    return {
-        str(company_id): {"company_id": str(company_id), **base}
-        for company_id in company_ids
-    }
+    return {str(company_id): {"company_id": str(company_id), **base} for company_id in company_ids}
 
 
 def _review_queue(
@@ -382,7 +391,9 @@ def _review_queue(
                 "cadence": review.cadence,
                 "pack_id": review.pack_id,
                 "status": "blocked" if review.id not in snapshot_review_ids else "ready",
-                "blocker": "missing_metric_snapshot" if review.id not in snapshot_review_ids else None,
+                "blocker": "missing_metric_snapshot"
+                if review.id not in snapshot_review_ids
+                else None,
                 "latest_report": latest_reports.get(review.company_id),
             }
         )

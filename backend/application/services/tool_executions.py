@@ -197,24 +197,13 @@ def _annotate_one_tool_node(
         },
     )
     if not created:
-        _enforce_retry_policy(tool_execution)
-        update_fields: list[str] = []
-        if tool_execution.tool_name != tool_name:
-            tool_execution.tool_name = tool_name
-            update_fields.append("tool_name")
-        if tool_execution.tool_version != tool_version:
-            tool_execution.tool_version = tool_version
-            update_fields.append("tool_version")
-        if tool_execution.idempotency_key != idempotency_key:
-            raise ToolExecutionDispatchBlocked(
-                f"tool execution {tool_execution.id} idempotency key changed"
-            )
-        if tool_execution.side_effect_class != side_effect_class:
-            tool_execution.side_effect_class = side_effect_class
-            update_fields.append("side_effect_class")
-        if update_fields:
-            update_fields.append("updated_at")
-            tool_execution.save(update_fields=update_fields)
+        _update_existing_tool_execution(
+            tool_execution=tool_execution,
+            tool_name=tool_name,
+            tool_version=tool_version,
+            idempotency_key=idempotency_key,
+            side_effect_class=side_effect_class,
+        )
 
     config["tool_execution_id"] = str(tool_execution.id)
     config["idempotency_key"] = tool_execution.idempotency_key
@@ -237,6 +226,34 @@ def _annotate_one_tool_node(
             "retry_decision": "dispatch_allowed",
         },
     )
+
+
+def _update_existing_tool_execution(
+    *,
+    tool_execution: ToolExecution,
+    tool_name: str,
+    tool_version: str,
+    idempotency_key: str,
+    side_effect_class: str,
+) -> None:
+    _enforce_retry_policy(tool_execution)
+    update_fields: list[str] = []
+    if tool_execution.tool_name != tool_name:
+        tool_execution.tool_name = tool_name
+        update_fields.append("tool_name")
+    if tool_execution.tool_version != tool_version:
+        tool_execution.tool_version = tool_version
+        update_fields.append("tool_version")
+    if tool_execution.idempotency_key != idempotency_key:
+        raise ToolExecutionDispatchBlocked(
+            f"tool execution {tool_execution.id} idempotency key changed"
+        )
+    if tool_execution.side_effect_class != side_effect_class:
+        tool_execution.side_effect_class = side_effect_class
+        update_fields.append("side_effect_class")
+    if update_fields:
+        update_fields.append("updated_at")
+        tool_execution.save(update_fields=update_fields)
 
 
 def _enforce_retry_policy(tool_execution: ToolExecution) -> None:

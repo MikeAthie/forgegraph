@@ -242,16 +242,7 @@ class Auth0LoginView(APIView):
 class Auth0CallbackView(APIView):
     permission_classes = [AllowAny]
 
-    def post(self, request: Request) -> Response:
-        code = request.data.get("code")
-        state = request.data.get("state")
-        if not code or not state:
-            return error_response(
-                code="VALIDATION_ERROR",
-                message="code and state are required",
-                status=400,
-            )
-
+    def _verified_state(self, state: str) -> dict[str, Any] | Response:
         try:
             state_payload = verify_state(state)
         except ValueError as exc:
@@ -269,7 +260,9 @@ class Auth0CallbackView(APIView):
                 message="state is missing required fields",
                 status=400,
             )
+        return state_payload
 
+    def _provider_for_state(self, tenant_id: str) -> OIDCProvider | Response:
         provider = OIDCProvider.objects.filter(tenant_id=tenant_id, enabled=True).first()
         if not provider:
             return error_response(
@@ -277,7 +270,15 @@ class Auth0CallbackView(APIView):
                 message="SSO provider not configured for this tenant.",
                 status=404,
             )
+        return provider
 
+    def _claims_for_code(
+        self,
+        *,
+        provider: OIDCProvider,
+        code: object,
+        nonce: object,
+    ) -> dict[str, Any] | Response:
         try:
             tokens = exchange_code_for_tokens(
                 provider, code=str(code), redirect_uri=_get_sso_callback_url()
@@ -292,7 +293,9 @@ class Auth0CallbackView(APIView):
                 message=f"SSO login failed: {exc}",
                 status=400,
             )
+        return claims
 
+    def _active_user_for_claims(self, claims: dict[str, Any]) -> tuple[Any, str] | Response:
         email = (claims.get("email") or claims.get("preferred_username") or "").lower()
         if not email:
             return error_response(
@@ -315,6 +318,38 @@ class Auth0CallbackView(APIView):
                 message="Your account has been disabled. Contact an administrator.",
                 status=403,
             )
+        return user, email
+
+    def post(self, request: Request) -> Response:
+        code = request.data.get("code")
+        state = request.data.get("state")
+        if not code or not state:
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="code and state are required",
+                status=400,
+            )
+        code = str(code)
+        state = str(state)
+
+        state_payload = self._verified_state(state)
+        if isinstance(state_payload, Response):
+            return state_payload
+
+        tenant_id = str(state_payload.get("tenant_id") or "")
+        nonce = str(state_payload.get("nonce") or "")
+        provider = self._provider_for_state(tenant_id)
+        if isinstance(provider, Response):
+            return provider
+
+        claims = self._claims_for_code(provider=provider, code=code, nonce=nonce)
+        if isinstance(claims, Response):
+            return claims
+
+        user_response = self._active_user_for_claims(claims)
+        if isinstance(user_response, Response):
+            return user_response
+        user, email = user_response
 
         organization = Organization.objects.filter(id=tenant_id).first()
         if not organization:

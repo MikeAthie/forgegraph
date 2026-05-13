@@ -355,6 +355,133 @@ class Command(BaseCommand):
         parser.add_argument("--password", default="")
         parser.add_argument("--json", action="store_true", dest="output_json")
 
+    def _ensure_legacy_user(
+        self,
+        *,
+        email: str,
+        password: str,
+        warnings: list[str],
+    ) -> tuple[User, bool]:
+        user = User.objects.filter(email=email).first()
+        created_user = user is None
+        if user is None:
+            user = User.objects.create_user(email=email, password=password)
+            user.is_active = True
+            user.save(update_fields=["is_active"])
+            return user, created_user
+
+        clean, reason = _target_user_state_is_clean(user)
+        if not clean:
+            raise CommandError(reason)
+        if not user.is_active:
+            user.is_active = True
+            user.save(update_fields=["is_active"])
+            warnings.append("Reactivated existing Legacy user.")
+        if not user.check_password(password):
+            user.set_password(password)
+            user.save(update_fields=["password"])
+            warnings.append("Updated existing Legacy user password.")
+        return user, created_user
+
+    def _ensure_legacy_membership(self, user: User) -> tuple[Organization, OrganizationMembership]:
+        user.refresh_from_db()
+        memberships = list(OrganizationMembership.objects.filter(user=user))
+        if len(memberships) > 1:
+            raise CommandError("Target user has more than one organization after creation.")
+
+        if memberships:
+            organization = memberships[0].organization
+            membership = memberships[0]
+        else:
+            organization = Organization.objects.create(name=DEFAULT_ORG_NAME)
+            membership = OrganizationMembership.objects.create(
+                organization=organization,
+                user=user,
+                role="owner",
+                is_default=True,
+            )
+
+        self._normalize_legacy_membership(user, organization, membership)
+        return organization, membership
+
+    def _normalize_legacy_membership(
+        self,
+        user: User,
+        organization: Organization,
+        membership: OrganizationMembership,
+    ) -> None:
+        if organization.name != DEFAULT_ORG_NAME:
+            organization.name = DEFAULT_ORG_NAME
+            organization.save(update_fields=["name", "updated_at"])
+
+        OrganizationMembership.objects.filter(user=user).exclude(pk=membership.pk).delete()
+        membership.role = "owner"
+        membership.is_default = True
+        membership.organization = organization
+        membership.save(update_fields=["role", "is_default", "organization", "updated_at"])
+
+        if user.default_organization_id != organization.id:
+            user.default_organization = organization
+            user.save(update_fields=["default_organization"])
+
+    def _ensure_legacy_graph(
+        self,
+        *,
+        user: User,
+        organization: Organization,
+        warnings: list[str],
+    ) -> tuple[Graph, bool]:
+        graph, created_graph = Graph.objects.update_or_create(
+            organization=organization,
+            external_source=EXTERNAL_SOURCE,
+            external_ref=EXTERNAL_REF,
+            defaults={
+                "owner": user,
+                "name": DEFAULT_COMPANY_NAME,
+                "description": COMPANY_OBJECTIVE,
+            },
+        )
+        if created_graph:
+            warnings.append("Created Legacy Glasswear company graph.")
+        return graph, created_graph
+
+    def _ensure_legacy_graph_version(
+        self,
+        *,
+        graph: Graph,
+        graph_json: dict[str, Any],
+        warnings: list[str],
+    ) -> GraphVersion:
+        latest = graph.versions.order_by("-version").first()
+        incoming_checksum = _graph_checksum(graph_json)
+        if latest and latest.checksum == incoming_checksum:
+            self._assign_legacy_version_idempotency_key(latest)
+            return latest
+
+        next_version = (latest.version + 1) if latest else 1
+        version = GraphVersion.objects.create(
+            graph=graph,
+            version=next_version,
+            graph_json=graph_json,
+            external_idempotency_key=EXTERNAL_IDEMPOTENCY_KEY if latest is None else "",
+        )
+        graph.save()
+        warnings.append(f"Created Legacy Glasswear graph version {version.version}.")
+        return version
+
+    def _assign_legacy_version_idempotency_key(self, version: GraphVersion) -> None:
+        key_already_used = (
+            GraphVersion.objects.filter(
+                graph=version.graph,
+                external_idempotency_key=EXTERNAL_IDEMPOTENCY_KEY,
+            )
+            .exclude(pk=version.pk)
+            .exists()
+        )
+        if not version.external_idempotency_key and not key_already_used:
+            version.external_idempotency_key = EXTERNAL_IDEMPOTENCY_KEY
+            version.save(update_fields=["external_idempotency_key"])
+
     def handle(self, *args: Any, **options: Any) -> None:
         email = str(options["email"]).strip().lower() or DEFAULT_EMAIL
         password = str(options["password"] or os.environ.get(PASSWORD_ENV, "")).strip()
@@ -366,69 +493,19 @@ class Command(BaseCommand):
         warnings: list[str] = []
 
         with transaction.atomic():
-            user = User.objects.filter(email=email).first()
-            created_user = user is None
-            if user is None:
-                user = User.objects.create_user(email=email, password=password)
-                user.is_active = True
-                user.save(update_fields=["is_active"])
-            else:
-                clean, reason = _target_user_state_is_clean(user)
-                if not clean:
-                    raise CommandError(reason)
-                if not user.is_active:
-                    user.is_active = True
-                    user.save(update_fields=["is_active"])
-                    warnings.append("Reactivated existing Legacy user.")
-                if not user.check_password(password):
-                    user.set_password(password)
-                    user.save(update_fields=["password"])
-                    warnings.append("Updated existing Legacy user password.")
-
-            user.refresh_from_db()
-            memberships = list(OrganizationMembership.objects.filter(user=user))
-            if len(memberships) > 1:
-                raise CommandError("Target user has more than one organization after creation.")
-
-            if memberships:
-                organization = memberships[0].organization
-                membership = memberships[0]
-            else:
-                organization = Organization.objects.create(name=DEFAULT_ORG_NAME)
-                membership = OrganizationMembership.objects.create(
-                    organization=organization,
-                    user=user,
-                    role="owner",
-                    is_default=True,
-                )
-
-            if organization.name != DEFAULT_ORG_NAME:
-                organization.name = DEFAULT_ORG_NAME
-                organization.save(update_fields=["name", "updated_at"])
-
-            OrganizationMembership.objects.filter(user=user).exclude(pk=membership.pk).delete()
-            membership.role = "owner"
-            membership.is_default = True
-            membership.organization = organization
-            membership.save(update_fields=["role", "is_default", "organization", "updated_at"])
-
-            if user.default_organization_id != organization.id:
-                user.default_organization = organization
-                user.save(update_fields=["default_organization"])
+            user, created_user = self._ensure_legacy_user(
+                email=email,
+                password=password,
+                warnings=warnings,
+            )
+            organization, _ = self._ensure_legacy_membership(user)
 
             graph_json = build_legacy_phase0_graph_json()
-            graph, created_graph = Graph.objects.update_or_create(
+            graph, created_graph = self._ensure_legacy_graph(
+                user=user,
                 organization=organization,
-                external_source=EXTERNAL_SOURCE,
-                external_ref=EXTERNAL_REF,
-                defaults={
-                    "owner": user,
-                    "name": DEFAULT_COMPANY_NAME,
-                    "description": COMPANY_OBJECTIVE,
-                },
+                warnings=warnings,
             )
-            if created_graph:
-                warnings.append("Created Legacy Glasswear company graph.")
             storefront_profile = ensure_storefront_profile(
                 company=graph,
                 slug=EXTERNAL_SOURCE,
@@ -438,31 +515,11 @@ class Command(BaseCommand):
             )
             MemoryConfiguration.objects.get_or_create(graph=graph)
 
-            latest = graph.versions.order_by("-version").first()
-            incoming_checksum = _graph_checksum(graph_json)
-            if latest and latest.checksum == incoming_checksum:
-                version = latest
-                key_already_used = (
-                    GraphVersion.objects.filter(
-                        graph=graph,
-                        external_idempotency_key=EXTERNAL_IDEMPOTENCY_KEY,
-                    )
-                    .exclude(pk=version.pk)
-                    .exists()
-                )
-                if not version.external_idempotency_key and not key_already_used:
-                    version.external_idempotency_key = EXTERNAL_IDEMPOTENCY_KEY
-                    version.save(update_fields=["external_idempotency_key"])
-            else:
-                next_version = (latest.version + 1) if latest else 1
-                version = GraphVersion.objects.create(
-                    graph=graph,
-                    version=next_version,
-                    graph_json=graph_json,
-                    external_idempotency_key=EXTERNAL_IDEMPOTENCY_KEY if latest is None else "",
-                )
-                graph.save()
-                warnings.append(f"Created Legacy Glasswear graph version {version.version}.")
+            version = self._ensure_legacy_graph_version(
+                graph=graph,
+                graph_json=graph_json,
+                warnings=warnings,
+            )
 
             membership_count = OrganizationMembership.objects.filter(user=user).count()
             visible_graphs = Graph.objects.filter(Q(owner=user) | Q(organization=organization))

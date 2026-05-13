@@ -39,26 +39,7 @@ class GraphValidator:
         errors: list[dict[str, Any]] = []
         warnings: list[dict[str, Any]] = []
 
-        # Check required top-level keys
-        if "nodes" not in graph_json:
-            errors.append(
-                {
-                    "type": "missing_key",
-                    "key": "nodes",
-                    "message": "Graph JSON is missing required 'nodes' array",
-                    "suggestion": "Add a 'nodes' array to your graph JSON",
-                }
-            )
-        if "edges" not in graph_json:
-            errors.append(
-                {
-                    "type": "missing_key",
-                    "key": "edges",
-                    "message": "Graph JSON is missing required 'edges' array",
-                    "suggestion": "Add an 'edges' array to your graph JSON",
-                }
-            )
-
+        errors.extend(self._validate_top_level_keys(graph_json))
         if errors:
             raise GraphValidationError("Graph JSON missing required keys", errors=errors)
 
@@ -102,6 +83,28 @@ class GraphValidator:
 
         # Combine errors and warnings
         return errors + warnings
+
+    def _validate_top_level_keys(self, graph_json: dict[str, Any]) -> list[dict[str, Any]]:
+        errors: list[dict[str, Any]] = []
+        if "nodes" not in graph_json:
+            errors.append(
+                {
+                    "type": "missing_key",
+                    "key": "nodes",
+                    "message": "Graph JSON is missing required 'nodes' array",
+                    "suggestion": "Add a 'nodes' array to your graph JSON",
+                }
+            )
+        if "edges" not in graph_json:
+            errors.append(
+                {
+                    "type": "missing_key",
+                    "key": "edges",
+                    "message": "Graph JSON is missing required 'edges' array",
+                    "suggestion": "Add an 'edges' array to your graph JSON",
+                }
+            )
+        return errors
 
     def validate_or_raise(self, graph_json: dict[str, Any]) -> None:
         """
@@ -152,29 +155,51 @@ class GraphValidator:
 
         edge_id = edge["id"]
 
-        if "from" not in edge:
-            errors.append({"type": "edge_missing_from", "edge_id": edge_id})
-        else:
-            from_node = edge["from"]
-            if from_node == self.END_NODE_ID:
-                errors.append(
-                    {"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node}
-                )
-            elif from_node != self.START_NODE_ID and from_node not in node_ids:
-                errors.append(
-                    {"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node}
-                )
+        errors.extend(self._validate_edge_endpoint(edge, edge_id, "from", node_ids))
+        errors.extend(self._validate_edge_endpoint(edge, edge_id, "to", node_ids))
+        errors.extend(self._validate_sentinel_edge_semantics(edge, edge_id, node_ids))
 
-        if "to" not in edge:
-            errors.append({"type": "edge_missing_to", "edge_id": edge_id})
-        else:
-            to_node = edge["to"]
-            if to_node == self.START_NODE_ID:
-                errors.append({"type": "edge_invalid_to", "edge_id": edge_id, "to_node": to_node})
-            elif to_node != self.END_NODE_ID and to_node not in node_ids:
-                errors.append({"type": "edge_invalid_to", "edge_id": edge_id, "to_node": to_node})
+        if "from" in edge and "to" in edge and edge["from"] == edge["to"]:
+            errors.append(
+                {"type": "edge_self_reference", "edge_id": edge_id, "node_id": edge["from"]}
+            )
 
-        # Validate START/END sentinel semantics
+        return errors
+
+    def _validate_edge_endpoint(
+        self,
+        edge: dict[str, Any],
+        edge_id: str,
+        endpoint: str,
+        node_ids: set[str],
+    ) -> list[dict[str, Any]]:
+        errors: list[dict[str, Any]] = []
+        if endpoint not in edge:
+            errors.append({"type": f"edge_missing_{endpoint}", "edge_id": edge_id})
+            return errors
+
+        node_id = edge[endpoint]
+        invalid = (
+            node_id == self.END_NODE_ID if endpoint == "from" else node_id == self.START_NODE_ID
+        )
+        allowed_sentinel = self.START_NODE_ID if endpoint == "from" else self.END_NODE_ID
+        if invalid or (node_id != allowed_sentinel and node_id not in node_ids):
+            errors.append(
+                {
+                    "type": f"edge_invalid_{endpoint}",
+                    "edge_id": edge_id,
+                    f"{endpoint}_node": node_id,
+                }
+            )
+        return errors
+
+    def _validate_sentinel_edge_semantics(
+        self,
+        edge: dict[str, Any],
+        edge_id: str,
+        node_ids: set[str],
+    ) -> list[dict[str, Any]]:
+        errors: list[dict[str, Any]] = []
         from_node = edge.get("from")
         to_node = edge.get("to")
         if from_node == self.START_NODE_ID:
@@ -193,13 +218,6 @@ class GraphValidator:
                 errors.append(
                     {"type": "edge_invalid_from", "edge_id": edge_id, "from_node": from_node}
                 )
-
-        # Check for self-referencing edge
-        if "from" in edge and "to" in edge and edge["from"] == edge["to"]:
-            errors.append(
-                {"type": "edge_self_reference", "edge_id": edge_id, "node_id": edge["from"]}
-            )
-
         return errors
 
     def _validate_start_output_requirements(
@@ -253,33 +271,55 @@ class GraphValidator:
             if from_node and to_node:
                 adjacency[from_node].append(to_node)
 
-        # DFS cycle detection
         WHITE, GRAY, BLACK = 0, 1, 2
         color = dict.fromkeys(node_ids, WHITE)
-        cycle_nodes = []
-
-        def dfs(node: str) -> bool:
-            color[node] = GRAY
-            for neighbor in adjacency[node]:
-                if neighbor not in color:
-                    continue
-                if color[neighbor] == GRAY:
-                    # Found a cycle
-                    cycle_nodes.append(neighbor)
-                    return True
-                if color[neighbor] == WHITE:
-                    if dfs(neighbor):
-                        cycle_nodes.append(node)
-                        return True
-            color[node] = BLACK
-            return False
+        cycle_nodes: list[str] = []
 
         for node_id in node_ids:
-            if color[node_id] == WHITE:
-                if dfs(node_id):
-                    return {"type": "cycle_detected", "nodes": list(reversed(cycle_nodes))}
+            if color[node_id] == WHITE and self._dfs_cycle(
+                node_id,
+                adjacency=adjacency,
+                color=color,
+                cycle_nodes=cycle_nodes,
+                white=WHITE,
+                gray=GRAY,
+                black=BLACK,
+            ):
+                return {"type": "cycle_detected", "nodes": list(reversed(cycle_nodes))}
 
         return None
+
+    def _dfs_cycle(
+        self,
+        node: str,
+        *,
+        adjacency: dict[str, list[str]],
+        color: dict[str, int],
+        cycle_nodes: list[str],
+        white: int,
+        gray: int,
+        black: int,
+    ) -> bool:
+        color[node] = gray
+        for neighbor in adjacency[node]:
+            if neighbor not in color:
+                continue
+            if color[neighbor] == gray:
+                cycle_nodes.append(neighbor)
+                return True
+            if color[neighbor] == white and self._dfs_cycle(
+                neighbor,
+                adjacency=adjacency,
+                color=color,
+                cycle_nodes=cycle_nodes,
+                white=white,
+                gray=gray,
+                black=black,
+            ):
+                cycle_nodes.append(node)
+                return True
+        color[node] = black
+        return False
 
     def _find_disconnected_nodes(
         self, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
