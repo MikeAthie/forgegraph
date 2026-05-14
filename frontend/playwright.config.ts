@@ -166,6 +166,7 @@ process.env.MEMORY_GRPC_PORT = process.env.MEMORY_GRPC_PORT ?? String(memoryGrpc
 const workerOverride = process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined;
 const useSqlite = (process.env.USE_SQLITE ?? "false").toLowerCase() === "true";
 const sqliteDbPath = process.env.SQLITE_DB_PATH ?? path.join(os.tmpdir(), `forgegraph-playwright-${playwrightRunId}.sqlite3`);
+const liveLlmE2eEnabled = (process.env.LIVE_LLM_E2E ?? "").toLowerCase() === "true";
 
 // Ensure the Playwright test process and any helper subprocesses (e.g. seed_run_trace)
 // point at the same SQLite DB as the Django webServer.
@@ -196,6 +197,7 @@ export default defineConfig({
     "**/jackie-workflow.spec.ts",
     "**/marketplace-runtime.spec.ts",
     "**/prompts.spec.ts",
+    ...(liveLlmE2eEnabled ? [] : ["**/product-modes-live/**/*.spec.ts"]),
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

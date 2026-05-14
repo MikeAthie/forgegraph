@@ -14,6 +14,7 @@ import {
   Wrench,
 } from "lucide-react";
 
+import { CommunicationPanel } from "@/components/company/CommunicationPanel";
 import { EmptyBlock, MicroExplanation, Panel, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
 import {
   Alert,
@@ -1399,6 +1400,7 @@ function useOperatingModelWorkspaceController({ companyId, companyName }: Operat
 
   return {
     companyId,
+    companyName,
     packs,
     model,
     programs,
@@ -1686,6 +1688,8 @@ function ToolPackagesPanel({ controller }: { controller: OperatingModelControlle
 }
 
 function OperatingModelWorkColumn({ controller }: { controller: OperatingModelController }) {
+  const communicationEnabled = process.env.NEXT_PUBLIC_COMMUNICATION_ENABLED !== "false";
+
   return (
     <div className="space-y-5">
       <ProgramsPanel controller={controller} />
@@ -1706,6 +1710,9 @@ function OperatingModelWorkColumn({ controller }: { controller: OperatingModelCo
         <PolicyPanel controller={controller} />
       </div>
       <ServiceHistoryPanel projection={controller.serviceHistoryProjection} />
+      {communicationEnabled ? (
+        <CommunicationPanel companyId={controller.companyId} companyName={controller.companyName} />
+      ) : null}
     </div>
   );
 }

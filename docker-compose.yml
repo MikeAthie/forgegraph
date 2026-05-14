@@ -97,6 +97,7 @@ services:
       ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://backend:8000
       RUN_QUEUE_ENABLED: ${RUN_QUEUE_ENABLED:-true}
+      COMMUNICATION_ENABLED: ${COMMUNICATION_ENABLED:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -460,12 +461,14 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_COMMUNICATION_ENABLED: ${NEXT_PUBLIC_COMMUNICATION_ENABLED:-true}
         API_PROXY_TARGET: ${API_PROXY_TARGET:-http://backend:8000}
     container_name: forgegraph-frontend
     ports:
       - "127.0.0.1:3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_COMMUNICATION_ENABLED: ${NEXT_PUBLIC_COMMUNICATION_ENABLED:-true}
       API_PROXY_TARGET: ${API_PROXY_TARGET:-http://backend:8000}
     depends_on:
       - backend

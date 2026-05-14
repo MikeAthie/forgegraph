@@ -65,9 +65,15 @@ def authenticated_client(api_client, user):
 def mock_engine_client():
     """Mock the engine client in all tests by default."""
     mock_client = MockEngineClient()
-    with patch(
-        "adapters.api.runs.views.get_engine_client",
-        return_value=mock_client,
+    with (
+        patch(
+            "adapters.api.runs.responses.get_engine_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "adapters.api.runs.common.get_engine_client",
+            return_value=mock_client,
+        ),
     ):
         yield mock_client
 

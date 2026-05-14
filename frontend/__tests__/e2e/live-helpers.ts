@@ -159,6 +159,13 @@ export async function loginLive(
   targetPath = "/companies",
 ): Promise<string> {
   await Promise.all([page.context().clearCookies(), ensureUserRegistered(request, user)]);
+  await page
+    .evaluate(() => {
+      window.sessionStorage.removeItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__");
+      window.localStorage.removeItem("__FORGEGRAPH_E2E_ACCESS_TOKEN__");
+      delete (window as Window & { __FORGEGRAPH_E2E_ACCESS_TOKEN__?: string }).__FORGEGRAPH_E2E_ACCESS_TOKEN__;
+    })
+    .catch(() => undefined);
 
   const loginResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/auth/login") && response.request().method() === "POST",

@@ -55,7 +55,11 @@ from application.services.company_programs import (
     program_payload,
     update_program,
 )
-from application.services.evaluations import evaluation_payload, run_evaluation
+from application.services.evaluations import (
+    SubmittedScorecardValidationError,
+    evaluation_payload,
+    run_evaluation,
+)
 from application.services.operating_model_packs import (
     OperatingModelPackError,
     archive_pack_installation,
@@ -1084,17 +1088,20 @@ class EvaluationRunView(APIView):
                 asset=asset,
                 id=serializer.validated_data["asset_version_id"],
             ).first()
-        evaluation = run_evaluation(
-            company=company,
-            user=cast(User, request.user),
-            profile_id=str(serializer.validated_data["profile_id"]),
-            content=str(serializer.validated_data.get("content") or ""),
-            asset=asset,
-            asset_version=version,
-            program=program,
-            input_refs=serializer.validated_data.get("input_refs") or [],
-            inputs=serializer.validated_data.get("inputs") or {},
-        )
+        try:
+            evaluation = run_evaluation(
+                company=company,
+                user=cast(User, request.user),
+                profile_id=str(serializer.validated_data["profile_id"]),
+                content=str(serializer.validated_data.get("content") or ""),
+                asset=asset,
+                asset_version=version,
+                program=program,
+                input_refs=serializer.validated_data.get("input_refs") or [],
+                inputs=serializer.validated_data.get("inputs") or {},
+            )
+        except SubmittedScorecardValidationError as exc:
+            return _validation_error(exc.field_errors)
         response = success_response(
             {"evaluation": evaluation_payload(evaluation)},
             status=http_status.HTTP_201_CREATED,

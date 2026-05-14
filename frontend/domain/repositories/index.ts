@@ -1,6 +1,7 @@
 export { approvalRepository } from "./approvalRepository";
 export { accountingRepository } from "./accountingRepository";
 export { companyRepository } from "./companyRepository";
+export { communicationRepository } from "./communicationRepository";
 export { departmentRepository } from "./departmentRepository";
 
 export { interactionRepository } from "./interactionRepository";

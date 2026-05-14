@@ -1,0 +1,1 @@
+"""Communication API adapter package."""
