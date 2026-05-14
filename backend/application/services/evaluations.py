@@ -24,6 +24,66 @@ from infrastructure.orm.models import (
     User,
 )
 
+REVIEW_BOARD_SCORECARD_SCHEMA = "consulting_review_board_v1"
+REVIEW_BOARD_SECTIONS = {
+    "atlas": [
+        "Diagnostic depth",
+        "Strategic reasoning",
+        "Use of Legacy context",
+        "Execution design",
+        "Tool/capability honesty",
+        "Client communication quality",
+        "Operating-system maturity",
+    ],
+    "legacy": [
+        "Context completeness",
+        "Commercial readiness",
+        "Brand readiness",
+        "Channel readiness",
+        "Approval readiness",
+        "Measurement readiness",
+        "Operational maturity",
+    ],
+    "engagement": [
+        "Goal clarity",
+        "Evidence quality",
+        "Deliverable completeness",
+        "Cross-company boundary correctness",
+        "Client safety",
+        "Execution continuity",
+        "Reusability/history",
+    ],
+}
+REVIEW_BOARD_CRITICAL_AREAS = {
+    "atlas": {"Use of Legacy context", "Execution design", "Tool/capability honesty"},
+    "legacy": {"Commercial readiness", "Measurement readiness"},
+    "engagement": {"Client safety", "Cross-company boundary correctness"},
+}
+REVIEW_BOARD_IMPROVEMENT_PRIMITIVES = {
+    "OperationRecommendation",
+    "CompanySignal",
+    "MetricSnapshot",
+    "StateProjection",
+    "WorkArtifact",
+}
+REVIEW_BOARD_APPROVAL_STATUSES = {"approved_for_review", "needs_revision", "blocked"}
+REVIEW_BOARD_EXECUTION_STATUSES = {
+    "ready",
+    "blocked_until_missing_capabilities_resolved",
+    "blocked",
+}
+
+
+class SubmittedScorecardValidationError(ValueError):
+    """Raised when a submitted generic evaluation scorecard is structurally invalid."""
+
+    def __init__(self, field_errors: dict[str, list[str]]) -> None:
+        self.field_errors = field_errors
+        message = "; ".join(
+            f"{field}: {', '.join(errors)}" for field, errors in field_errors.items()
+        )
+        super().__init__(message)
+
 
 def run_evaluation(
     *,
@@ -37,6 +97,17 @@ def run_evaluation(
     input_refs: list[Any] | None = None,
     inputs: dict[str, Any] | None = None,
 ) -> EvaluationRun:
+    if _has_submitted_scorecard(inputs):
+        return _run_submitted_scorecard(
+            company=company,
+            user=user,
+            profile_id=profile_id,
+            program=program,
+            asset=asset,
+            asset_version=asset_version,
+            input_refs=input_refs or [],
+            inputs=inputs or {},
+        )
     profile = EvaluationProfile.objects.filter(company=company, profile_id=profile_id).first()
     if _profile_engine(profile) == "threshold_scorecard_v1":
         return _run_threshold_scorecard(
@@ -102,6 +173,154 @@ def run_evaluation(
         metadata={"company_id": str(company.id), "profile_id": profile_id, "status": status},
     )
     return evaluation
+
+
+def _run_submitted_scorecard(
+    *,
+    company: Graph,
+    user: User,
+    profile_id: str,
+    program: CompanyProgram | None,
+    asset: Asset | None,
+    asset_version: AssetVersion | None,
+    input_refs: list[Any],
+    inputs: dict[str, Any],
+) -> EvaluationRun:
+    submitted = _dict_value(inputs.get("submitted_scorecard"))
+    scorecard = _submitted_scorecard(submitted)
+    status = _submitted_scorecard_status(scorecard)
+    grade = _grade(scorecard["overall_average"] * 20)
+    findings = _submitted_scorecard_findings(scorecard)
+    effective_version = asset_version or (canonical_version(asset) if asset is not None else None)
+
+    evaluation = EvaluationRun.objects.create(
+        organization=cast(Any, company.organization),
+        company=company,
+        program=program,
+        asset=asset,
+        asset_version=effective_version,
+        profile=None,
+        profile_key=profile_id,
+        status=status,
+        score=scorecard["overall_average"],
+        grade=grade,
+        input_refs_json=input_refs,
+        result_json={
+            "engine": "submitted_scorecard",
+            "schema_version": REVIEW_BOARD_SCORECARD_SCHEMA,
+            "decision": scorecard["decision"],
+            "hard_fail": scorecard["hard_fail"],
+            "overall_average": scorecard["overall_average"],
+            "client_readiness_level": scorecard["client_readiness_level"],
+            "atlas": scorecard["atlas"],
+            "legacy": scorecard["legacy"],
+            "engagement": scorecard["engagement"],
+            "company_improvement_plan": scorecard["company_improvement_plan"],
+            "approval_gate": scorecard["approval_gate"],
+        },
+        created_by=user,
+        evaluated_at=timezone.now(),
+    )
+    for item in findings:
+        EvaluationFinding.objects.create(
+            organization=cast(Any, company.organization),
+            company=company,
+            evaluation=evaluation,
+            severity=item["severity"],
+            issue_type=item["issue_type"],
+            message=item["message"],
+            evidence_refs_json=item["evidence_refs"],
+            suggested_fix=item["suggested_fix"],
+            blocking=item["blocking"],
+        )
+    EvaluationScorecard.objects.create(
+        organization=cast(Any, company.organization),
+        company=company,
+        evaluation=evaluation,
+        dimensions_json={
+            "engine": "submitted_scorecard",
+            "schema_version": REVIEW_BOARD_SCORECARD_SCHEMA,
+            "decision": scorecard["decision"],
+            "hard_fail": scorecard["hard_fail"],
+            "overall_average": scorecard["overall_average"],
+            "client_readiness_level": scorecard["client_readiness_level"],
+            "sections": {
+                "atlas": scorecard["atlas"],
+                "legacy": scorecard["legacy"],
+                "engagement": scorecard["engagement"],
+            },
+            "approval_gate": scorecard["approval_gate"],
+            "company_improvement_plan": scorecard["company_improvement_plan"],
+        },
+        composite_score=scorecard["overall_average"],
+        grade=grade,
+    )
+    improvement_signals = _create_review_board_improvement_signals(
+        company=company,
+        user=user,
+        evaluation=evaluation,
+        scorecard=scorecard,
+    )
+    if improvement_signals:
+        evaluation.result_json = {
+            **evaluation.result_json,
+            "signal_ids": [str(signal.id) for signal in improvement_signals],
+        }
+        evaluation.save(update_fields=["result_json"])
+    record_audit_log(
+        actor=user,
+        tenant_id=str(company.organization_id),
+        action="evaluation.run",
+        resource_type="evaluation",
+        resource_id=str(evaluation.id),
+        metadata={
+            "company_id": str(company.id),
+            "profile_id": profile_id,
+            "status": status,
+            "engine": "submitted_scorecard",
+            "schema_version": REVIEW_BOARD_SCORECARD_SCHEMA,
+        },
+    )
+    return evaluation
+
+
+def _create_review_board_improvement_signals(
+    *,
+    company: Graph,
+    user: User,
+    evaluation: EvaluationRun,
+    scorecard: dict[str, Any],
+) -> list[CompanySignal]:
+    if scorecard["decision"] == "fail" or bool(scorecard["hard_fail"]):
+        return []
+    signals: list[CompanySignal] = []
+    for index, item in enumerate(scorecard["company_improvement_plan"]):
+        primitive = str(item.get("primitive") or "")
+        if primitive not in {"CompanySignal", "OperationRecommendation"}:
+            continue
+        signal = create_company_signal(
+            company=company,
+            actor=user,
+            signal_type="manual",
+            source="consulting_review_board",
+            external_key=f"review_board:{evaluation.id}:{index}",
+            title=str(item.get("title") or "Review board improvement"),
+            summary=str(item.get("rationale") or ""),
+            metadata={
+                "evaluation_id": str(evaluation.id),
+                "primitive": primitive,
+                "target": item.get("target"),
+                "priority": item.get("priority"),
+                "decision": scorecard["decision"],
+                "approval_gate": scorecard["approval_gate"]["client_deliverable_status"],
+                "execution_status": scorecard["approval_gate"]["execution_status"],
+            },
+        )
+        if evaluation.operation_id and signal.operation_id != evaluation.operation_id:
+            signal.operation_id = evaluation.operation_id
+            signal.save(update_fields=["operation", "updated_at"])
+        signals.append(signal)
+    return signals
 
 
 def _run_threshold_scorecard(
@@ -306,6 +525,363 @@ def _profile_engine(profile: EvaluationProfile | None) -> str:
     if profile is None or not isinstance(profile.rubric_json, dict):
         return ""
     return str(profile.rubric_json.get("engine") or "")
+
+
+def _has_submitted_scorecard(inputs: dict[str, Any] | None) -> bool:
+    return isinstance(inputs, dict) and "submitted_scorecard" in inputs
+
+
+def _submitted_scorecard(raw: dict[str, Any]) -> dict[str, Any]:
+    if str(raw.get("schema_version") or "").strip() != REVIEW_BOARD_SCORECARD_SCHEMA:
+        _raise_submitted_scorecard_error(
+            "schema_version",
+            f"Submitted scorecards must use {REVIEW_BOARD_SCORECARD_SCHEMA}.",
+        )
+
+    sections = {
+        key: _submitted_review_board_section(raw.get(key), section_key=key)
+        for key in REVIEW_BOARD_SECTIONS
+    }
+    all_section_averages = [float(section["average"]) for section in sections.values()]
+    if not all(average > 4.7 for average in all_section_averages):
+        for key, section in sections.items():
+            if len(section["required_improvements"]) < 2:
+                _raise_submitted_scorecard_error(
+                    f"{key}.required_improvements",
+                    "At least two improvements are required unless every section average exceeds 4.7.",
+                )
+    overall_average = _rounded_average(all_section_averages)
+    submitted_overall = _number_value(raw.get("overall_average"))
+    if submitted_overall is None:
+        _raise_submitted_scorecard_error("overall_average", "overall_average is required.")
+    if abs(float(submitted_overall or 0) - overall_average) > 0.15:
+        _raise_submitted_scorecard_error(
+            "overall_average",
+            "overall_average must match the server-computed section average.",
+        )
+
+    company_improvement_plan = _submitted_company_improvement_plan(
+        raw.get("company_improvement_plan")
+    )
+    approval_gate = _submitted_approval_gate(raw.get("approval_gate"))
+    hard_fail = bool(raw.get("hard_fail") is True)
+    raw_decision = _submitted_decision(raw.get("decision"))
+    decision = _submitted_review_board_decision(
+        raw_decision=raw_decision,
+        hard_fail=hard_fail,
+        overall_average=overall_average,
+        sections=sections,
+        approval_gate=approval_gate,
+        company_improvement_plan=company_improvement_plan,
+    )
+    return {
+        "schema_version": REVIEW_BOARD_SCORECARD_SCHEMA,
+        "decision": decision,
+        "hard_fail": hard_fail,
+        "overall_average": overall_average,
+        "client_readiness_level": _review_board_readiness_level(
+            decision=decision,
+            overall_average=overall_average,
+        ),
+        "atlas": sections["atlas"],
+        "legacy": sections["legacy"],
+        "engagement": sections["engagement"],
+        "company_improvement_plan": company_improvement_plan,
+        "approval_gate": approval_gate,
+    }
+
+
+def _submitted_decision(value: Any) -> str:
+    decision = str(value or "").strip().lower()
+    if decision in {"client_ready", "revision_required", "fail"}:
+        return decision
+    return "fail"
+
+
+def _submitted_review_board_section(value: Any, *, section_key: str) -> dict[str, Any]:
+    raw = _dict_value(value)
+    if not raw:
+        _raise_submitted_scorecard_error(section_key, f"{section_key} section is required.")
+    expected_areas = REVIEW_BOARD_SECTIONS[section_key]
+    raw_scores = raw.get("scores")
+    if not isinstance(raw_scores, list) or len(raw_scores) < 6:
+        _raise_submitted_scorecard_error(
+            f"{section_key}.scores",
+            f"{section_key} must include at least six scored areas.",
+        )
+    scores = [_submitted_review_board_score(item, section_key=section_key) for item in raw_scores]
+    scored_areas = {str(item["area"]) for item in scores}
+    missing = [area for area in expected_areas if area not in scored_areas]
+    if missing:
+        _raise_submitted_scorecard_error(
+            f"{section_key}.scores",
+            f"{section_key} is missing required areas: {', '.join(missing)}.",
+        )
+    average = _rounded_average([float(item["score"]) for item in scores])
+    submitted_average = _number_value(raw.get("average"))
+    if submitted_average is None:
+        _raise_submitted_scorecard_error(f"{section_key}.average", "average is required.")
+    if abs(float(submitted_average or 0) - average) > 0.15:
+        _raise_submitted_scorecard_error(
+            f"{section_key}.average",
+            "Section average must match the server-computed criterion average.",
+        )
+    if average == 5.0 and any(not _has_exceptional_rationale(item) for item in scores):
+        _raise_submitted_scorecard_error(
+            f"{section_key}.scores",
+            "A perfect section average requires exceptional rationale for every criterion.",
+        )
+
+    top_strengths = _submitted_text_list(raw.get("top_strengths"), max_items=8, max_length=500)
+    required_improvements = _submitted_text_list(
+        raw.get("required_improvements"),
+        max_items=12,
+        max_length=700,
+    )
+    return {
+        "average": average,
+        "scores": scores,
+        "top_strengths": top_strengths,
+        "required_improvements": required_improvements,
+    }
+
+
+def _submitted_review_board_score(value: Any, *, section_key: str) -> dict[str, Any]:
+    raw = _dict_value(value)
+    area = _submitted_text(raw.get("area"), max_length=120)
+    if not area:
+        _raise_submitted_scorecard_error(f"{section_key}.scores.area", "Score area is required.")
+    score = _number_value(raw.get("score"))
+    if score is None or score < 1 or score > 5:
+        _raise_submitted_scorecard_error(
+            f"{section_key}.scores.{area}",
+            "Score must be a number between 1 and 5.",
+        )
+    return {
+        "area": area,
+        "score": round(float(score), 2),
+        "rationale": _submitted_text(raw.get("rationale"), max_length=900),
+        "improvement": _submitted_text(raw.get("improvement"), max_length=900),
+    }
+
+
+def _submitted_company_improvement_plan(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    improvements = []
+    for item in value[:20]:
+        raw = _dict_value(item)
+        primitive = _submitted_text(raw.get("primitive"), max_length=80)
+        if primitive not in REVIEW_BOARD_IMPROVEMENT_PRIMITIVES:
+            _raise_submitted_scorecard_error(
+                "company_improvement_plan.primitive",
+                "Improvement primitive must be a generic ForgeGraph primitive.",
+            )
+        target = _submitted_text(raw.get("target"), max_length=120)
+        if target not in {"ATLAS", "Legacy Eyewear", "engagement"}:
+            _raise_submitted_scorecard_error(
+                "company_improvement_plan.target",
+                "Improvement target must be ATLAS, Legacy Eyewear, or engagement.",
+            )
+        priority = _submitted_text(raw.get("priority"), max_length=20).lower()
+        if priority not in {"low", "medium", "high"}:
+            priority = "medium"
+        improvements.append(
+            {
+                "target": target,
+                "primitive": primitive,
+                "title": _submitted_text(raw.get("title"), max_length=255),
+                "priority": priority,
+                "rationale": _submitted_text(raw.get("rationale"), max_length=900),
+            }
+        )
+    return improvements
+
+
+def _submitted_approval_gate(value: Any) -> dict[str, str]:
+    raw = _dict_value(value)
+    client_status = _submitted_text(raw.get("client_deliverable_status"), max_length=80)
+    execution_status = _submitted_text(raw.get("execution_status"), max_length=80)
+    if client_status not in REVIEW_BOARD_APPROVAL_STATUSES:
+        _raise_submitted_scorecard_error(
+            "approval_gate.client_deliverable_status",
+            "Approval gate client_deliverable_status is invalid.",
+        )
+    if execution_status not in REVIEW_BOARD_EXECUTION_STATUSES:
+        _raise_submitted_scorecard_error(
+            "approval_gate.execution_status",
+            "Approval gate execution_status is invalid.",
+        )
+    return {
+        "client_deliverable_status": client_status,
+        "execution_status": execution_status,
+        "reason": _submitted_text(raw.get("reason"), max_length=1200),
+    }
+
+
+def _submitted_text_list(value: Any, *, max_items: int, max_length: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value[:max_items]:
+        text = _submitted_text(item, max_length=max_length)
+        if text:
+            result.append(text)
+    return result
+
+
+def _submitted_text(value: Any, *, max_length: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 3].rstrip() + "..."
+
+
+def _submitted_scorecard_status(scorecard: dict[str, Any]) -> str:
+    if bool(scorecard["hard_fail"]) or scorecard["decision"] == "fail":
+        return "BLOCK"
+    if (
+        scorecard["decision"] == "client_ready"
+        and float(scorecard["overall_average"]) >= 4.2
+        and _review_board_min_score(scorecard) >= 3
+        and scorecard["approval_gate"]["client_deliverable_status"] == "approved_for_review"
+    ):
+        return "PASS"
+    if float(scorecard["overall_average"]) < 3.3:
+        return "BLOCK"
+    return "WARN"
+
+
+def _submitted_scorecard_findings(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
+    issues = _review_board_issue_messages(scorecard)
+    hard_fail = bool(scorecard["hard_fail"]) or scorecard["decision"] == "fail"
+    if not issues and hard_fail:
+        issues = [
+            {
+                "message": "The submitted review board scorecard marked this output as a hard failure.",
+                "suggested_fix": "Revise the deliverable before customer review.",
+            }
+        ]
+    findings = []
+    for index, issue in enumerate(issues):
+        findings.append(
+            {
+                "severity": "CRITICAL" if hard_fail else "WARNING",
+                "issue_type": "consulting_review_board_issue",
+                "message": issue["message"],
+                "suggested_fix": issue["suggested_fix"],
+                "blocking": hard_fail,
+                "evidence_refs": [{"type": "consulting_review_board", "index": index}],
+            }
+        )
+    return findings
+
+
+def _submitted_review_board_decision(
+    *,
+    raw_decision: str,
+    hard_fail: bool,
+    overall_average: float,
+    sections: dict[str, dict[str, Any]],
+    approval_gate: dict[str, str],
+    company_improvement_plan: list[dict[str, Any]],
+) -> str:
+    if (
+        raw_decision == "fail"
+        or hard_fail
+        or overall_average < 3.3
+        or _has_critical_review_board_score_one(sections)
+    ):
+        return "fail"
+    has_next_step = any(
+        item["primitive"] in {"CompanySignal", "OperationRecommendation"}
+        for item in company_improvement_plan
+    )
+    if (
+        raw_decision == "client_ready"
+        and overall_average >= 4.2
+        and _sections_min_score(sections) >= 3
+        and approval_gate["client_deliverable_status"] == "approved_for_review"
+        and has_next_step
+    ):
+        return "client_ready"
+    return "revision_required"
+
+
+def _review_board_readiness_level(*, decision: str, overall_average: float) -> str:
+    if decision == "client_ready":
+        return "client_ready"
+    if decision == "fail":
+        return "not_ready"
+    if overall_average >= 4.2:
+        return "strong_with_minor_revisions"
+    return "needs_revision"
+
+
+def _has_critical_review_board_score_one(sections: dict[str, dict[str, Any]]) -> bool:
+    for section_key, areas in REVIEW_BOARD_CRITICAL_AREAS.items():
+        for item in sections[section_key]["scores"]:
+            if item["area"] in areas and float(item["score"]) <= 1:
+                return True
+    return False
+
+
+def _sections_min_score(sections: dict[str, dict[str, Any]]) -> float:
+    return min(
+        float(item["score"])
+        for section in sections.values()
+        for item in section["scores"]
+    )
+
+
+def _review_board_min_score(scorecard: dict[str, Any]) -> float:
+    return _sections_min_score(
+        {
+            "atlas": scorecard["atlas"],
+            "legacy": scorecard["legacy"],
+            "engagement": scorecard["engagement"],
+        }
+    )
+
+
+def _review_board_issue_messages(scorecard: dict[str, Any]) -> list[dict[str, str]]:
+    messages = []
+    for section_key in ("atlas", "legacy", "engagement"):
+        section = scorecard[section_key]
+        for item in section["scores"]:
+            if float(item["score"]) <= 3:
+                messages.append(
+                    {
+                        "message": f"{section_key} review area '{item['area']}' scored {item['score']}.",
+                        "suggested_fix": item["improvement"],
+                    }
+                )
+        for improvement in section["required_improvements"]:
+            messages.append(
+                {
+                    "message": f"{section_key} needs improvement: {improvement}",
+                    "suggested_fix": improvement,
+                }
+            )
+    return messages[:20]
+
+
+def _rounded_average(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return round(sum(values) / len(values), 2)
+
+
+def _has_exceptional_rationale(item: dict[str, Any]) -> bool:
+    text = str(item.get("rationale") or "").lower()
+    return any(
+        marker in text
+        for marker in ("exceptional", "top-tier", "best-in-class", "outstanding")
+    )
+
+
+def _raise_submitted_scorecard_error(field: str, message: str) -> None:
+    raise SubmittedScorecardValidationError({f"inputs.submitted_scorecard.{field}": [message]})
 
 
 def _metric_inputs(inputs: dict[str, Any]) -> dict[str, Any]:

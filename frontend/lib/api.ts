@@ -143,6 +143,12 @@ const API_PATHS = {
     currentBrief: "/api/interaction/briefs/current",
     events: "/api/interaction/events",
   },
+  communication: {
+    threads: "/api/communication/threads",
+    thread: (threadId: string) => `/api/communication/threads/${threadId}`,
+    messages: (threadId: string) => `/api/communication/threads/${threadId}/messages`,
+    attachments: (messageId: string) => `/api/communication/messages/${messageId}/attachments`,
+  },
   inventory: {
     overview: "/api/inventory/overview",
     reservations: "/api/inventory/reservations",
@@ -4852,6 +4858,89 @@ export type ServiceDeliverableInput = {
   metadata?: Record<string, unknown>;
 };
 
+export type CommunicationVisibility = "customer" | "operator" | "internal";
+
+export type CommunicationAttachmentDTO = {
+  id: string;
+  message_id: string;
+  type: string;
+  target_id: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type CommunicationThreadDTO = {
+  id: string;
+  organization_id: string;
+  company_id: string | null;
+  service_engagement_id: string | null;
+  operation_id: string | null;
+  approval_task_id: string | null;
+  artifact_id: string | null;
+  report_run_id: string | null;
+  title: string;
+  thread_type: string;
+  visibility_mode: "customer" | "operator" | "internal" | "mixed" | string;
+  status: string;
+  source_key: string;
+  metadata: Record<string, unknown>;
+  can_send_internal: boolean;
+  created_by_user_id: string | null;
+  created_by_agent_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CommunicationMessageDTO = {
+  id: string;
+  thread_id: string;
+  organization_id: string;
+  company_id: string | null;
+  sender_kind: "user" | "agent" | "company" | "organization" | "system" | string;
+  sender_user_id: string | null;
+  sender_agent_id: string | null;
+  sender_company_id: string | null;
+  sender_organization_id: string | null;
+  message_kind: string;
+  body: string;
+  body_format: "plain" | "markdown" | "structured_json" | string;
+  visibility: CommunicationVisibility | string;
+  redacted: boolean;
+  redacted_at: string | null;
+  metadata: Record<string, unknown>;
+  attachments: CommunicationAttachmentDTO[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type CommunicationThreadInput = {
+  company_id: string;
+  service_engagement_id?: string | null;
+  operation_id?: string | null;
+  approval_task_id?: string | null;
+  artifact_id?: string | null;
+  report_run_id?: string | null;
+  title: string;
+  thread_type?: string;
+  visibility_mode?: "customer" | "operator" | "internal" | "mixed";
+  status?: string;
+  source_key?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type CommunicationMessageInput = {
+  message_kind?: string;
+  body: string;
+  body_format?: "plain" | "markdown" | "structured_json";
+  visibility?: CommunicationVisibility;
+  metadata?: Record<string, unknown>;
+  attachments?: Array<{ type: string; id: string; metadata?: Record<string, unknown> }>;
+};
+
+export type CommunicationAttachmentInput = {
+  attachments: Array<{ type: string; id: string; metadata?: Record<string, unknown> }>;
+};
+
 export type CompanyBlueprintInput = {
   company_name: string;
   objective: string;
@@ -4950,6 +5039,68 @@ export const portfolioApi = {
       input,
     );
     return response.data.data.assignment;
+  },
+};
+
+export const communicationApi = {
+  listThreads: async (params?: {
+    company_id?: string;
+    status?: string;
+    service_engagement_id?: string;
+    operation_id?: string;
+  }): Promise<CommunicationThreadDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ threads: CommunicationThreadDTO[] }>>(
+      API_PATHS.communication.threads,
+      { params },
+    );
+    return response.data.data.threads;
+  },
+  createThread: async (
+    input: CommunicationThreadInput,
+    options?: IdempotencyOptions,
+  ): Promise<CommunicationThreadDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ thread: CommunicationThreadDTO }>>(
+      API_PATHS.communication.threads,
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.thread;
+  },
+  getThread: async (threadId: string): Promise<CommunicationThreadDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ thread: CommunicationThreadDTO }>>(
+      API_PATHS.communication.thread(threadId),
+    );
+    return response.data.data.thread;
+  },
+  listMessages: async (threadId: string): Promise<CommunicationMessageDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ messages: CommunicationMessageDTO[] }>>(
+      API_PATHS.communication.messages(threadId),
+    );
+    return response.data.data.messages;
+  },
+  createMessage: async (
+    threadId: string,
+    input: CommunicationMessageInput,
+    options?: IdempotencyOptions,
+  ): Promise<CommunicationMessageDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ message: CommunicationMessageDTO }>>(
+      API_PATHS.communication.messages(threadId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.message;
+  },
+  attachObjects: async (
+    messageId: string,
+    input: CommunicationAttachmentInput,
+    options?: IdempotencyOptions,
+  ): Promise<CommunicationMessageDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ message: CommunicationMessageDTO }>>(
+      API_PATHS.communication.attachments(messageId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data.message;
   },
 };
 

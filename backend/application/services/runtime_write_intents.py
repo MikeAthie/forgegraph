@@ -97,6 +97,7 @@ SUPPORTED_RUNTIME_INTENTS = {
 }
 
 _DEADLOCK_RETRY_ATTEMPTS = 3
+_TRANSIENT_DB_RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.5, 1.0)
 
 IntentProcessResult = Literal["processed", "duplicate", "invalid", "ignored"]
 _UNSET = object()
@@ -252,7 +253,7 @@ def process_runtime_intent_message(
             stream_message_id=stream_message_id,
         )
     except RuntimeIntentError as exc:
-        _record_runtime_intent_outcome(
+        _record_runtime_intent_outcome_with_retry(
             intent=intent,
             outcome="invalid",
             stream_message_id=stream_message_id,
@@ -261,7 +262,7 @@ def process_runtime_intent_message(
         )
         raise
 
-    _record_runtime_intent_outcome(
+    _record_runtime_intent_outcome_with_retry(
         intent=intent,
         outcome=result,
         stream_message_id=stream_message_id,
@@ -282,7 +283,7 @@ def _apply_runtime_intent_message_with_deadlock_retry(
                 stream_message_id=stream_message_id,
             )
         except OperationalError as exc:
-            if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
+            if not _is_retryable_runtime_db_error(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
                 raise
             time.sleep(0.02 * (attempt + 1))
     raise RuntimeError("unreachable runtime intent retry state")
@@ -1383,8 +1384,56 @@ def _record_runtime_intent_outcome(
         )
 
 
-def _is_deadlock(exc: OperationalError) -> bool:
-    return "deadlock detected" in str(exc).lower()
+def _record_runtime_intent_outcome_with_retry(
+    *,
+    intent: RuntimeIntentEnvelope,
+    outcome: str,
+    stream_message_id: str,
+    reason: str = "",
+    error_class: str = "",
+) -> None:
+    for attempt, delay_seconds in enumerate(_TRANSIENT_DB_RETRY_DELAYS_SECONDS):
+        try:
+            _record_runtime_intent_outcome(
+                intent=intent,
+                outcome=outcome,
+                stream_message_id=stream_message_id,
+                reason=reason,
+                error_class=error_class,
+            )
+            return
+        except OperationalError as exc:
+            if not _is_retryable_runtime_db_error(exc):
+                raise
+            logger.warning(
+                "runtime_intent_outcome_retry",
+                extra={
+                    "run_id": str(intent.run_id),
+                    "intent_id": str(intent.intent_id),
+                    "intent_type": intent.intent_type,
+                    "attempt": attempt + 1,
+                    "max_attempts": len(_TRANSIENT_DB_RETRY_DELAYS_SECONDS) + 1,
+                    "error": str(exc),
+                },
+            )
+            time.sleep(delay_seconds)
+
+    _record_runtime_intent_outcome(
+        intent=intent,
+        outcome=outcome,
+        stream_message_id=stream_message_id,
+        reason=reason,
+        error_class=error_class,
+    )
+
+
+def _is_retryable_runtime_db_error(exc: OperationalError) -> bool:
+    message = str(exc).lower()
+    return (
+        "deadlock detected" in message
+        or "database is locked" in message
+        or "database table is locked" in message
+    )
 
 
 def _touch_run(run: Run, *, event_time: datetime) -> None:

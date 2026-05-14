@@ -5,7 +5,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -332,6 +332,40 @@ def test_process_runtime_intent_records_backend_owned_outcome(
     assert duplicate == "duplicate"
     outcome.refresh_from_db()
     assert outcome.outcome == "duplicate"
+    broadcast_run_updated.assert_called_once()
+    broadcast_decision_required.assert_called_once()
+
+
+@patch("application.services.runtime_write_intents.time.sleep", return_value=None)
+@patch("application.services.runtime_write_intents.broadcast_decision_required")
+@patch("application.services.runtime_write_intents.broadcast_run_updated")
+def test_process_runtime_intent_retries_transient_outcome_write_lock(
+    broadcast_run_updated,
+    broadcast_decision_required,
+    _sleep,
+):
+    run = _make_run()
+    intent = _pause_intent(run=run)
+    original_update_or_create = RuntimeIntentOutcome.objects.update_or_create
+    attempts = {"count": 0}
+
+    def flaky_update_or_create(*args, **kwargs):  # type: ignore[no-untyped-def]
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise OperationalError("database is locked")
+        return original_update_or_create(*args, **kwargs)
+
+    with patch.object(RuntimeIntentOutcome.objects, "update_or_create", side_effect=flaky_update_or_create):
+        result = process_runtime_intent_message(
+            stream_message_id="1700000000099-lock",
+            fields=_intent_fields(intent),
+        )
+
+    assert result == "processed"
+    assert attempts["count"] == 2
+    outcome = RuntimeIntentOutcome.objects.get(intent_id=intent.intent_id)
+    assert outcome.outcome == "processed"
+    assert outcome.run == run
     broadcast_run_updated.assert_called_once()
     broadcast_decision_required.assert_called_once()
 

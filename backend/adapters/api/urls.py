@@ -29,6 +29,7 @@ urlpatterns = [
     path("credentials/", include("adapters.api.credentials.urls")),
     path("integrations/", include("adapters.api.integrations.urls")),
     path("interaction/", include("adapters.api.interaction.urls")),
+    path("", include("adapters.api.communications.urls")),
     path("archive/", include("adapters.api.archive.urls")),
     path("", include("adapters.api.operating_models.urls")),
     path("", include("adapters.api.company_blueprints.urls")),

@@ -1,24 +1,24 @@
-import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import { loginLive, startRunViaApi } from "../e2e/live-helpers";
+import { loginLive } from "../e2e/live-helpers";
 import {
   collectLiveProductModeApiRequests,
   createLiveReportFromCompletedRun,
   forbiddenLegacyFunctionCompanies,
-  legacyLiveOperationBrief,
+  launchAndWaitForLiveOperationFromUi,
+  LIVE_LLM_RUN_TIMEOUT_MS,
+  liveBackendLaunchFallbackAllowed,
   liveLegacyCompanyName,
   liveLlmSkipReason,
   liveProductModeRunNamespace,
   sawLiveApiPath,
   sawLiveCompanyScopedQuery,
   seedLiveLegacyProductMode,
-  type LiveLegacyProductModeFixture,
   verticalLiveProductModeApiRequests,
-  waitForLiveRunTerminal,
+  withLiveLlmExecutionLock,
 } from "./fixtures.live";
 
 const liveSkipReason = liveLlmSkipReason();
-type LiveLaunchResult = { runId: string; mode: "ui" | "backend" };
 
 test.describe("Live product modes", () => {
   test.skip(Boolean(liveSkipReason), liveSkipReason ?? "Live LLM product-mode suite is disabled.");
@@ -27,7 +27,7 @@ test.describe("Live product modes", () => {
     page,
     request,
   }, testInfo) => {
-    test.setTimeout(240_000);
+    test.setTimeout(LIVE_LLM_RUN_TIMEOUT_MS * 2 + 180_000);
 
     const apiRequests = collectLiveProductModeApiRequests(page);
     const fixture = await seedLiveLegacyProductMode(request, testInfo);
@@ -59,7 +59,9 @@ test.describe("Live product modes", () => {
     await expect(primaryCards).toHaveCount(1);
     await expect(addOnCards).toHaveCount(fixture.installedPacks.filter((pack) => pack.role === "addon").length);
 
-    const launch = await launchLiveOperationFromUi(page, request, fixture, testInfo);
+    const { launch, completedRun, attempts: liveRunAttempts } = await withLiveLlmExecutionLock(testInfo, async () =>
+      launchAndWaitForLiveOperationFromUi(page, request, fixture, testInfo),
+    );
     const runId = launch.runId;
     console.info(
       [
@@ -76,6 +78,7 @@ test.describe("Live product modes", () => {
           fallbackAllowed: liveBackendLaunchFallbackAllowed(),
           runId,
           companyId: fixture.companyId,
+          attempts: liveRunAttempts,
         },
         null,
         2,
@@ -83,7 +86,6 @@ test.describe("Live product modes", () => {
       contentType: "application/json",
     });
 
-    const completedRun = await waitForLiveRunTerminal(request, fixture.accessToken, runId);
     expect(completedRun.status).toBe("succeeded");
     expect(completedRun.graph_id).toBe(fixture.companyId);
     expect(completedRun.node_runs?.filter((nodeRun) => nodeRun.status === "failed")).toEqual([]);
@@ -144,71 +146,3 @@ test.describe("Live product modes", () => {
     expect(verticalLiveProductModeApiRequests(apiRequests)).toEqual([]);
   });
 });
-
-async function launchLiveOperationFromUi(
-  page: Page,
-  request: APIRequestContext,
-  fixture: LiveLegacyProductModeFixture,
-  testInfo: TestInfo,
-): Promise<LiveLaunchResult> {
-  let lastFailure = "";
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const runStartResponsePromise = page.waitForResponse(
-        (response) => response.request().method() === "POST" && response.url().includes("/api/runs/start"),
-        { timeout: 30_000 },
-      );
-      await page.getByTestId("company-launch-operation-input").fill(legacyLiveOperationBrief());
-      await page.getByTestId("company-launch-operation-button").click();
-      const runStartResponse = await runStartResponsePromise;
-      if (runStartResponse.ok()) {
-        const runStartBody = (await runStartResponse.json()) as { data: { id: string } };
-        return { runId: runStartBody.data.id, mode: "ui" };
-      }
-
-      lastFailure = `${runStartResponse.status()} ${runStartResponse.statusText()}: ${await runStartResponse.text()}`;
-      if (runStartResponse.status() < 500) {
-        break;
-      }
-    } catch (error) {
-      lastFailure = error instanceof Error ? error.message : String(error);
-    }
-
-    await page.waitForTimeout(1_500 * (attempt + 1));
-    await page.reload({ waitUntil: "networkidle" }).catch(() => undefined);
-  }
-
-  if (!liveBackendLaunchFallbackAllowed()) {
-    throw new Error(
-      [
-        `UI launch failed with ${lastFailure}.`,
-        "The live LLM spec requires UI launch by default.",
-        "Set LIVE_LLM_ALLOW_BACKEND_FALLBACK=true to allow backend-created operation plus UI verification.",
-      ].join(" "),
-    );
-  }
-
-  console.info(`Live product-mode UI launch failed; using explicit backend fallback. Last failure: ${lastFailure}`);
-  testInfo.annotations.push({
-    type: "live-launch-mode",
-    description: "backend-fallback",
-  });
-
-  try {
-    const fallback = await startRunViaApi(request, fixture.accessToken, {
-      versionId: fixture.versionId,
-      inputJson: {
-        company_name: liveLegacyCompanyName,
-        operation_brief: legacyLiveOperationBrief(),
-      },
-    });
-    return { runId: fallback.runId, mode: "backend" };
-  } catch (error) {
-    const fallbackFailure = error instanceof Error ? error.message : String(error);
-    throw new Error(`UI launch failed with ${lastFailure}; backend fallback failed with ${fallbackFailure}`);
-  }
-}
-
-function liveBackendLaunchFallbackAllowed(): boolean {
-  return (process.env.LIVE_LLM_ALLOW_BACKEND_FALLBACK ?? "").toLowerCase() === "true";
-}

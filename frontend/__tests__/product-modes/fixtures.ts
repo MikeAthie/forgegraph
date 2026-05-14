@@ -3,6 +3,8 @@ import type { Page, Route } from "@playwright/test";
 import { installCompanyWorkspaceMocks, type CompanyWorkspaceMockState } from "../e2e/company-ux-fixtures";
 import type {
   AssertionRecordDTO,
+  CommunicationMessageDTO,
+  CommunicationThreadDTO,
   CompanyOperatingModelDTO,
   CompanyProgramDTO,
   CrossCompanyQueues,
@@ -28,6 +30,8 @@ export const legacyMultiPackIds = {
   report: "legacy-eyewear-q2-report",
   metricSnapshot: "legacy-eyewear-q2-metrics",
   periodicReview: "legacy-eyewear-quarterly-review",
+  communicationThread: "legacy-eyewear-consult-thread",
+  signal: "legacy-eyewear-missing-whatsapp-signal",
 } as const;
 
 export type ProductModeMockState = CompanyWorkspaceMockState & {
@@ -41,6 +45,8 @@ export type ProductModeMockState = CompanyWorkspaceMockState & {
   periodicReviews?: PeriodicReviewDTO[];
   metricSnapshots?: MetricSnapshotDTO[];
   reportRuns?: ReportRunDTO[];
+  communicationThreads?: CommunicationThreadDTO[];
+  communicationMessages?: Record<string, CommunicationMessageDTO[]>;
 };
 
 export function collectProductModeApiRequests(page: Page): string[] {
@@ -346,6 +352,60 @@ export async function installProductModeMocks(page: Page, state: ProductModeMock
       return;
     }
     await fulfillJson(route, { report_runs: scopedByCompany(state.reportRuns ?? [], route) });
+  });
+
+  route(/\/api\/communication\/threads(?:\?.*)?$/, async (route: Route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    const url = new URL(route.request().url());
+    const companyId = url.searchParams.get("company_id");
+    const threads = companyId
+      ? (state.communicationThreads ?? []).filter((thread) => thread.company_id === companyId)
+      : (state.communicationThreads ?? []);
+    await fulfillJson(route, { threads });
+  });
+
+  route(/\/api\/communication\/threads\/[^/]+\/messages(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/communication\/threads\/([^/]+)\/messages$/);
+    const threadId = match?.[1] ?? "";
+    if (route.request().method() === "GET") {
+      await fulfillJson(route, { messages: state.communicationMessages?.[threadId] ?? [] });
+      return;
+    }
+    if (route.request().method() === "POST") {
+      const posted = JSON.parse(route.request().postData() || "{}") as Partial<CommunicationMessageDTO>;
+      const message: CommunicationMessageDTO = {
+        id: `mock-message-${Date.now()}`,
+        thread_id: threadId,
+        organization_id: "playwright-product-modes-org",
+        company_id: state.companyId,
+        sender_kind: "user",
+        sender_user_id: "playwright-user",
+        sender_agent_id: null,
+        sender_company_id: null,
+        sender_organization_id: null,
+        message_kind: String(posted.message_kind || "note"),
+        body: String(posted.body || ""),
+        body_format: String(posted.body_format || "markdown"),
+        visibility: String(posted.visibility || "customer"),
+        redacted: false,
+        redacted_at: null,
+        metadata: {},
+        attachments: [],
+        created_at: "2026-05-12T12:10:00.000Z",
+        updated_at: "2026-05-12T12:10:00.000Z",
+      };
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(apiSuccess({ message })),
+      });
+      return;
+    }
+    await route.continue();
   });
 
   await Promise.all(routePromises);
@@ -730,6 +790,72 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
       updated_at: "2026-05-10T12:00:00.000Z",
     },
   ];
+  const communicationThread: CommunicationThreadDTO = {
+    id: legacyMultiPackIds.communicationThread,
+    organization_id: "playwright-product-modes-org",
+    company_id: base.companyId,
+    service_engagement_id: null,
+    operation_id: base.operations[0]?.id ?? null,
+    approval_task_id: null,
+    artifact_id: artifact.id,
+    report_run_id: legacyMultiPackIds.report,
+    title: "Legacy Eyewear consult",
+    thread_type: "service_engagement",
+    visibility_mode: "mixed",
+    status: "open",
+    source_key: "service_engagement:legacy-eyewear:primary",
+    metadata: {},
+    can_send_internal: false,
+    created_by_user_id: null,
+    created_by_agent_id: null,
+    created_at: "2026-05-12T12:00:00.000Z",
+    updated_at: "2026-05-12T12:05:00.000Z",
+  };
+  const communicationMessages: CommunicationMessageDTO[] = [
+    {
+      id: "legacy-whatsapp-question",
+      thread_id: communicationThread.id,
+      organization_id: communicationThread.organization_id,
+      company_id: base.companyId,
+      sender_kind: "user",
+      sender_user_id: "legacy-owner",
+      sender_agent_id: null,
+      sender_company_id: null,
+      sender_organization_id: null,
+      message_kind: "request",
+      body: "Can you explain why WhatsApp is recommended if the connector is missing?",
+      body_format: "markdown",
+      visibility: "customer",
+      redacted: false,
+      redacted_at: null,
+      metadata: {},
+      attachments: [],
+      created_at: "2026-05-12T12:00:00.000Z",
+      updated_at: "2026-05-12T12:00:00.000Z",
+    },
+    {
+      id: "atlas-whatsapp-reply",
+      thread_id: communicationThread.id,
+      organization_id: communicationThread.organization_id,
+      company_id: base.companyId,
+      sender_kind: "user",
+      sender_user_id: "atlas-operator",
+      sender_agent_id: null,
+      sender_company_id: null,
+      sender_organization_id: null,
+      message_kind: "response",
+      body:
+        "WhatsApp is recommended as a manual first step. Automation requires connecting a WhatsApp/Twilio/Brevo capability.",
+      body_format: "markdown",
+      visibility: "customer",
+      redacted: false,
+      redacted_at: null,
+      metadata: {},
+      attachments: [],
+      created_at: "2026-05-12T12:03:00.000Z",
+      updated_at: "2026-05-12T12:03:00.000Z",
+    },
+  ];
   const state: ProductModeMockState = {
     ...base,
     pendingApprovalCount: base.pendingApprovalCount ?? 0,
@@ -742,6 +868,10 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
     metricSnapshots,
     reportRuns,
     stateProjections,
+    communicationThreads: [communicationThread],
+    communicationMessages: {
+      [communicationThread.id]: communicationMessages,
+    },
   };
   return {
     ...state,

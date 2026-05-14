@@ -12,10 +12,12 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, OperationalError, connection, transaction
 from django.utils import timezone
 
+from application.services.domain_event_outbox import enqueue_domain_event_outbox
 from infrastructure.orm.models import (
     ApprovalTask,
     AuditLog,
     DomainEvent,
+    Graph,
     GraphVersion,
     LLMUsage,
     MemoryObservation,
@@ -66,6 +68,11 @@ def record_domain_event(
     tenant_id: UUID | str | None = None,
     event_version: int = 1,
     occurred_at: Any = None,
+    outbox_topic: str | None = None,
+    outbox_schema_version: str = "domain_event_v1",
+    outbox_payload: dict[str, Any] | None = None,
+    outbox_visibility: str = "",
+    outbox_company: Graph | None = None,
 ) -> DomainEventResult:
     """Record a backend-authored projection event in the caller's transaction."""
 
@@ -81,6 +88,11 @@ def record_domain_event(
                 tenant_id=tenant_id,
                 event_version=event_version,
                 occurred_at=occurred_at,
+                outbox_topic=outbox_topic,
+                outbox_schema_version=outbox_schema_version,
+                outbox_payload=outbox_payload,
+                outbox_visibility=outbox_visibility,
+                outbox_company=outbox_company,
             )
         except OperationalError as exc:
             if not _is_deadlock(exc) or attempt >= _DEADLOCK_RETRY_ATTEMPTS - 1:
@@ -100,6 +112,11 @@ def _record_domain_event_once(
     tenant_id: UUID | str | None = None,
     event_version: int = 1,
     occurred_at: Any = None,
+    outbox_topic: str | None = None,
+    outbox_schema_version: str = "domain_event_v1",
+    outbox_payload: dict[str, Any] | None = None,
+    outbox_visibility: str = "",
+    outbox_company: Graph | None = None,
 ) -> DomainEventResult:
     key = _compact_key(idempotency_key)
     if not key:
@@ -109,11 +126,27 @@ def _record_domain_event_once(
     organization_id = organization.id
     existing = DomainEvent.objects.filter(idempotency_key=key).first()
     if existing is not None:
+        _maybe_enqueue_outbox(
+            existing,
+            topic=outbox_topic,
+            schema_version=outbox_schema_version,
+            payload_json=outbox_payload,
+            visibility=outbox_visibility,
+            company=outbox_company,
+        )
         return DomainEventResult(event=existing, created=False)
 
     with transaction.atomic():
         existing = DomainEvent.objects.filter(idempotency_key=key).first()
         if existing is not None:
+            _maybe_enqueue_outbox(
+                existing,
+                topic=outbox_topic,
+                schema_version=outbox_schema_version,
+                payload_json=outbox_payload,
+                visibility=outbox_visibility,
+                company=outbox_company,
+            )
             return DomainEventResult(event=existing, created=False)
 
         sequence = _allocate_sequence(organization_id)
@@ -130,8 +163,24 @@ def _record_domain_event_once(
                 payload=_json_safe_payload(payload or {}),
                 occurred_at=occurred_at or timezone.now(),
             )
+            _maybe_enqueue_outbox(
+                event,
+                topic=outbox_topic,
+                schema_version=outbox_schema_version,
+                payload_json=outbox_payload,
+                visibility=outbox_visibility,
+                company=outbox_company,
+            )
         except IntegrityError:
             duplicate = DomainEvent.objects.get(idempotency_key=key)
+            _maybe_enqueue_outbox(
+                duplicate,
+                topic=outbox_topic,
+                schema_version=outbox_schema_version,
+                payload_json=outbox_payload,
+                visibility=outbox_visibility,
+                company=outbox_company,
+            )
             return DomainEventResult(event=duplicate, created=False)
         return DomainEventResult(event=event, created=True)
 
@@ -485,6 +534,28 @@ def _allocate_sequence(organization_id: UUID) -> int:
 
 def _json_safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], json.loads(json.dumps(payload, cls=DjangoJSONEncoder)))
+
+
+def _maybe_enqueue_outbox(
+    event: DomainEvent,
+    *,
+    topic: str | None,
+    schema_version: str,
+    payload_json: dict[str, Any] | None,
+    visibility: str,
+    company: Graph | None,
+) -> None:
+    if not topic:
+        return
+    enqueue_domain_event_outbox(
+        domain_event=event,
+        topic=topic,
+        schema_version=schema_version,
+        payload_json=payload_json,
+        visibility=visibility,
+        company=company,
+        idempotency_key=f"domain-event-outbox:{event.id}",
+    )
 
 
 def _node_run_payload(node_run: NodeRun) -> dict[str, Any]:

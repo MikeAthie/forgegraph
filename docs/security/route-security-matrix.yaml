@@ -5150,6 +5150,105 @@ routes:
   rate_limit_scope: default
   request_size_limit: api_default
   sensitive_audit_action: service_deliverable.created
+- id: communication-threads-read
+  names:
+  - communication-thread-list-create
+  paths:
+  - /api/communication/threads
+  - /api/v1/communication/threads
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: filtered_read_model
+  company_role: viewer
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: communication-threads-create
+  names:
+  - communication-thread-list-create
+  paths:
+  - /api/communication/threads
+  - /api/v1/communication/threads
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  company_role: viewer
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: communication.thread.created
+- id: communication-thread-detail-read
+  names:
+  - communication-thread-detail
+  paths:
+  - /api/communication/threads/<uuid:thread_id>
+  - /api/v1/communication/threads/<uuid:thread_id>
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  company_role: viewer
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: communication-thread-messages-read
+  names:
+  - communication-thread-messages
+  paths:
+  - /api/communication/threads/<uuid:thread_id>/messages
+  - /api/v1/communication/threads/<uuid:thread_id>/messages
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  company_role: viewer
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: communication-thread-messages-create
+  names:
+  - communication-thread-messages
+  paths:
+  - /api/communication/threads/<uuid:thread_id>/messages
+  - /api/v1/communication/threads/<uuid:thread_id>/messages
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  company_role: viewer
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: communication.message.created
+- id: communication-message-attachments-create
+  names:
+  - communication-message-attachments
+  paths:
+  - /api/communication/messages/<uuid:message_id>/attachments
+  - /api/v1/communication/messages/<uuid:message_id>/attachments
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  company_role: viewer
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: communication.attachment.created
 - id: operating-model-packs-pack-id
   names:
   - operating-model-pack-detail

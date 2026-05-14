@@ -24,6 +24,9 @@ from infrastructure.orm.models import (
     CompanyAccessPolicy,
     CompanyAssignment,
     CompanyOperatingModelInstallation,
+    CompanySignal,
+    EvaluationRun,
+    EvaluationScorecard,
     Graph,
     MetricSnapshot,
     Organization,
@@ -32,6 +35,7 @@ from infrastructure.orm.models import (
     PeriodicReviewDefinition,
     ReportRun,
     StateProjection,
+    ToolExecution,
     User,
 )
 
@@ -194,6 +198,173 @@ def _assert_no_marketing_specific_shape(payload: Any) -> None:
     assert "/api/marketing/" not in serialized
     assert "marketing_company" not in serialized
     assert "marketingmodel" not in serialized
+
+
+def _review_board_section(
+    area_names: list[str],
+    *,
+    score: float,
+    required_improvements: list[str] | None = None,
+    exceptional: bool = False,
+) -> dict[str, Any]:
+    rationale = (
+        "Exceptional, top-tier rationale grounded in the submitted evidence."
+        if exceptional
+        else "Strong rationale grounded in Legacy context and the submitted evidence."
+    )
+    scores = [
+        {
+            "area": area,
+            "score": score,
+            "rationale": rationale,
+            "improvement": f"Improve {area.lower()} with a concrete next operating step.",
+        }
+        for area in area_names
+    ]
+    average = round(sum(float(item["score"]) for item in scores) / len(scores), 2)
+    return {
+        "average": average,
+        "scores": scores,
+        "top_strengths": [
+            "Uses company-scoped Legacy Eyewear context.",
+            "Keeps ATLAS and Legacy boundaries separate.",
+        ],
+        "required_improvements": required_improvements
+        or [
+            "Add sharper operating owner and timing detail.",
+            "Tie the next review to a measurable company signal.",
+        ],
+    }
+
+
+def _submitted_review_board_scorecard(
+    *,
+    score: float = 4.3,
+    decision: str = "client_ready",
+    hard_fail: bool = False,
+    approval_status: str = "approved_for_review",
+    primitive: str = "CompanySignal",
+    exceptional: bool = False,
+) -> dict[str, Any]:
+    atlas_areas = [
+        "Diagnostic depth",
+        "Strategic reasoning",
+        "Use of Legacy context",
+        "Execution design",
+        "Tool/capability honesty",
+        "Client communication quality",
+        "Operating-system maturity",
+    ]
+    legacy_areas = [
+        "Context completeness",
+        "Commercial readiness",
+        "Brand readiness",
+        "Channel readiness",
+        "Approval readiness",
+        "Measurement readiness",
+        "Operational maturity",
+    ]
+    engagement_areas = [
+        "Goal clarity",
+        "Evidence quality",
+        "Deliverable completeness",
+        "Cross-company boundary correctness",
+        "Client safety",
+        "Execution continuity",
+        "Reusability/history",
+    ]
+    atlas = _review_board_section(atlas_areas, score=score, exceptional=exceptional)
+    legacy = _review_board_section(legacy_areas, score=score, exceptional=exceptional)
+    engagement = _review_board_section(engagement_areas, score=score, exceptional=exceptional)
+    overall_average = round(
+        (atlas["average"] + legacy["average"] + engagement["average"]) / 3,
+        2,
+    )
+    return {
+        "schema_version": "consulting_review_board_v1",
+        "decision": decision,
+        "hard_fail": hard_fail,
+        "overall_average": overall_average,
+        "client_readiness_level": "client_ready",
+        "atlas": atlas,
+        "legacy": legacy,
+        "engagement": engagement,
+        "company_improvement_plan": [
+            {
+                "target": "ATLAS",
+                "primitive": primitive,
+                "title": "Create a sharper consulting follow-up signal",
+                "priority": "medium",
+                "rationale": "ATLAS should convert judge feedback into a generic next-step primitive.",
+            },
+            {
+                "target": "Legacy Eyewear",
+                "primitive": "OperationRecommendation",
+                "title": "Prepare approval-ready execution checklist",
+                "priority": "high",
+                "rationale": "Legacy needs a generic recommendation before public execution.",
+            },
+        ],
+        "approval_gate": {
+            "client_deliverable_status": approval_status,
+            "execution_status": "ready"
+            if approval_status == "approved_for_review"
+            else "blocked_until_missing_capabilities_resolved",
+            "reason": "The review board gate is based on company-scoped evidence.",
+        },
+        "judge_prompt": "internal prompt must not persist",
+        "internal_reasoning": "private chain-of-thought must not persist",
+        "evidence_bundle": {"private": "must not persist"},
+        "raw_judge_prompt": "raw prompt must not persist",
+        "private_reasoning": "private reasoning must not persist",
+        "raw_evidence_bundle": {"private": "raw evidence must not persist"},
+        "pack_manifest": {"private": "pack manifest must not persist"},
+        "private_config": {"secret": "private config must not persist"},
+    }
+
+
+def _run_submitted_scorecard(
+    client: APIClient,
+    company: Graph,
+    scorecard: dict[str, Any],
+    *,
+    key: str,
+) -> dict[str, Any]:
+    response = client.post(
+        "/api/evaluations/run",
+        data={
+            "company_id": str(company.id),
+            "profile_id": "consulting_ops_demo.v1.quality_judge",
+            "input_refs": [{"type": "artifact", "id": "strategy-output"}],
+            "inputs": {"submitted_scorecard": scorecard},
+        },
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=key,
+    )
+    assert response.status_code == 201, response.json()
+    return cast(dict[str, Any], response.json()["data"]["evaluation"])
+
+
+def _run_invalid_submitted_scorecard(
+    client: APIClient,
+    company: Graph,
+    scorecard: dict[str, Any],
+    *,
+    key: str,
+) -> dict[str, Any]:
+    response = client.post(
+        "/api/evaluations/run",
+        data={
+            "company_id": str(company.id),
+            "profile_id": "consulting_ops_demo.v1.quality_judge",
+            "input_refs": [{"type": "artifact", "id": "strategy-output"}],
+            "inputs": {"submitted_scorecard": scorecard},
+        },
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=key,
+    )
+    assert response.status_code == 400
+    return cast(dict[str, Any], response.json())
 
 
 def test_legacy_can_be_one_company_with_multiple_pack_installations(authenticated_client, user):
@@ -520,6 +691,304 @@ def test_archived_pack_is_not_active_but_company_history_remains_readable(
     assert reports.json()["data"]["report_runs"]
     assert history.status_code == 200
     assert history.json()["data"]["state_projections"]
+
+
+def test_review_board_scorecard_client_ready_persists_sanitized_generic_pass(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    evaluation = _run_submitted_scorecard(
+        authenticated_client,
+        company,
+        _submitted_review_board_scorecard(score=4.3, decision="client_ready"),
+        key="quality-judge-pass",
+    )
+
+    assert evaluation["status"] == "PASS"
+    assert evaluation["score"] == 4.3
+    assert evaluation["result"]["schema_version"] == "consulting_review_board_v1"
+    assert evaluation["result"]["decision"] == "client_ready"
+    assert evaluation["result"]["hard_fail"] is False
+    assert evaluation["result"]["overall_average"] == 4.3
+    assert evaluation["result"]["atlas"]["average"] == 4.3
+    assert evaluation["result"]["legacy"]["average"] == 4.3
+    assert evaluation["result"]["engagement"]["average"] == 4.3
+    assert evaluation["result"]["company_improvement_plan"][0]["primitive"] == "CompanySignal"
+    assert "judge_prompt" not in str(evaluation)
+    persisted = EvaluationRun.objects.get(id=evaluation["id"])
+    assert persisted.company == company
+    signal_ids = persisted.result_json["signal_ids"]
+    assert signal_ids
+    signals = CompanySignal.objects.filter(company=company, source="consulting_review_board")
+    assert signals.count() == 2
+    assert {str(signal.id) for signal in signals} == set(signal_ids)
+    assert {
+        signal.metadata_json["primitive"] for signal in signals
+    } == {"CompanySignal", "OperationRecommendation"}
+    scorecard = EvaluationScorecard.objects.get(evaluation=persisted)
+    assert scorecard.composite_score == 4.3
+    assert scorecard.dimensions_json["schema_version"] == "consulting_review_board_v1"
+    assert scorecard.dimensions_json["sections"]["atlas"]["scores"]
+    assert "judge_prompt" not in str(scorecard.dimensions_json)
+    serialized = str({"run": persisted.result_json, "scorecard": scorecard.dimensions_json}).lower()
+    assert "raw prompt" not in serialized
+    assert "private reasoning" not in serialized
+    assert "raw evidence" not in serialized
+    assert "pack manifest" not in serialized
+    assert "private config" not in serialized
+
+
+def test_review_board_scorecard_revision_required_persists_generic_warn_with_improvements(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    evaluation = _run_submitted_scorecard(
+        authenticated_client,
+        company,
+        _submitted_review_board_scorecard(
+            score=3.5,
+            decision="revision_required",
+            approval_status="needs_revision",
+        ),
+        key="quality-judge-warn",
+    )
+
+    assert evaluation["status"] == "WARN"
+    assert evaluation["score"] == 3.5
+    assert evaluation["result"]["decision"] == "revision_required"
+    assert evaluation["result"]["approval_gate"]["client_deliverable_status"] == "needs_revision"
+    assert (
+        evaluation["result"]["approval_gate"]["execution_status"]
+        == "blocked_until_missing_capabilities_resolved"
+    )
+    assert evaluation["findings"][0]["severity"] == "WARNING"
+    assert evaluation["findings"][0]["blocking"] is False
+    assert {
+        item["primitive"] for item in evaluation["result"]["company_improvement_plan"]
+    } >= {"CompanySignal", "OperationRecommendation"}
+    persisted = EvaluationRun.objects.get(id=evaluation["id"])
+    assert persisted.status == "WARN"
+    assert persisted.result_json["signal_ids"]
+    signals = CompanySignal.objects.filter(company=company, source="consulting_review_board")
+    assert signals.count() == 2
+    assert all(signal.metadata_json["decision"] == "revision_required" for signal in signals)
+    assert all(
+        signal.metadata_json["execution_status"] == "blocked_until_missing_capabilities_resolved"
+        for signal in signals
+    )
+
+
+def test_review_board_scorecard_hard_fail_persists_generic_block(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    evaluation = _run_submitted_scorecard(
+        authenticated_client,
+        company,
+        _submitted_review_board_scorecard(
+            score=4.4,
+            decision="fail",
+            hard_fail=True,
+            approval_status="blocked",
+        ),
+        key="quality-judge-block",
+    )
+
+    assert evaluation["status"] == "BLOCK"
+    assert evaluation["score"] == 4.4
+    assert evaluation["result"]["hard_fail"] is True
+    assert evaluation["result"]["approval_gate"]["client_deliverable_status"] == "blocked"
+    assert evaluation["findings"][0]["severity"] == "CRITICAL"
+    assert evaluation["findings"][0]["blocking"] is True
+    assert not CompanySignal.objects.filter(company=company, source="consulting_review_board").exists()
+
+
+def test_review_board_downgrades_unapproved_client_ready_gate_to_warn(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    evaluation = _run_submitted_scorecard(
+        authenticated_client,
+        company,
+        _submitted_review_board_scorecard(
+            score=4.4,
+            decision="client_ready",
+            approval_status="needs_revision",
+        ),
+        key="quality-judge-client-ready-needs-revision",
+    )
+
+    assert evaluation["status"] == "WARN"
+    assert evaluation["result"]["decision"] == "revision_required"
+    assert evaluation["result"]["client_readiness_level"] == "strong_with_minor_revisions"
+    assert evaluation["result"]["approval_gate"]["client_deliverable_status"] == "needs_revision"
+
+
+def test_missing_connector_recommendations_create_generic_signals_without_fake_execution(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+    scorecard = _submitted_review_board_scorecard(
+        score=3.8,
+        decision="revision_required",
+        approval_status="needs_revision",
+    )
+    scorecard["company_improvement_plan"] = [
+        {
+            "target": "ATLAS",
+            "primitive": "CompanySignal",
+            "title": "Prioritize social connector readiness",
+            "priority": "high",
+            "rationale": "Social publishing is recommended but not connected, so create readiness work.",
+        },
+        {
+            "target": "Legacy Eyewear",
+            "primitive": "CompanySignal",
+            "title": "Prepare WhatsApp approval checklist",
+            "priority": "high",
+            "rationale": "WhatsApp execution is recommended but unavailable until a connector exists.",
+        },
+        {
+            "target": "engagement",
+            "primitive": "OperationRecommendation",
+            "title": "Block landing-page deployment until connector exists",
+            "priority": "medium",
+            "rationale": "Landing-page deployment must remain a recommendation, not fake execution.",
+        },
+    ]
+
+    evaluation = _run_submitted_scorecard(
+        authenticated_client,
+        company,
+        scorecard,
+        key="quality-judge-missing-connectors",
+    )
+
+    assert evaluation["status"] == "WARN"
+    assert evaluation["result"]["decision"] == "revision_required"
+    signals = list(CompanySignal.objects.filter(company=company, source="consulting_review_board"))
+    assert len(signals) == 3
+    serialized_signals = str([signal.title + signal.summary for signal in signals]).lower()
+    assert "social" in serialized_signals
+    assert "whatsapp" in serialized_signals
+    assert "landing-page" in serialized_signals
+    assert not ToolExecution.objects.filter(
+        run__graph_version__graph=company,
+        tool_name__in=[
+            "social_publisher",
+            "whatsapp_connector",
+            "landing_page_deployer",
+            "production_email_sender",
+        ],
+        status="succeeded",
+    ).exists()
+
+
+def test_legacy_100_point_scorecard_is_rejected(authenticated_client, user):
+    company = _company(user)
+
+    payload = _run_invalid_submitted_scorecard(
+        authenticated_client,
+        company,
+        {
+            "overall_score": 100,
+            "decision": "client_ready",
+            "scores": {"grounding_in_legacy_context": 20},
+        },
+        key="quality-judge-legacy-scorecard",
+    )
+
+    assert payload["error"]["code"] == "VALIDATION_ERROR"
+    assert "consulting_review_board_v1" in str(payload["error"]["details"])
+
+
+def test_review_board_scorecard_rejects_scores_outside_one_to_five(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+    scorecard = _submitted_review_board_scorecard(score=4.2, decision="client_ready")
+    scorecard["atlas"]["scores"][0]["score"] = 6
+
+    payload = _run_invalid_submitted_scorecard(
+        authenticated_client,
+        company,
+        scorecard,
+        key="quality-judge-out-of-range",
+    )
+
+    assert "between 1 and 5" in str(payload["error"]["details"])
+
+
+def test_review_board_scorecard_rejects_missing_sections(authenticated_client, user):
+    company = _company(user)
+    scorecard = _submitted_review_board_scorecard(score=4.2, decision="client_ready")
+    del scorecard["legacy"]
+
+    payload = _run_invalid_submitted_scorecard(
+        authenticated_client,
+        company,
+        scorecard,
+        key="quality-judge-missing-section",
+    )
+
+    assert "legacy section is required" in str(payload["error"]["details"])
+
+
+def test_review_board_scorecard_rejects_unearned_perfect_scores(authenticated_client, user):
+    company = _company(user)
+
+    payload = _run_invalid_submitted_scorecard(
+        authenticated_client,
+        company,
+        _submitted_review_board_scorecard(
+            score=5,
+            decision="client_ready",
+            exceptional=False,
+        ),
+        key="quality-judge-unearned-perfect",
+    )
+
+    assert "perfect section average requires exceptional rationale" in str(
+        payload["error"]["details"]
+    )
+
+
+def test_customer_can_read_quality_summary_without_judge_internals(api_client, user):
+    company = _company(user)
+    api_client.force_authenticate(user=user)
+    evaluation = _run_submitted_scorecard(
+        api_client,
+        company,
+        _submitted_review_board_scorecard(score=4.4, decision="client_ready"),
+        key="quality-judge-viewer-safe",
+    )
+    _restrict_company(company)
+    viewer = _member_in_org(user, role="viewer")
+    _assign_company(user, company, viewer, role="viewer")
+
+    api_client.force_authenticate(user=viewer)
+    response = api_client.get(f"/api/evaluations/{evaluation['id']}")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["evaluation"]
+    assert payload["company_id"] == str(company.id)
+    assert payload["result"]["schema_version"] == "consulting_review_board_v1"
+    assert payload["result"]["approval_gate"]
+    serialized = str(payload).lower()
+    assert "judge_prompt" not in serialized
+    assert "internal_reasoning" not in serialized
+    assert "evidence_bundle" not in serialized
+    assert "pack manifest" not in serialized
 
 
 def test_product_mode_routes_and_models_remain_generic():
