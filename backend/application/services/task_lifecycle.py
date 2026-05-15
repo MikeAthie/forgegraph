@@ -546,6 +546,18 @@ def transition_task_lifecycle(
         )
 
 
+def assign_lifecycle_task_department(
+    *,
+    lifecycle_task: TaskLifecycleRecord,
+    department: object | None,
+) -> TaskLifecycleRecord:
+    """Assign current department inside the approved lifecycle write boundary."""
+
+    lifecycle_task.current_department = department
+    lifecycle_task.save(update_fields=["current_department", "updated_at"])
+    return lifecycle_task
+
+
 def _is_deadlock(exc: BaseException) -> bool:
     current: BaseException | None = exc
     while current is not None:
