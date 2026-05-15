@@ -3,6 +3,7 @@ export { accountingRepository } from "./accountingRepository";
 export { companyRepository } from "./companyRepository";
 export { communicationRepository } from "./communicationRepository";
 export { departmentRepository } from "./departmentRepository";
+export { whiteboardRepository } from "./whiteboardRepository";
 
 export { interactionRepository } from "./interactionRepository";
 export { memoryRepository } from "./memoryRepository";

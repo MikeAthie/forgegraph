@@ -1,0 +1,103 @@
+"""URL configuration for generic WorkWhiteboard APIs."""
+
+from django.urls import path
+
+from adapters.api.whiteboards.views import (
+    WhiteboardDeploymentChannelExecuteView,
+    WhiteboardDeploymentDetailView,
+    WhiteboardDeploymentPrepareView,
+    WhiteboardDetailView,
+    WhiteboardListView,
+    WhiteboardPerformanceDetailView,
+    WhiteboardPerformanceEvaluateView,
+    WhiteboardPerformanceReportView,
+    WhiteboardPerformanceStartView,
+    WhiteboardPhaseDetailView,
+    WhiteboardPhaseEvaluateView,
+    WhiteboardPhaseStartView,
+    WhiteboardPhaseSynthesizeView,
+    WhiteboardReadyForStrategyView,
+    WhiteboardStrategyDetailView,
+    WhiteboardStrategyStartView,
+    WhiteboardStrategySynthesizeView,
+)
+
+urlpatterns = [
+    path("whiteboards", WhiteboardListView.as_view(), name="whiteboard-list"),
+    path("whiteboards/<uuid:whiteboard_id>", WhiteboardDetailView.as_view(), name="whiteboard-detail"),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/deployment",
+        WhiteboardDeploymentDetailView.as_view(),
+        name="whiteboard-deployment-detail",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/deployment/prepare",
+        WhiteboardDeploymentPrepareView.as_view(),
+        name="whiteboard-deployment-prepare",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/deployment/<str:channel_id>/execute",
+        WhiteboardDeploymentChannelExecuteView.as_view(),
+        name="whiteboard-deployment-execute",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/performance",
+        WhiteboardPerformanceDetailView.as_view(),
+        name="whiteboard-performance-detail",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/performance/start",
+        WhiteboardPerformanceStartView.as_view(),
+        name="whiteboard-performance-start",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/performance/report",
+        WhiteboardPerformanceReportView.as_view(),
+        name="whiteboard-performance-report",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/performance/evaluate",
+        WhiteboardPerformanceEvaluateView.as_view(),
+        name="whiteboard-performance-evaluate",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/ready-for-strategy",
+        WhiteboardReadyForStrategyView.as_view(),
+        name="whiteboard-ready-for-strategy",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>/start",
+        WhiteboardPhaseStartView.as_view(),
+        name="whiteboard-phase-start",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>",
+        WhiteboardPhaseDetailView.as_view(),
+        name="whiteboard-phase-detail",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>/synthesize",
+        WhiteboardPhaseSynthesizeView.as_view(),
+        name="whiteboard-phase-synthesize",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>/evaluate",
+        WhiteboardPhaseEvaluateView.as_view(),
+        name="whiteboard-phase-evaluate",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/start-strategy",
+        WhiteboardStrategyStartView.as_view(),
+        name="whiteboard-start-strategy",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/strategy",
+        WhiteboardStrategyDetailView.as_view(),
+        name="whiteboard-strategy-detail",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/strategy/synthesize",
+        WhiteboardStrategySynthesizeView.as_view(),
+        name="whiteboard-strategy-synthesize",
+    ),
+]

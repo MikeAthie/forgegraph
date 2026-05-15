@@ -9,6 +9,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def positive_int_env(env: dict[str, str], name: str, default: int) -> int:
+    try:
+        value = int(env.get(name, str(default)))
+    except ValueError:
+        return default
+    return max(value, 1)
+
+
 def run_step(args: list[str], env: dict[str, str]) -> None:
     subprocess.run(args, cwd=PROJECT_ROOT, env=env, check=True)
 
@@ -64,6 +72,7 @@ def main() -> int:
         "PLAYWRIGHT_RUN_QUEUE_WORKER_ID",
         f"playwright-run-queue-{playwright_run_id}",
     )
+    run_queue_sleep_seconds = positive_int_env(env, "PLAYWRIGHT_RUN_QUEUE_SLEEP_SECONDS", 1)
 
     env.setdefault("MEMORY_GRPC_HOST", "127.0.0.1")
     env.setdefault("MEMORY_GRPC_PORT", "50052")
@@ -145,6 +154,8 @@ def main() -> int:
             "process_run_queue",
             "--worker-id",
             run_queue_worker_id,
+            "--sleep",
+            str(run_queue_sleep_seconds),
         ],
         cwd=PROJECT_ROOT,
         env=env,

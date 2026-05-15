@@ -66,6 +66,7 @@ def _project_lifecycle_task(lifecycle_task: TaskLifecycleRecord) -> TaskRecord:
             "execution": run,
             "lifecycle_task": lifecycle_task,
             "agent": agent,
+            "department": lifecycle_task.current_department,
             "source_node_id": lifecycle_task.source_node_id,
             "title": lifecycle_task.title,
             "status": lifecycle_task.status,

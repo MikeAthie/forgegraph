@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { CommunicationPanel } from "@/components/company/CommunicationPanel";
+import { WhiteboardPanel } from "@/components/company/WhiteboardPanel";
 import { EmptyBlock, MicroExplanation, Panel, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
 import {
   Alert,
@@ -1710,6 +1711,7 @@ function OperatingModelWorkColumn({ controller }: { controller: OperatingModelCo
         <PolicyPanel controller={controller} />
       </div>
       <ServiceHistoryPanel projection={controller.serviceHistoryProjection} />
+      <WhiteboardPanel companyId={controller.companyId} />
       {communicationEnabled ? (
         <CommunicationPanel companyId={controller.companyId} companyName={controller.companyName} />
       ) : null}

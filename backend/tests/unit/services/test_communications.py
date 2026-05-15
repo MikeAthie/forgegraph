@@ -356,6 +356,41 @@ def test_domain_event_payload_is_body_free_and_sanitized() -> None:
     assert outbox.payload_json["message_id"] == str(message.id)
 
 
+def test_communication_outbox_rolls_back_with_message_transaction() -> None:
+    _org, operator, _customer, _other_user, legacy, _other = _setup()
+    thread = create_thread(
+        company=legacy,
+        user=operator,
+        data={"title": "Legacy consult", "visibility_mode": "mixed"},
+    )
+    message_id = None
+
+    with pytest.raises(RuntimeError, match="rollback"):
+        with transaction.atomic():
+            message = create_message(
+                thread=thread,
+                sender_user=operator,
+                message_kind="note",
+                body="This committed state should roll back.",
+                visibility="customer",
+                idempotency_key="rollback-message",
+            )
+            message_id = message.id
+            assert DomainEventOutbox.objects.filter(
+                payload_json__message_id=str(message.id)
+            ).exists()
+            raise RuntimeError("rollback")
+
+    assert message_id is not None
+    assert not CommunicationMessage.objects.filter(id=message_id).exists()
+    assert not DomainEvent.objects.filter(
+        idempotency_key=f"communication-message:{message_id}:created",
+    ).exists()
+    assert not DomainEventOutbox.objects.filter(
+        payload_json__message_id=str(message_id)
+    ).exists()
+
+
 def test_redact_message_preserves_row_and_hides_body() -> None:
     _org, operator, _customer, _other_user, legacy, _other = _setup()
     thread = create_thread(

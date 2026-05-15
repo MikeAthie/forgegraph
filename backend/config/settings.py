@@ -405,18 +405,30 @@ RUN_QUEUE_WORKER_HEARTBEAT_TTL_SECONDS = int(
 COMMUNICATION_ENABLED = _get_bool_env("COMMUNICATION_ENABLED", True)
 
 # Optional communication event transport. The database outbox remains authoritative.
+KAFKA_BROKERS = os.environ.get("KAFKA_BROKERS", "").strip()
+KAFKA_CLIENT_ID = os.environ.get("KAFKA_CLIENT_ID", "").strip()
+KAFKA_COMMUNICATION_TOPIC = os.environ.get("KAFKA_COMMUNICATION_TOPIC", "").strip()
+KAFKA_COMMUNICATION_CONSUMER_GROUP = os.environ.get(
+    "KAFKA_COMMUNICATION_CONSUMER_GROUP",
+    "",
+).strip()
+KAFKA_TEST_TOPIC_PREFIX = os.environ.get("KAFKA_TEST_TOPIC_PREFIX", "").strip()
 COMMUNICATION_KAFKA_ENABLED = _get_bool_env("COMMUNICATION_KAFKA_ENABLED", False)
 COMMUNICATION_KAFKA_BOOTSTRAP_SERVERS = os.environ.get(
     "COMMUNICATION_KAFKA_BOOTSTRAP_SERVERS",
-    "",
+    KAFKA_BROKERS,
 ).strip()
 COMMUNICATION_KAFKA_TOPIC = os.environ.get(
     "COMMUNICATION_KAFKA_TOPIC",
-    "forgegraph.communication.events.v1",
+    KAFKA_COMMUNICATION_TOPIC or "forgegraph.communication.events.v1",
 ).strip()
 COMMUNICATION_KAFKA_CLIENT_ID = os.environ.get(
     "COMMUNICATION_KAFKA_CLIENT_ID",
-    "forgegraph-communication-outbox",
+    KAFKA_CLIENT_ID or "forgegraph-communication-outbox",
+).strip()
+COMMUNICATION_KAFKA_CONSUMER_GROUP = os.environ.get(
+    "COMMUNICATION_KAFKA_CONSUMER_GROUP",
+    KAFKA_COMMUNICATION_CONSUMER_GROUP or "forgegraph-communication-events",
 ).strip()
 COMMUNICATION_KAFKA_FLUSH_TIMEOUT_SECONDS = float(
     os.environ.get("COMMUNICATION_KAFKA_FLUSH_TIMEOUT_SECONDS", "5")
@@ -437,6 +449,14 @@ COMMUNICATION_KAFKA_SASL_PASSWORD = os.environ.get(
     "COMMUNICATION_KAFKA_SASL_PASSWORD",
     "",
 ).strip()
+COMMUNICATION_ROUTING_FROM_KAFKA_ENABLED = _get_bool_env(
+    "COMMUNICATION_ROUTING_FROM_KAFKA_ENABLED",
+    False,
+)
+REQUEST_ROUTER_FROM_KAFKA_ENABLED = _get_bool_env(
+    "REQUEST_ROUTER_FROM_KAFKA_ENABLED",
+    False,
+)
 
 # SLO thresholds (defaults)
 FORGEGRAPH_RELEASE_TIER = os.environ.get("FORGEGRAPH_RELEASE_TIER", "beta")

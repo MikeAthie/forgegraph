@@ -1,6 +1,5 @@
 import asyncio
 from playwright import async_api
-from playwright.async_api import expect
 
 async def run_test():
     pw = None

@@ -288,6 +288,13 @@ class TaskLifecycleRecord(models.Model):
         blank=True,
         related_name="lifecycle_tasks",
     )
+    current_department = models.ForeignKey(
+        "DepartmentRegistry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="current_lifecycle_tasks",
+    )
     retry_metadata = models.JSONField(default=dict, blank=True)
     recovery_options = models.JSONField(default=list, blank=True)
     unresolved_error = models.TextField(blank=True, default="")
@@ -312,6 +319,10 @@ class TaskLifecycleRecord(models.Model):
             models.Index(fields=["organization", "status"], name="task_life_org_status_idx"),
             models.Index(fields=["run", "status"], name="task_life_run_status_idx"),
             models.Index(fields=["run", "source_node_id"], name="task_life_run_node_idx"),
+            models.Index(
+                fields=["current_department", "status"],
+                name="task_life_dept_status_idx",
+            ),
             models.Index(fields=["last_transition_at"], name="task_life_transition_idx"),
         ]
 
@@ -648,6 +659,13 @@ class TaskRecord(models.Model):
         blank=True,
         related_name="task_records",
     )
+    department = models.ForeignKey(
+        "DepartmentRegistry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_records",
+    )
     source_node_id = models.CharField(max_length=255, blank=True, default="")
     external_key = models.CharField(max_length=255)
     title = models.CharField(max_length=255)
@@ -686,6 +704,7 @@ class TaskRecord(models.Model):
             models.Index(fields=["organization", "status"], name="task_records_org_status_idx"),
             models.Index(fields=["execution", "status"], name="task_rec_exec_stat_idx"),
             models.Index(fields=["agent", "status"], name="task_records_agent_status_idx"),
+            models.Index(fields=["department", "status"], name="task_records_dept_status_idx"),
         ]
 
     def __str__(self) -> str:

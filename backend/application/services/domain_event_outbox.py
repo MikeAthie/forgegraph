@@ -119,6 +119,15 @@ def enqueue_domain_event_outbox(
     if not created and outbox.domain_event_id is None:
         outbox.domain_event = domain_event
         outbox.save(update_fields=["domain_event", "updated_at"])
+    _ensure_outbox_payload_envelope(
+        outbox=outbox,
+        domain_event=domain_event,
+        base_payload=outbox.payload_json or safe_payload,
+        schema_version=str(schema_version or "domain_event_v1")[:64],
+        visibility=str(visibility or "")[:32],
+        company=company,
+        idempotency_key=key,
+    )
     return outbox
 
 
@@ -142,7 +151,7 @@ def publish_outbox_event(
             publisher.publish(event)
         except Exception as exc:  # noqa: BLE001 - persistence must capture publisher failures.
             event.status = "failed"
-            event.last_error = str(exc)[:_MAX_LAST_ERROR_LENGTH]
+            event.last_error = _sanitize_last_error(exc)
             event.next_attempt_at = timestamp + _retry_delay(event.publish_attempts)
             event.save(
                 update_fields=[
@@ -214,6 +223,79 @@ def sanitize_outbox_payload(value: Any) -> dict[str, Any]:
     if not isinstance(cleaned, dict):
         return {}
     return cast(dict[str, Any], json.loads(json.dumps(cleaned, cls=DjangoJSONEncoder)))
+
+
+def _ensure_outbox_payload_envelope(
+    *,
+    outbox: DomainEventOutbox,
+    domain_event: DomainEvent,
+    base_payload: dict[str, Any],
+    schema_version: str,
+    visibility: str,
+    company: Graph | None,
+    idempotency_key: str,
+) -> None:
+    payload = _outbox_envelope_payload(
+        outbox=outbox,
+        domain_event=domain_event,
+        base_payload=base_payload,
+        schema_version=schema_version,
+        visibility=visibility,
+        company=company,
+        idempotency_key=idempotency_key,
+    )
+    if payload == outbox.payload_json:
+        return
+    outbox.payload_json = payload
+    outbox.save(update_fields=["payload_json", "updated_at"])
+
+
+def _outbox_envelope_payload(
+    *,
+    outbox: DomainEventOutbox,
+    domain_event: DomainEvent,
+    base_payload: dict[str, Any],
+    schema_version: str,
+    visibility: str,
+    company: Graph | None,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    payload = sanitize_outbox_payload(base_payload)
+    company_id = str(company.id) if company else payload.get("company_id")
+    created_at = payload.get("created_at") or domain_event.occurred_at.isoformat()
+    envelope = {
+        "event_id": str(outbox.id),
+        "event_type": domain_event.event_type,
+        "schema_version": str(schema_version or "domain_event_v1")[:64],
+        "organization_id": str(domain_event.organization_id),
+        "company_id": company_id,
+        "aggregate_type": domain_event.aggregate_type,
+        "aggregate_id": str(domain_event.aggregate_id),
+        "visibility": visibility,
+        "created_at": created_at,
+        "idempotency_key": idempotency_key,
+    }
+    envelope.update(payload)
+    envelope["event_id"] = str(outbox.id)
+    envelope["event_type"] = domain_event.event_type
+    envelope["schema_version"] = str(schema_version or "domain_event_v1")[:64]
+    envelope["organization_id"] = str(domain_event.organization_id)
+    envelope["company_id"] = company_id
+    envelope["aggregate_type"] = domain_event.aggregate_type
+    envelope["aggregate_id"] = str(domain_event.aggregate_id)
+    envelope["visibility"] = visibility
+    envelope["idempotency_key"] = idempotency_key
+    return sanitize_outbox_payload(envelope)
+
+
+def _sanitize_last_error(exc: Exception) -> str:
+    message = redact_payload(str(exc))
+    if not isinstance(message, str) or not message:
+        message = exc.__class__.__name__
+    lowered = message.lower()
+    if any(term in lowered for term in _DROPPED_OUTBOX_KEYS):
+        message = exc.__class__.__name__
+    return message[:_MAX_LAST_ERROR_LENGTH]
 
 
 def _is_due(event: DomainEventOutbox, *, now: Any) -> bool:

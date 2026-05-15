@@ -24,6 +24,7 @@ from adapters.api.service_engagements.serializers import (
 )
 from application.services.audit_log import record_audit_log
 from application.services.company_access import accessible_company_queryset, has_company_access
+from application.services.departments import can_mutate_department_work
 from application.services.rbac import has_min_role
 from application.services.service_engagements import (
     ServiceEngagementError,
@@ -38,6 +39,7 @@ from application.services.service_engagements import (
 )
 from infrastructure.orm.models import (
     Asset,
+    DepartmentRegistry,
     Graph,
     OrganizationMembership,
     ReportRun,
@@ -332,8 +334,16 @@ class ServiceDeliverableListCreateView(APIView):
         report_run = _report_for_company(engagement.company, data.pop("report_run_id", None))
         if isinstance(report_run, Response):
             return report_run
+        department = _department_for_company_user(
+            user,
+            engagement.company,
+            data.pop("department_id", None),
+        )
+        if isinstance(department, Response):
+            return department
         data["artifact"] = artifact
         data["report_run"] = report_run
+        data["department"] = department
         try:
             deliverable = create_service_deliverable(
                 engagement=engagement,
@@ -440,6 +450,24 @@ def _report_for_company(company: Graph, report_id: UUID | None) -> ReportRun | R
     if report_run is None:
         return _not_found("Report run was not found for this company.")
     return report_run
+
+
+def _department_for_company_user(
+    user: User,
+    company: Graph,
+    department_id: UUID | None,
+) -> DepartmentRegistry | Response | None:
+    if department_id is None:
+        return None
+    department = DepartmentRegistry.objects.filter(
+        id=department_id,
+        organization=company.organization,
+    ).first()
+    if department is None:
+        return _not_found("Department was not found for this company organization.")
+    if not can_mutate_department_work(user=user, company=company, department=department):
+        return _forbidden("You do not have permission to assign this department.")
+    return department
 
 
 def _service_error(exc: ServiceEngagementError) -> Response:

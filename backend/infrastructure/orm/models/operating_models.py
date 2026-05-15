@@ -557,6 +557,13 @@ class ServiceDeliverable(models.Model):
     deliverable_type = models.CharField(max_length=80, blank=True, default="")
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="draft")
     visibility = models.CharField(max_length=16, choices=VISIBILITY_CHOICES, default="customer")
+    department = models.ForeignKey(
+        "DepartmentRegistry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="service_deliverables",
+    )
     artifact = models.ForeignKey(
         Asset,
         on_delete=models.SET_NULL,
@@ -591,6 +598,7 @@ class ServiceDeliverable(models.Model):
             models.Index(fields=["organization", "status"], name="svc_deliv_org_status_idx"),
             models.Index(fields=["company", "status"], name="svc_deliv_company_status_idx"),
             models.Index(fields=["engagement", "status"], name="svc_deliv_eng_status_idx"),
+            models.Index(fields=["department", "status"], name="svc_deliv_dept_status_idx"),
             models.Index(fields=["visibility", "status"], name="svc_deliv_vis_status_idx"),
         ]
 

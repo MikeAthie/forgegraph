@@ -1,0 +1,1 @@
+"""Generic WorkWhiteboard API package."""

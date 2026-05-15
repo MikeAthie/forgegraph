@@ -19,7 +19,7 @@ import {
 } from "../e2e/helpers";
 
 const forbiddenVerticalMarketingRoutePattern =
-  /\/api\/(?:marketing|growth-marketing|digital-marketing|marketing-campaigns)(?:\/|$)/i;
+  /\/api\/(?:marketing|growth-marketing|digital-marketing|marketing-campaigns|atlas|legacy)(?:\/|$)/i;
 
 function sawStateProjectionType(apiRequests: string[], companyId: string, projectionType: string): boolean {
   return apiRequests.some((requestUrl) => {
@@ -89,6 +89,24 @@ test.describe("Product modes", () => {
     await expect(page.getByText(/Can you explain why WhatsApp is recommended/i)).toBeVisible();
     await expect(page.getByText(/manual first step/i)).toBeVisible();
     await expect(page.getByText(/Execution remains blocked/i)).toHaveCount(0);
+    await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
+    await expect(page.getByTestId("whiteboard-panel")).toBeVisible();
+    await expect(page.getByTestId("whiteboard-summary")).toContainText(/WhatsApp is recommended/i);
+    await expect(page.getByTestId("whiteboard-phase-section")).toBeVisible();
+    await expect(page.getByTestId("whiteboard-phase-workstreams")).toContainText(/Copywriting/i);
+    await expect(page.getByTestId("whiteboard-phase-gate")).toContainText(/Pass/i);
+    await expect(page.getByTestId("whiteboard-phase-gate")).toContainText(/Captured/i);
+    await expect(page.getByTestId("whiteboard-phase-approval")).toContainText(/Queued/i);
+    await expect(page.getByTestId("whiteboard-deployment-section")).toBeVisible();
+    await expect(page.getByTestId("whiteboard-deployment-channels")).toContainText(/Email/i);
+    await expect(page.getByTestId("whiteboard-deployment-channels")).toContainText(/Captured|Receipt/i);
+    await expect(page.getByTestId("whiteboard-deployment-channel-whatsapp")).toContainText(/Blocked/i);
+    await expect(page.getByTestId("whiteboard-performance-section")).toBeVisible();
+    await expect(page.getByTestId("whiteboard-performance-sources")).toContainText(/Email/i);
+    await expect(page.getByTestId("whiteboard-performance-source-whatsapp")).toContainText(/Blocked/i);
+    await expect(page.getByTestId("whiteboard-performance-state")).toContainText(/legacy-performance-report-run/i);
+    await expect(page.getByTestId("whiteboard-routing-tasks")).toContainText(/Content\/Creative/i);
+    await expect(page.getByTestId("whiteboard-routing-tasks")).toContainText(/Client Services/i);
     await page.getByTestId("commerce-inventory-panel").scrollIntoViewIfNeeded();
     await expect(page.getByTestId("commerce-inventory-panel")).toBeVisible();
 
@@ -109,6 +127,7 @@ test.describe("Product modes", () => {
     expect(sawCompanyScopedProductModeQuery(apiRequests, "/api/metric-snapshots", seed.companyId)).toBe(true);
     expect(sawCompanyScopedProductModeQuery(apiRequests, "/api/report-runs", seed.companyId)).toBe(true);
     expect(sawCompanyScopedProductModeQuery(apiRequests, "/api/communication/threads", seed.companyId)).toBe(true);
+    expect(sawCompanyScopedProductModeQuery(apiRequests, "/api/whiteboards", seed.companyId)).toBe(true);
     expect(sawStateProjectionType(apiRequests, seed.companyId, "client_service_history")).toBe(true);
     expect(verticalProductModeApiRequests(apiRequests, forbiddenVerticalMarketingRoutePattern)).toEqual([]);
   });

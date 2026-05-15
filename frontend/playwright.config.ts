@@ -64,7 +64,10 @@ const trustedFrontendOrigins = [
   "http://localhost:3001",
   "http://127.0.0.1:3001",
 ].join(",");
+const engineHost = process.env.PLAYWRIGHT_ENGINE_HOST ?? "127.0.0.1";
 const enginePort = process.env.PLAYWRIGHT_ENGINE_PORT ? Number(process.env.PLAYWRIGHT_ENGINE_PORT) : 50071;
+const engineInstanceId = process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1";
+const engineTargets = process.env.PLAYWRIGHT_ENGINE_TARGETS ?? `${engineInstanceId}=${engineHost}:${enginePort}`;
 const engineMetricsPort = process.env.PLAYWRIGHT_ENGINE_METRICS_PORT
   ? Number(process.env.PLAYWRIGHT_ENGINE_METRICS_PORT)
   : 9091;
@@ -162,6 +165,11 @@ process.env.CSRF_COOKIE_SECURE = process.env.CSRF_COOKIE_SECURE ?? "false";
 process.env.AUTH_REFRESH_COOKIE_SECURE = process.env.AUTH_REFRESH_COOKIE_SECURE ?? "false";
 process.env.MEMORY_GRPC_HOST = process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost;
 process.env.MEMORY_GRPC_PORT = process.env.MEMORY_GRPC_PORT ?? String(memoryGrpcPort);
+if (!useDockerRuntime) {
+  process.env.ENGINE_HOST = engineHost;
+  process.env.ENGINE_PORT = String(enginePort);
+  process.env.ENGINE_TARGETS = engineTargets;
+}
 
 const workerOverride = process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined;
 const useSqlite = (process.env.USE_SQLITE ?? "false").toLowerCase() === "true";
@@ -299,12 +307,10 @@ export default defineConfig({
               REDIS_SENTINELS: "",
               REDIS_SENTINEL_USERNAME: "",
               REDIS_SENTINEL_PASSWORD: "",
-              ENGINE_HOST: process.env.ENGINE_HOST ?? "127.0.0.1",
-              ENGINE_PORT: String(process.env.ENGINE_PORT ?? enginePort),
-              ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
-              ENGINE_TARGETS:
-                process.env.ENGINE_TARGETS ??
-                `playwright-engine-1=${process.env.ENGINE_HOST ?? "127.0.0.1"}:${String(process.env.ENGINE_PORT ?? enginePort)}`,
+              ENGINE_HOST: engineHost,
+              ENGINE_PORT: String(enginePort),
+              ENGINE_INSTANCE_ID: engineInstanceId,
+              ENGINE_TARGETS: engineTargets,
               ENGINE_CALLBACK_URL: process.env.ENGINE_CALLBACK_URL ?? `${backendUrl}/api/runs/engine-events`,
               ENGINE_CALLBACK_SECRET: callbackSecret,
               MEMORY_GRPC_HOST: process.env.MEMORY_GRPC_HOST ?? memoryGrpcHost,
@@ -328,7 +334,7 @@ export default defineConfig({
               ENGINE_RUN_STATE_MODE: process.env.ENGINE_RUN_STATE_MODE ?? "control-plane-http",
               ENGINE_CALLBACK_SECRET: callbackSecret,
               ENGINE_EVENT_VERBOSITY: process.env.ENGINE_EVENT_VERBOSITY ?? "default",
-              ENGINE_INSTANCE_ID: process.env.ENGINE_INSTANCE_ID ?? "playwright-engine-1",
+              ENGINE_INSTANCE_ID: engineInstanceId,
               ENGINE_EVENT_SPOOL_PATH: engineEventSpoolPath,
               REDIS_ADDR: redisAddr,
               REDIS_HOST: redisHost,
