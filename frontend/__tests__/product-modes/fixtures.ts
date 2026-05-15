@@ -16,6 +16,7 @@ import type {
   ReportRunDTO,
   StateProjectionDTO,
   WorkArtifactDTO,
+  WorkWhiteboardDTO,
 } from "../../lib/api";
 
 export const legacyMultiPackIds = {
@@ -32,6 +33,7 @@ export const legacyMultiPackIds = {
   periodicReview: "legacy-eyewear-quarterly-review",
   communicationThread: "legacy-eyewear-consult-thread",
   signal: "legacy-eyewear-missing-whatsapp-signal",
+  whiteboard: "legacy-eyewear-work-whiteboard",
 } as const;
 
 export type ProductModeMockState = CompanyWorkspaceMockState & {
@@ -47,6 +49,7 @@ export type ProductModeMockState = CompanyWorkspaceMockState & {
   reportRuns?: ReportRunDTO[];
   communicationThreads?: CommunicationThreadDTO[];
   communicationMessages?: Record<string, CommunicationMessageDTO[]>;
+  whiteboards?: WorkWhiteboardDTO[];
 };
 
 export function collectProductModeApiRequests(page: Page): string[] {
@@ -365,6 +368,74 @@ export async function installProductModeMocks(page: Page, state: ProductModeMock
       ? (state.communicationThreads ?? []).filter((thread) => thread.company_id === companyId)
       : (state.communicationThreads ?? []);
     await fulfillJson(route, { threads });
+  });
+
+  route(/\/api\/whiteboards(?:\?.*)?$/, async (route: Route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    await fulfillJson(route, { whiteboards: scopedByCompany(state.whiteboards ?? [], route) });
+  });
+
+  route(/\/api\/whiteboards\/[^/]+\/deployment(?:\/prepare)?(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/deployment(?:\/prepare)?$/);
+    const whiteboardId = match?.[1] ?? "";
+    const whiteboard = (state.whiteboards ?? []).find((item) => item.id === whiteboardId);
+    if (!whiteboard?.deployment_contract) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Deployment contract was not found." } }),
+      });
+      return;
+    }
+    await fulfillJson(route, {
+      deployment_contract: whiteboard.deployment_contract,
+      whiteboard,
+    });
+  });
+
+  route(/\/api\/whiteboards\/[^/]+\/deployment\/[^/]+\/execute(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/deployment\/([^/]+)\/execute$/);
+    const whiteboardId = match?.[1] ?? "";
+    const channelId = match?.[2] ?? "";
+    const whiteboard = (state.whiteboards ?? []).find((item) => item.id === whiteboardId);
+    const channel = whiteboard?.deployment_contract?.channels.find((item) => item.id === channelId);
+    if (!whiteboard?.deployment_contract || !channel) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Deployment channel was not found." } }),
+      });
+      return;
+    }
+    await fulfillJson(route, {
+      deployment_channel: channel,
+      deployment_contract: whiteboard.deployment_contract,
+      whiteboard,
+    });
+  });
+
+  route(/\/api\/whiteboards\/[^/]+\/performance(?:\/(?:start|report|evaluate))?(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/performance(?:\/(?:start|report|evaluate))?$/);
+    const whiteboardId = match?.[1] ?? "";
+    const whiteboard = (state.whiteboards ?? []).find((item) => item.id === whiteboardId);
+    if (!whiteboard?.performance_contract) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Performance contract was not found." } }),
+      });
+      return;
+    }
+    await fulfillJson(route, {
+      performance_contract: whiteboard.performance_contract,
+      whiteboard,
+    });
   });
 
   route(/\/api\/communication\/threads\/[^/]+\/messages(?:\?.*)?$/, async (route: Route) => {
@@ -856,6 +927,280 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
       updated_at: "2026-05-12T12:03:00.000Z",
     },
   ];
+  const whiteboard: WorkWhiteboardDTO = {
+    id: legacyMultiPackIds.whiteboard,
+    organization_id: "playwright-product-modes-org",
+    company_id: base.companyId,
+    service_engagement_id: null,
+    communication_thread_id: communicationThread.id,
+    source_message_id: "legacy-whatsapp-question",
+    status: "in_approval",
+    request_type: "campaign",
+    client_name: base.companyName,
+    request_summary:
+      "Legacy asked why WhatsApp is recommended while the connector is missing; onboarding is collecting launch context before strategy.",
+    objective: "Clarify the manual-first launch path before strategy.",
+    budget_limit: "$5000",
+    timeline: "next week",
+    constraints: { legal: "No unsupported performance claims." },
+    target_audience: { segment: "premium eyewear shoppers" },
+    brand_context: { brand_voice: "precise" },
+    product_context: { offer: "DEPP GOLD launch consult" },
+    channel_context: { requested_channels: ["whatsapp"], connectors: ["email"] },
+    known_facts: { approval_owner: "Legacy owner", success_metrics: "consult replies", inventory: "launch batch" },
+    missing_fields: [],
+    completion_score: 100,
+    redis_snapshot_key: "forgegraph:whiteboard:legacy-eyewear-work-whiteboard",
+    assumptions: ["Internal readiness depends on connector configuration."],
+    metadata: { source: "playwright-product-modes" },
+    routing_records: [
+      {
+        id: "legacy-whiteboard-deployment-task",
+        department_id: "deployment-ops",
+        department_name: "Deployment Ops",
+        status: "queued",
+        priority: "normal",
+        reason: "Fill missing whiteboard context: connector_readiness.",
+        created_at: "2026-05-12T12:06:00.000Z",
+      },
+      {
+        id: "legacy-whiteboard-content-task",
+        department_id: "content-creative",
+        department_name: "Content/Creative",
+        status: "queued",
+        priority: "normal",
+        reason: "Strategy gate passed. Content/Creative can begin content planning.",
+        created_at: "2026-05-12T12:22:00.000Z",
+      },
+      {
+        id: "legacy-whiteboard-client-services-approval",
+        department_id: "client-services",
+        department_name: "Client Services",
+        status: "queued",
+        priority: "normal",
+        reason: "Content production gate passed. Client approval can begin.",
+        created_at: "2026-05-12T12:23:00.000Z",
+      },
+    ],
+    phase_contracts: [
+      {
+        whiteboard_id: legacyMultiPackIds.whiteboard,
+        phase_id: "atlas_agency_ops.v1.content_production",
+        source_policy_id: "atlas_agency_ops.v1.content_production",
+        pack_id: "atlas_agency_ops.v1",
+        phase_name: "Content Production",
+        workstreams: [
+          "copywriting",
+          "social_content",
+          "email_sequence",
+          "whatsapp_script",
+          "landing_page_copy",
+          "ad_copy",
+          "visual_concepts",
+          "video_storyboard",
+        ].map((workstream, index) => ({
+          id: workstream,
+          name: workstream.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+          status: "completed",
+          required: true,
+          output_type: "asset",
+          department_id: index < 3 ? "content" : "creative",
+          department_name: index < 3 ? "Content" : "Creative",
+          run_id: `legacy-phase-run-${index + 1}`,
+          task_lifecycle_id: `legacy-phase-lifecycle-${index + 1}`,
+          asset_id: `legacy-phase-asset-${index + 1}`,
+          asset_version_id: `legacy-phase-asset-version-${index + 1}`,
+          reason: `Complete configured workstream: ${workstream.replaceAll("_", " ")}.`,
+          created_at: "2026-05-12T12:12:00.000Z",
+          updated_at: "2026-05-12T12:20:00.000Z",
+        })),
+        gate: {
+          gate_id: "atlas_agency_ops.v1.content_quality_gate",
+          result: "pass",
+          criteria: [
+            { key: "brand_alignment", value_type: "number", operator: ">=", threshold: 90 },
+            { key: "strategy_alignment", value_type: "number", operator: ">=", threshold: 90 },
+            { key: "channel_fit", value_type: "number", operator: ">=", threshold: 90 },
+            { key: "claim_support", value_type: "enum", operator: "in", expected: ["pass", 100] },
+            { key: "legal_compliance", value_type: "enum", operator: "in", expected: ["pass", 100] },
+            { key: "format_compliance", value_type: "number", operator: ">=", threshold: 95 },
+            { key: "execution_readiness", value_type: "number", operator: ">=", threshold: 85 },
+          ],
+          approval_required: true,
+          latest_evaluation: {
+            evaluation_id: "legacy-content-quality-gate",
+            status: "PASS",
+            result: "pass",
+            score: 100,
+            grade: "A",
+            evaluated_at: "2026-05-12T12:22:00.000Z",
+          },
+        },
+        current_state: {
+          status: "passed",
+          all_workstreams_completed: true,
+          synthesis: {
+            asset_id: "legacy-content-synthesis",
+            asset_version_id: "legacy-content-synthesis-v1",
+            created_at: "2026-05-12T12:21:00.000Z",
+          },
+          gate: {
+            evaluation_id: "legacy-content-quality-gate",
+            status: "PASS",
+            result: "pass",
+            score: 100,
+            grade: "A",
+            evaluated_at: "2026-05-12T12:22:00.000Z",
+          },
+          applied_actions: { approval_task_id: "legacy-content-approval" },
+        },
+        allowed_actions: [],
+      },
+    ],
+    deployment_contract: {
+      whiteboard_id: legacyMultiPackIds.whiteboard,
+      policy_id: "atlas_agency_ops.v1.launch_deployment",
+      source_policy_id: "atlas_agency_ops.v1.launch_deployment",
+      pack_id: "atlas_agency_ops.v1",
+      status: "partial",
+      channels: [
+        {
+          id: "email",
+          display_name: "Email",
+          status: "executed",
+          blocked_reason: "",
+          blocked_reason_code: "",
+          tool_execution_id: "legacy-email-sandbox-tool-execution",
+          company_signal_id: "",
+          routing_record_id: "",
+          approval_task_id: "legacy-content-approval",
+          asset_id: "legacy-phase-asset-3",
+          asset_version_id: "legacy-phase-asset-version-3",
+          allowed_actions: [],
+          department: "crm",
+          department_name: "CRM",
+          required_connector: "email_service_connector",
+          tool_id: "dmp.email_draft_send_schedule",
+          asset_types: ["asset", "publication_draft"],
+          risk_level: "medium",
+          receipt: {
+            tool_execution_id: "legacy-email-sandbox-tool-execution",
+            tool_id: "dmp.email_draft_send_schedule",
+            dry_run: true,
+            status: "succeeded",
+            completed_at: "2026-05-12T12:30:00.000Z",
+            result: {
+              provider: "local_capture",
+              mode: "sandbox",
+              status: "captured",
+              message_id: "fg-email-sandbox-legacy",
+              recipient_count: 0,
+              recipient_domains: [],
+            },
+          },
+        },
+        ...["whatsapp", "instagram", "facebook", "tiktok", "landing_page"].map((channel) => ({
+          id: channel,
+          display_name: channel.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+          status: "blocked",
+          blocked_reason: "Required connector is not available for this company.",
+          blocked_reason_code: "connector_missing",
+          tool_execution_id: "",
+          company_signal_id: `legacy-deployment-signal-${channel}`,
+          routing_record_id: `legacy-deployment-routing-${channel}`,
+          approval_task_id: "legacy-content-approval",
+          asset_id: "",
+          asset_version_id: "",
+          allowed_actions: [],
+          department: channel === "landing_page" ? "web" : "social",
+          department_name: channel === "landing_page" ? "Web" : "Social",
+          required_connector: `${channel}_connector`,
+          tool_id: `${channel}.publish`,
+          asset_types: ["publication_draft"],
+          risk_level: "high",
+        })),
+      ],
+      current_state: {
+        status: "partial",
+        updated_at: "2026-05-12T12:30:00.000Z",
+        prepared_at: "2026-05-12T12:30:00.000Z",
+      },
+      allowed_actions: [],
+    },
+    performance_contract: {
+      whiteboard_id: legacyMultiPackIds.whiteboard,
+      policy_id: "atlas_agency_ops.v1.launch_performance_review",
+      source_policy_id: "atlas_agency_ops.v1.launch_performance_review",
+      pack_id: "atlas_agency_ops.v1",
+      status: "partial",
+      cadence: "weekly",
+      sources: [
+        {
+          id: "email",
+          display_name: "Email",
+          status: "collected",
+          blocked_reason: "",
+          blocked_reason_code: "",
+          tool_execution_id: "legacy-email-performance-tool-execution",
+          company_signal_id: "",
+          routing_record_id: "",
+          operation_id: "legacy-email-performance-run",
+          metrics: {
+            open_rate: 0.42,
+            click_rate: 0.11,
+            execution_completeness: 86,
+          },
+          department: "crm",
+          department_name: "CRM",
+          required_connector: "email_service_connector",
+          tool_id: "dmp.email_draft_send_schedule",
+          metric_keys: ["open_rate", "click_rate", "execution_completeness"],
+          receipt: {
+            tool_execution_id: "legacy-email-performance-tool-execution",
+            tool_id: "dmp.email_draft_send_schedule",
+            dry_run: true,
+            status: "succeeded",
+            completed_at: "2026-05-19T09:00:00.000Z",
+            result: {
+              provider: "local_capture",
+              mode: "sandbox",
+              status: "captured",
+            },
+          },
+        },
+        ...["whatsapp", "social", "landing_page"].map((source) => ({
+          id: source,
+          display_name: source.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+          status: "blocked",
+          blocked_reason: "Required metric connector is not available for this company.",
+          blocked_reason_code: "missing_metric_connector",
+          tool_execution_id: "",
+          company_signal_id: `legacy-performance-signal-${source}`,
+          routing_record_id: `legacy-performance-routing-${source}`,
+          operation_id: "",
+          metrics: {},
+          department: source === "landing_page" ? "analytics" : "deployment-ops",
+          department_name: source === "landing_page" ? "Analytics" : "Deployment Ops",
+          required_connector: `${source}_analytics_connector`,
+          tool_id: `${source}.metrics`,
+          metric_keys: ["configured_metric"],
+        })),
+      ],
+      current_state: {
+        status: "evaluated",
+        metric_snapshot_id: "legacy-performance-metric-snapshot",
+        report_run_id: "legacy-performance-report-run",
+        evaluation_id: "legacy-performance-evaluation",
+        period_start: "2026-05-04",
+        period_end: "2026-05-10",
+        updated_at: "2026-05-19T09:05:00.000Z",
+      },
+      allowed_actions: [],
+    },
+    can_update: true,
+    created_at: "2026-05-12T12:05:00.000Z",
+    updated_at: "2026-05-12T12:06:00.000Z",
+  };
   const state: ProductModeMockState = {
     ...base,
     pendingApprovalCount: base.pendingApprovalCount ?? 0,
@@ -872,6 +1217,7 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
     communicationMessages: {
       [communicationThread.id]: communicationMessages,
     },
+    whiteboards: [whiteboard],
   };
   return {
     ...state,

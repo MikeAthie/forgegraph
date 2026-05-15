@@ -20,9 +20,22 @@ IGNORED_PARTS = {
 }
 
 ALLOWED_RUNTIME_WRITERS = {
-    Path("backend/adapters/api/runs/views.py"),
     Path("backend/adapters/api/engine/views.py"),
+    Path("backend/adapters/api/integrations/run_dispatch.py"),
     Path("backend/adapters/api/operator/views.py"),
+    Path("backend/adapters/api/runs/authenticated_event_views.py"),
+    Path("backend/adapters/api/runs/cancel_view.py"),
+    Path("backend/adapters/api/runs/command_dispatch.py"),
+    Path("backend/adapters/api/runs/engine_callback_ingestion.py"),
+    Path("backend/adapters/api/runs/engine_node_lifecycle.py"),
+    Path("backend/adapters/api/runs/engine_run_lifecycle.py"),
+    Path("backend/adapters/api/runs/invoke_view.py"),
+    Path("backend/adapters/api/runs/replay_view.py"),
+    Path("backend/adapters/api/runs/responses.py"),
+    Path("backend/adapters/api/runs/resume_view.py"),
+    Path("backend/adapters/api/runs/start_view.py"),
+    Path("backend/adapters/api/runs/state_projection.py"),
+    Path("backend/adapters/api/runs/views.py"),
     Path("backend/adapters/api/integrations/telegram_views.py"),
     Path("backend/adapters/api/integrations/whatsapp_views.py"),
     Path("backend/adapters/api/integrations/webhook_views.py"),

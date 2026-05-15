@@ -21,6 +21,7 @@ class CommunicationThreadCreateSerializer(serializers.Serializer[Any]):
     approval_task_id = serializers.UUIDField(required=False, allow_null=True)
     artifact_id = serializers.UUIDField(required=False, allow_null=True)
     report_run_id = serializers.UUIDField(required=False, allow_null=True)
+    department_id = serializers.UUIDField(required=False, allow_null=True)
     title = serializers.CharField(max_length=255)
     thread_type = serializers.ChoiceField(
         choices=[

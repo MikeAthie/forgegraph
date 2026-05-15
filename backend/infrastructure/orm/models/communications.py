@@ -96,6 +96,13 @@ class CommunicationThread(models.Model):
         blank=True,
         related_name="communication_threads",
     )
+    department = models.ForeignKey(
+        "DepartmentRegistry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="communication_threads",
+    )
     title = models.CharField(max_length=255)
     thread_type = models.CharField(
         max_length=32,
@@ -155,6 +162,7 @@ class CommunicationThread(models.Model):
             models.Index(fields=["approval_task"], name="comm_thread_approval_idx"),
             models.Index(fields=["artifact"], name="comm_thread_artifact_idx"),
             models.Index(fields=["report_run"], name="comm_thread_report_idx"),
+            models.Index(fields=["department", "status"], name="comm_thread_dept_status_idx"),
         ]
 
     def clean(self) -> None:
@@ -168,6 +176,7 @@ class CommunicationThread(models.Model):
             "approval_task",
             "artifact",
             "report_run",
+            "department",
         ):
             linked = getattr(self, field_name, None)
             if linked is None:
@@ -444,6 +453,86 @@ class CommunicationAttachment(models.Model):
         return f"Attachment {self.id} for message {self.message_id}"
 
 
+class CommunicationEventReceipt(models.Model):
+    """Idempotent receipt for consumed communication Kafka metadata events."""
+
+    STATUS_CHOICES = [
+        ("handled", "Handled"),
+        ("ignored", "Ignored"),
+        ("failed", "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    consumer_group = models.CharField(max_length=128)
+    event_id = models.CharField(max_length=255, blank=True, default="")
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
+    topic = models.CharField(max_length=255, blank=True, default="")
+    partition = models.IntegerField(null=True, blank=True)
+    offset = models.BigIntegerField(null=True, blank=True)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="communication_event_receipts",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="communication_event_receipts",
+    )
+    outbox_event = models.ForeignKey(
+        "DomainEventOutbox",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="communication_event_receipts",
+    )
+    event_type = models.CharField(max_length=128, blank=True, default="")
+    schema_version = models.CharField(max_length=64, blank=True, default="")
+    aggregate_type = models.CharField(max_length=64, blank=True, default="")
+    aggregate_id = models.CharField(max_length=64, blank=True, default="")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES)
+    error_message = models.TextField(blank=True, default="")
+    payload_json = models.JSONField(default=dict, blank=True)
+    received_at = models.DateTimeField(auto_now_add=True)
+    handled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "communication_event_receipts"
+        ordering = ["-received_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["consumer_group", "event_id"],
+                condition=models.Q(event_id__gt=""),
+                name="comm_evt_receipt_event_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["consumer_group", "idempotency_key"],
+                condition=models.Q(idempotency_key__gt=""),
+                name="comm_evt_receipt_idem_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["consumer_group", "status", "received_at"],
+                name="comm_evt_receipt_group_idx",
+            ),
+            models.Index(fields=["event_type", "received_at"], name="comm_evt_receipt_type_idx"),
+            models.Index(
+                fields=["organization", "status", "received_at"],
+                name="comm_evt_receipt_org_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.consumer_group} {self.event_type} {self.status}"
+
+
 def _attachment_target_fields() -> tuple[str, ...]:
     return (
         "artifact",
@@ -463,6 +552,8 @@ def _attachment_target_fields() -> tuple[str, ...]:
 def _scope_for_object(value: object) -> tuple[uuid.UUID | None, uuid.UUID | None]:
     organization_id = getattr(value, "organization_id", None)
     company_id = getattr(value, "company_id", None)
+    if value.__class__.__name__ == "DepartmentRegistry":
+        return organization_id, None
     if isinstance(value, AssetVersion):
         return value.asset.organization_id, value.asset.company_id
     if isinstance(value, ApprovalTask):

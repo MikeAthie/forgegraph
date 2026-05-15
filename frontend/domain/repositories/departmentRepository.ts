@@ -1,4 +1,14 @@
-import { agentsApi, decisionsApi, memoryApi, type AgentRegistryEntry, type MemoryObservation } from "@/lib/api";
+import {
+  agentsApi,
+  decisionsApi,
+  departmentsApi,
+  memoryApi,
+  routingApi,
+  type AgentRegistryEntry,
+  type DepartmentDTO,
+  type MemoryObservation,
+  type TaskRoutingRecordDTO,
+} from "@/lib/api";
 import { toApprovalVMFromDecision } from "@/domain/translation";
 import type {
   ApprovalVM,
@@ -57,7 +67,7 @@ function getDepartmentPurpose(agent: AgentRegistryEntry): string {
   return "Turns company context into recommendations, approvals, and task direction.";
 }
 
-function toDepartmentVM(agent: AgentRegistryEntry): DepartmentVM {
+function toDepartmentVMFromAgent(agent: AgentRegistryEntry): DepartmentVM {
   const activityStatus = getActivityStatus(agent);
   const role = getDepartmentRole(agent);
 
@@ -82,6 +92,35 @@ function toDepartmentVM(agent: AgentRegistryEntry): DepartmentVM {
     totalCostUsd: agent.total_cost_usd,
     defaultModel: agent.default_model,
     lastOperationId: agent.last_execution_id,
+  };
+}
+
+function toDepartmentVMFromRegistry(department: DepartmentDTO): DepartmentVM {
+  const typeLabel = department.department_type ? sentenceCase(department.department_type) : "Department";
+  const serviceTags = department.service_tags ?? [];
+  const responsibility =
+    typeof department.metadata?.responsibility === "string" && department.metadata.responsibility.trim()
+      ? department.metadata.responsibility.trim()
+      : serviceTags.length
+        ? `Owns ${serviceTags.slice(0, 3).map(sentenceCase).join(", ").toLowerCase()} work.`
+        : "Owns routed company work, handoffs, and decisions for its service area.";
+
+  return {
+    id: department.id,
+    label: department.name,
+    name: department.name,
+    role: department.role === "lead" ? "You lead this department" : `${typeLabel} work owner`,
+    responsibility,
+    purpose: responsibility,
+    tools: serviceTags,
+    category: "department",
+    activityStatus: "idle",
+    currentFocus: "Ready to own routed work for accessible company operations.",
+    activeTaskCount: 0,
+    pendingDecisionCount: 0,
+    totalCostUsd: 0,
+    defaultModel: null,
+    lastOperationId: null,
   };
 }
 
@@ -140,6 +179,7 @@ function buildOperationRefs(
   tasks: TaskVM[],
   operations: OperationVM[],
   approvals: ApprovalVM[],
+  routingRecords: TaskRoutingRecordDTO[],
 ): OperationRefVM[] {
   const operationIds = new Set<string>();
   if (department.lastOperationId) {
@@ -153,6 +193,11 @@ function buildOperationRefs(
   for (const approval of approvals) {
     if (approval.operationId) {
       operationIds.add(approval.operationId);
+    }
+  }
+  for (const routingRecord of routingRecords) {
+    if (routingRecord.run_id) {
+      operationIds.add(routingRecord.run_id);
     }
   }
 
@@ -209,7 +254,12 @@ function buildProposals(approvals: ApprovalVM[], operations: OperationRefVM[]): 
   }));
 }
 
-function buildBlockers(approvals: ApprovalVM[], tasks: TaskVM[], operations: OperationRefVM[]): DepartmentBlockerVM[] {
+function buildBlockers(
+  approvals: ApprovalVM[],
+  tasks: TaskVM[],
+  operations: OperationRefVM[],
+  routingRecords: TaskRoutingRecordDTO[],
+): DepartmentBlockerVM[] {
   const operationById = new Map(operations.map((operation) => [operation.id, operation]));
   const approvalBlockers = approvals.flatMap((approval) =>
     approval.status === "pending"
@@ -237,7 +287,20 @@ function buildBlockers(approvals: ApprovalVM[], tasks: TaskVM[], operations: Ope
       : [],
   );
 
-  return [...approvalBlockers, ...taskBlockers];
+  const routingBlockers = routingRecords.flatMap((record) =>
+    record.status === "blocked"
+      ? [
+          {
+            id: record.id,
+            description: record.reason || "Routed work is blocked before this department can continue.",
+            status: "waiting" as const,
+            operation: operationById.get(record.run_id) ?? null,
+          },
+        ]
+      : [],
+  );
+
+  return [...approvalBlockers, ...taskBlockers, ...routingBlockers];
 }
 
 function buildFocus(
@@ -271,8 +334,12 @@ function buildFocus(
 
 export const departmentRepository = {
   list: async (): Promise<DepartmentVM[]> => {
-    const departments = await agentsApi.list();
-    return departments.map(toDepartmentVM);
+    const departments = await departmentsApi.list();
+    if (departments.length > 0) {
+      return departments.map(toDepartmentVMFromRegistry);
+    }
+    const agents = await agentsApi.list();
+    return agents.map(toDepartmentVMFromAgent);
   },
 
   listTasks: async (): Promise<TaskVM[]> => operationRepository.listTasks(),
@@ -283,11 +350,12 @@ export const departmentRepository = {
   },
 
   listActivity: async (): Promise<DepartmentActivityVM[]> => {
-    const [departments, tasks, approvals, operations] = await Promise.all([
+    const [departments, tasks, approvals, operations, routingInbox] = await Promise.all([
       departmentRepository.list(),
       departmentRepository.listTasks(),
       departmentRepository.listApprovalBlockers(),
       operationRepository.list(),
+      routingApi.listInbox(),
     ]);
 
     return Promise.all(
@@ -298,20 +366,49 @@ export const departmentRepository = {
         const departmentApprovals = approvals
           .filter((approval) => approval.agentId === department.id || approval.departmentId === department.id)
           .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+        const departmentRoutingRecords = routingInbox.filter(
+          (record) =>
+            record.to_department_id === department.id ||
+            (record.task_record_id ? departmentTasks.some((task) => task.id === record.task_record_id) : false),
+        );
         const knowledge = await departmentRepository.listKnowledge(department.id, 3);
-        const operationRefs = buildOperationRefs(department, departmentTasks, operations, departmentApprovals);
+        const operationRefs = buildOperationRefs(
+          department,
+          departmentTasks,
+          operations,
+          departmentApprovals,
+          departmentRoutingRecords,
+        );
         const focus = buildFocus(department, departmentTasks, departmentApprovals, operationRefs, knowledge);
+        const waitingCount =
+          departmentApprovals.filter((approval) => approval.status === "pending").length +
+          departmentRoutingRecords.filter((record) => record.status === "blocked").length;
+        const activityStatus: DepartmentActivityStatusVM =
+          waitingCount > 0
+            ? "waiting"
+            : departmentTasks.some((task) => task.status === "running" || task.status === "queued") ||
+                departmentRoutingRecords.some((record) => ["queued", "claimed", "in_progress"].includes(record.status))
+              ? "active"
+              : (department.activityStatus ?? "idle");
 
         return {
           department: {
             ...department,
+            activityStatus,
             currentFocus: focus.objective,
+            activeTaskCount: departmentTasks.length + departmentRoutingRecords.length,
+            pendingDecisionCount: waitingCount,
           },
           focus,
           proposals: buildProposals(departmentApprovals, operationRefs),
           tasks: departmentTasks,
           operations: operationRefs,
-          blockers: buildBlockers(departmentApprovals, departmentTasks, operationRefs),
+          blockers: buildBlockers(
+            departmentApprovals,
+            departmentTasks,
+            operationRefs,
+            departmentRoutingRecords,
+          ),
           approvals: departmentApprovals,
         };
       }),

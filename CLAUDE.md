@@ -19,7 +19,7 @@ cd backend
 python -m pytest                                    # All tests
 python -m pytest tests/unit/                        # Unit tests only
 python -m pytest tests/integration/                 # Integration tests only
-python -m pytest -q tests/integration/adapters/test_run_api.py  # Single file
+python -m pytest -q tests/integration/adapters/runs/test_start.py  # Single file
 ruff check .                                        # Lint
 mypy .                                              # Type check
 python manage.py migrate                            # Run migrations

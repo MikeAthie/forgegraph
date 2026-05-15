@@ -42,7 +42,7 @@ def projection_names_for_event(event: DomainEvent) -> tuple[str, ...]:
             names.add("agents")
         if not _node_run_has_lifecycle_task(event, payload):
             names.add("tasks")
-    elif event_type == "task.lifecycle_transitioned":
+    elif event_type in {"task.lifecycle_transitioned", "task.routing_created"}:
         names.add("tasks")
     elif event_type in {
         "decision.approval_created",

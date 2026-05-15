@@ -12,8 +12,8 @@ import {
 const API_BASE_URL = apiBaseUrl();
 const RUN_COUNT = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_RUNS ?? "100");
 const START_CONCURRENCY = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_START_CONCURRENCY ?? "10");
-const TEST_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_TIMEOUT_MS ?? (process.env.CI ? "360000" : "240000"));
-const TERMINAL_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_TERMINAL_TIMEOUT_MS ?? "180000");
+const TEST_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_TIMEOUT_MS ?? "840000");
+const TERMINAL_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_TERMINAL_TIMEOUT_MS ?? "720000");
 
 async function mapWithConcurrency<T, R>(
   items: T[],

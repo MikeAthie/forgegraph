@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { LockKeyhole, MessageSquare, Paperclip, Send } from "lucide-react";
 
 import { StatusBadge, formatDateTime } from "@/components/os/operations-ui";
-import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Spinner, Textarea } from "@/components/ui";
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Spinner,
+  Textarea,
+} from "@/components/ui";
 import { communicationRepository } from "@/domain/repositories";
 import { translateProductError } from "@/domain/errors";
 import type { CommunicationMessageDTO, CommunicationThreadDTO, CommunicationVisibility } from "@/lib/api";
@@ -12,6 +21,87 @@ type CommunicationPanelProps = {
   companyId: string;
   companyName: string;
 };
+
+type CommunicationPanelState = {
+  threads: CommunicationThreadDTO[];
+  messages: CommunicationMessageDTO[];
+  selectedThreadId: string;
+  body: string;
+  visibility: CommunicationVisibility;
+  loading: boolean;
+  sending: boolean;
+  error: string | null;
+};
+
+type CommunicationPanelAction =
+  | { type: "load-threads-start" }
+  | { type: "load-threads-success"; threads: CommunicationThreadDTO[] }
+  | { type: "load-threads-error"; error: string }
+  | { type: "load-messages-clear" }
+  | { type: "load-messages-success"; messages: CommunicationMessageDTO[] }
+  | { type: "load-messages-error"; error: string }
+  | { type: "select-thread"; selectedThreadId: string }
+  | { type: "set-body"; body: string }
+  | { type: "set-visibility"; visibility: CommunicationVisibility }
+  | { type: "send-start" }
+  | { type: "send-thread-created"; thread: CommunicationThreadDTO }
+  | { type: "send-success" }
+  | { type: "send-error"; error: string }
+  | { type: "send-finish" };
+
+const initialCommunicationPanelState: CommunicationPanelState = {
+  threads: [],
+  messages: [],
+  selectedThreadId: "",
+  body: "",
+  visibility: "customer",
+  loading: true,
+  sending: false,
+  error: null,
+};
+
+function communicationPanelReducer(
+  state: CommunicationPanelState,
+  action: CommunicationPanelAction,
+): CommunicationPanelState {
+  switch (action.type) {
+    case "load-threads-start":
+      return { ...state, loading: true, error: null };
+    case "load-threads-success": {
+      const selectedThreadId =
+        state.selectedThreadId && action.threads.some((thread) => thread.id === state.selectedThreadId)
+          ? state.selectedThreadId
+          : (action.threads[0]?.id ?? "");
+      return { ...state, threads: action.threads, selectedThreadId, loading: false };
+    }
+    case "load-threads-error":
+      return { ...state, error: action.error, loading: false };
+    case "load-messages-clear":
+      return { ...state, messages: [] };
+    case "load-messages-success":
+      return { ...state, messages: action.messages };
+    case "load-messages-error":
+      return { ...state, error: action.error };
+    case "select-thread":
+      return { ...state, selectedThreadId: action.selectedThreadId };
+    case "set-body":
+      return { ...state, body: action.body };
+    case "set-visibility":
+      return { ...state, visibility: action.visibility };
+    case "send-start":
+      return { ...state, sending: true, error: null };
+    case "send-thread-created":
+      return { ...state, threads: [action.thread], selectedThreadId: action.thread.id };
+    case "send-success":
+      return { ...state, body: "" };
+    case "send-error":
+      return { ...state, error: action.error };
+    case "send-finish":
+      return { ...state, sending: false };
+    default:
+      return state;
+  }
+}
 
 function visibilityLabel(value: string): string {
   if (value === "internal") {
@@ -28,14 +118,8 @@ function attachmentLabel(type: string): string {
 }
 
 export function CommunicationPanel({ companyId, companyName }: CommunicationPanelProps) {
-  const [threads, setThreads] = useState<CommunicationThreadDTO[]>([]);
-  const [messages, setMessages] = useState<CommunicationMessageDTO[]>([]);
-  const [selectedThreadId, setSelectedThreadId] = useState("");
-  const [body, setBody] = useState("");
-  const [visibility, setVisibility] = useState<CommunicationVisibility>("customer");
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(communicationPanelReducer, initialCommunicationPanelState);
+  const { threads, messages, selectedThreadId, body, visibility, loading, sending, error } = state;
 
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null,
@@ -45,32 +129,27 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
   const canSendInternal = Boolean(selectedThread?.can_send_internal);
 
   const loadThreads = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    dispatch({ type: "load-threads-start" });
     try {
       const threadList = await communicationRepository.listThreads({ companyId });
-      setThreads(threadList);
-      setSelectedThreadId((current) =>
-        current && threadList.some((thread) => thread.id === current) ? current : (threadList[0]?.id ?? ""),
-      );
+      dispatch({ type: "load-threads-success", threads: threadList });
     } catch (loadError: unknown) {
       const message = translateProductError(loadError, "company");
-      setError(message);
-    } finally {
-      setLoading(false);
+      dispatch({ type: "load-threads-error", error: message });
     }
   }, [companyId]);
 
   const loadMessages = useCallback(async (threadId: string) => {
     if (!threadId) {
-      setMessages([]);
+      dispatch({ type: "load-messages-clear" });
       return;
     }
     try {
-      setMessages(await communicationRepository.listMessages(threadId));
+      const messageList = await communicationRepository.listMessages(threadId);
+      dispatch({ type: "load-messages-success", messages: messageList });
     } catch (loadError: unknown) {
       const message = translateProductError(loadError, "company");
-      setError(message);
+      dispatch({ type: "load-messages-error", error: message });
     }
   }, []);
 
@@ -84,7 +163,7 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
 
   useEffect(() => {
     if (!canSendInternal && visibility !== "customer") {
-      setVisibility("customer");
+      dispatch({ type: "set-visibility", visibility: "customer" });
     }
   }, [canSendInternal, visibility]);
 
@@ -93,8 +172,7 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
     if (!trimmed || sending) {
       return;
     }
-    setSending(true);
-    setError(null);
+    dispatch({ type: "send-start" });
     try {
       let thread = selectedThread;
       if (!thread) {
@@ -106,8 +184,7 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
           source_key: `company:${companyId}:primary_communication`,
           metadata: {},
         });
-        setThreads([thread]);
-        setSelectedThreadId(thread.id);
+        dispatch({ type: "send-thread-created", thread });
       }
       await communicationRepository.createMessage(thread.id, {
         message_kind: trimmed.endsWith("?") ? "request" : "note",
@@ -117,14 +194,14 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
         metadata: {},
         attachments: [],
       });
-      setBody("");
+      dispatch({ type: "send-success" });
       await Promise.all([loadThreads(), loadMessages(thread.id)]);
     } catch (sendError: unknown) {
       const message = translateProductError(sendError, "company");
-      setError(message);
+      dispatch({ type: "send-error", error: message });
       showError("Message not sent", message);
     } finally {
-      setSending(false);
+      dispatch({ type: "send-finish" });
     }
   };
 
@@ -149,7 +226,10 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
         <>
           {threads.length > 1 ? (
             <div className="mt-3" data-testid="communication-thread-list">
-              <Select value={selectedThread?.id ?? ""} onValueChange={setSelectedThreadId}>
+              <Select
+                value={selectedThread?.id ?? ""}
+                onValueChange={(value) => dispatch({ type: "select-thread", selectedThreadId: value })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Thread" />
                 </SelectTrigger>
@@ -220,7 +300,7 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
             <Textarea
               data-testid="communication-composer"
               value={body}
-              onChange={(event) => setBody(event.target.value)}
+              onChange={(event) => dispatch({ type: "set-body", body: event.target.value })}
               placeholder="Write a message"
               rows={3}
             />
@@ -228,7 +308,9 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
               {canSendInternal ? (
                 <Select
                   value={visibility}
-                  onValueChange={(value) => setVisibility(value as CommunicationVisibility)}
+                  onValueChange={(value) =>
+                    dispatch({ type: "set-visibility", visibility: value as CommunicationVisibility })
+                  }
                 >
                   <SelectTrigger data-testid="communication-visibility-select" className="min-w-[150px]">
                     <SelectValue />

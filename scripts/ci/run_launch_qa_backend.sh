@@ -15,7 +15,7 @@ require_tcp_service "${REDIS_HOST}" "${REDIS_PORT}" "Redis"
 
 log_section "Launch QA backend"
 run_uv run pytest \
-  tests/integration/adapters/test_run_api.py \
+  tests/integration/adapters/runs \
   tests/integration/adapters/test_run_history_security_api.py \
   tests/integration/adapters/test_credentials_security_api.py \
   tests/integration/adapters/test_audit_logs_api.py \

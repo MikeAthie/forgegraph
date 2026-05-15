@@ -17,14 +17,20 @@ pytestmark = pytest.mark.django_db
 
 
 class RecordingPublisher:
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail: bool = False,
+        fail_message: str = "broker unavailable",
+    ) -> None:
         self.fail = fail
+        self.fail_message = fail_message
         self.events: list[DomainEventOutbox] = []
 
     def publish(self, event: DomainEventOutbox) -> None:
         self.events.append(event)
         if self.fail:
-            raise RuntimeError("broker unavailable")
+            raise RuntimeError(self.fail_message)
 
 
 def test_record_domain_event_enqueues_generic_outbox_idempotently(user) -> None:
@@ -74,6 +80,15 @@ def test_record_domain_event_enqueues_generic_outbox_idempotently(user) -> None:
     assert outbox.schema_version == "test_event_v1"
     assert outbox.status == "pending"
     assert outbox.visibility == "internal"
+    assert outbox.payload_json["event_id"] == str(outbox.id)
+    assert outbox.payload_json["event_type"] == "test.created"
+    assert outbox.payload_json["schema_version"] == "test_event_v1"
+    assert outbox.payload_json["organization_id"] == str(organization.id)
+    assert outbox.payload_json["aggregate_type"] == "test"
+    assert outbox.payload_json["aggregate_id"] == str(aggregate_id)
+    assert outbox.payload_json["idempotency_key"] == (
+        "domain-event-outbox:" + str(first.event.id)
+    )
     assert outbox.payload_json["safe"] == "ok"
     payload_text = str(outbox.payload_json)
     assert "hidden" not in payload_text
@@ -166,3 +181,32 @@ def test_publish_due_outbox_events_persists_failures_and_retries_due_rows(user) 
     assert retried.published == 1
     assert outbox.status == "published"
     assert outbox.publish_attempts == 2
+
+
+def test_publish_failure_last_error_is_bounded_and_sanitized(user) -> None:
+    organization = user.default_organization
+    assert organization is not None
+    event = record_domain_event(
+        organization=organization,
+        aggregate_type="test",
+        aggregate_id=uuid4(),
+        event_type="test.created",
+        idempotency_key="outbox:sensitive-error",
+        payload={"value": 1},
+        outbox_topic="forgegraph.test.events.v1",
+        outbox_payload={"event_type": "test.created"},
+    ).event
+    outbox = DomainEventOutbox.objects.get(domain_event=event)
+
+    publish_outbox_event(
+        outbox.id,
+        publisher=RecordingPublisher(
+            fail=True,
+            fail_message="private_config raw_prompt evidence_bundle debug_trace token=hidden",
+        ),
+    )
+    outbox.refresh_from_db()
+
+    assert outbox.status == "failed"
+    assert len(outbox.last_error) <= 4000
+    assert outbox.last_error == "RuntimeError"

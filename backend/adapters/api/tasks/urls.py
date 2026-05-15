@@ -7,11 +7,13 @@ from adapters.api.tasks.views import (
     TaskJudgeEvaluationView,
     TaskJudgeView,
     TaskListView,
+    TaskRouteView,
 )
 
 urlpatterns = [
     path("", TaskListView.as_view(), name="task-list"),
     path("<uuid:task_id>", TaskDetailView.as_view(), name="task-detail"),
+    path("<uuid:task_id>/route", TaskRouteView.as_view(), name="task-route"),
     path("<uuid:task_id>/judge", TaskJudgeView.as_view(), name="task-judge"),
     path(
         "<uuid:task_id>/judge/evaluate",

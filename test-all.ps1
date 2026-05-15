@@ -142,7 +142,7 @@ try {
       -Name "Backend (Django) tests [fast]" `
       -WorkDir (Join-Path $root "backend") `
       -Exe "python" `
-      -Args @("-m", "pytest", "tests/integration/adapters/test_run_api.py", "tests/integration/adapters/test_graph_api.py", "-q")
+      -Args @("-m", "pytest", "tests/integration/adapters/runs", "tests/integration/adapters/test_graph_api.py", "-q")
   } else {
     Invoke-Exec -Name "Backend (Django) tests" -WorkDir (Join-Path $root "backend") -Exe "python" -Args @("-m", "pytest")
   }

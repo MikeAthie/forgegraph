@@ -26,6 +26,7 @@ from infrastructure.orm.models import (
     CommunicationThread,
     CompanySignal,
     DecisionRecord,
+    DepartmentRegistry,
     EvaluationRun,
     Graph,
     InteractionEventRecord,
@@ -185,6 +186,7 @@ def create_thread(
             approval_task=linked.get("approval_task"),
             artifact=linked.get("artifact"),
             report_run=linked.get("report_run"),
+            department=linked.get("department"),
             title=str(data.get("title") or "").strip()[:255],
             thread_type=str(data.get("thread_type") or "support"),
             visibility_mode=visibility_mode,
@@ -401,6 +403,7 @@ def thread_payload(thread: CommunicationThread, *, user: User) -> dict[str, Any]
         "approval_task_id": str(thread.approval_task_id) if thread.approval_task_id else None,
         "artifact_id": str(thread.artifact_id) if thread.artifact_id else None,
         "report_run_id": str(thread.report_run_id) if thread.report_run_id else None,
+        "department_id": str(thread.department_id) if thread.department_id else None,
         "title": thread.title,
         "thread_type": thread.thread_type,
         "visibility_mode": thread.visibility_mode,
@@ -576,7 +579,8 @@ def record_communication_event(
 
 def _communication_outbox_topic() -> str:
     return str(
-        getattr(settings, "COMMUNICATION_KAFKA_TOPIC", COMMUNICATION_OUTBOX_TOPIC)
+        getattr(settings, "COMMUNICATION_KAFKA_TOPIC", "")
+        or getattr(settings, "KAFKA_COMMUNICATION_TOPIC", "")
         or COMMUNICATION_OUTBOX_TOPIC
     )
 
@@ -590,6 +594,7 @@ def _thread_queryset() -> QuerySet[CommunicationThread]:
         "approval_task__run__graph_version__graph",
         "artifact",
         "report_run",
+        "department",
         "created_by_user",
         "created_by_agent",
     )
@@ -616,6 +621,7 @@ def _resolve_thread_links(company: Graph, data: dict[str, Any]) -> dict[str, Any
         "approval_task": (ApprovalTask, "approval_task_id"),
         "artifact": (Asset, "artifact_id"),
         "report_run": (ReportRun, "report_run_id"),
+        "department": (DepartmentRegistry, "department_id"),
     }
     for key, (model, input_key) in resolvers.items():
         object_id = data.get(input_key)
@@ -813,6 +819,7 @@ def _thread_event_payload(thread: CommunicationThread) -> dict[str, Any]:
         "approval_task_id": str(thread.approval_task_id) if thread.approval_task_id else None,
         "artifact_id": str(thread.artifact_id) if thread.artifact_id else None,
         "report_run_id": str(thread.report_run_id) if thread.report_run_id else None,
+        "department_id": str(thread.department_id) if thread.department_id else None,
         "visibility": thread.visibility_mode,
         "thread_type": thread.thread_type,
         "status": thread.status,

@@ -116,6 +116,10 @@ function updateTaskJudge(tasks: TaskVM[], taskId: string, updatedJudge: TaskJudg
   );
 }
 
+function getDefaultSelectedTask(tasks: TaskVM[]): TaskVM | null {
+  return tasks.find((task) => task.status === "dead_lettered" || task.deadLetter) ?? tasks[0] ?? null;
+}
+
 function tasksPageReducer(state: TasksPageState, action: TasksPageAction): TasksPageState {
   switch (action.type) {
     case "tasks-success":
@@ -200,12 +204,12 @@ function useTasksPageController() {
     };
   }, []);
 
-  const selectedTaskId =
-    typeof router.query.task === "string" ? router.query.task : tasks.length > 0 ? (tasks[0]?.id ?? null) : null;
+  const defaultSelectedTask = useMemo(() => getDefaultSelectedTask(tasks), [tasks]);
+  const selectedTaskId = typeof router.query.task === "string" ? router.query.task : (defaultSelectedTask?.id ?? null);
 
   const selectedTask = useMemo(
-    () => tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null,
-    [selectedTaskId, tasks],
+    () => tasks.find((task) => task.id === selectedTaskId) ?? defaultSelectedTask,
+    [defaultSelectedTask, selectedTaskId, tasks],
   );
 
   useEffect(() => {
@@ -402,7 +406,7 @@ function TaskQueuePanel({ controller }: { controller: TasksPageController }) {
       </div>
       <SelectionList
         items={controller.tasks}
-        selectedId={controller.selectedTask?.id}
+        selectedId={controller.selectedTask?.id ?? null}
         onSelect={controller.selectTask}
         empty={<EmptyBlock title="Queue is clear" description="There are no projected tasks in the current time window." />}
       >

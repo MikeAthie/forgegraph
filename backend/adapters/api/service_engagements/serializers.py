@@ -169,5 +169,6 @@ class ServiceDeliverableCreateSerializer(serializers.Serializer[Any]):
     )
     artifact_id = serializers.UUIDField(required=False, allow_null=True)
     report_run_id = serializers.UUIDField(required=False, allow_null=True)
+    department_id = serializers.UUIDField(required=False, allow_null=True)
     summary = serializers.CharField(required=False, allow_blank=True, default="")
     metadata = serializers.JSONField(required=False, default=dict)

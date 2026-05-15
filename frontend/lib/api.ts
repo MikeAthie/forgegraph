@@ -149,6 +149,39 @@ const API_PATHS = {
     messages: (threadId: string) => `/api/communication/threads/${threadId}/messages`,
     attachments: (messageId: string) => `/api/communication/messages/${messageId}/attachments`,
   },
+  whiteboards: {
+    list: "/api/whiteboards",
+    detail: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}`,
+    readyForStrategy: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/ready-for-strategy`,
+    phase: (whiteboardId: string, phaseId: string) => `/api/whiteboards/${whiteboardId}/phases/${phaseId}`,
+    startPhase: (whiteboardId: string, phaseId: string) =>
+      `/api/whiteboards/${whiteboardId}/phases/${phaseId}/start`,
+    synthesizePhase: (whiteboardId: string, phaseId: string) =>
+      `/api/whiteboards/${whiteboardId}/phases/${phaseId}/synthesize`,
+    evaluatePhase: (whiteboardId: string, phaseId: string) =>
+      `/api/whiteboards/${whiteboardId}/phases/${phaseId}/evaluate`,
+    deployment: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/deployment`,
+    prepareDeployment: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/deployment/prepare`,
+    executeDeploymentChannel: (whiteboardId: string, channelId: string) =>
+      `/api/whiteboards/${whiteboardId}/deployment/${channelId}/execute`,
+    performance: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/performance`,
+    startPerformance: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/performance/start`,
+    reportPerformance: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/performance/report`,
+    evaluatePerformance: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/performance/evaluate`,
+    startStrategy: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/start-strategy`,
+    strategy: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/strategy`,
+    synthesizeStrategy: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/strategy/synthesize`,
+  },
+  departments: {
+    list: "/api/departments/",
+    detail: (departmentId: string) => `/api/departments/${departmentId}`,
+    members: (departmentId: string) => `/api/departments/${departmentId}/members`,
+  },
+  routing: {
+    inbox: "/api/routing/inbox",
+    policies: "/api/routing/policies",
+    policy: (policyId: string) => `/api/routing/policies/${policyId}`,
+  },
   inventory: {
     overview: "/api/inventory/overview",
     reservations: "/api/inventory/reservations",
@@ -305,6 +338,7 @@ const API_PATHS = {
   tasks: {
     list: "/api/tasks/",
     detail: (taskId: string) => `/api/tasks/${taskId}`,
+    route: (taskId: string) => `/api/tasks/${taskId}/route`,
     judge: (taskId: string) => `/api/tasks/${taskId}/judge`,
     judgeEvaluation: (taskId: string) => `/api/tasks/${taskId}/judge/evaluate`,
   },
@@ -2847,6 +2881,76 @@ export interface AgentRegistryEntry {
   updated_at: string;
 }
 
+export interface DepartmentDTO {
+  id: string;
+  organization_id: string;
+  slug: string;
+  name: string;
+  department_type: string;
+  service_tags: string[];
+  active: boolean;
+  metadata: Record<string, unknown>;
+  role?: "viewer" | "member" | "lead" | "admin" | string | null;
+  can_manage?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DepartmentMembershipDTO {
+  id: string;
+  organization_id: string;
+  department_id: string;
+  user_id: string;
+  role: "viewer" | "member" | "lead" | string;
+  status: "active" | "inactive" | string;
+  expires_at: string | null;
+  metadata: Record<string, unknown>;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutingPolicyDTO {
+  id: string;
+  organization_id: string;
+  company_id: string | null;
+  department_id: string;
+  service_type: string;
+  channel: string;
+  signal_type: string;
+  entry_conditions: Record<string, unknown>;
+  priority_rules: Record<string, unknown>;
+  sla: Record<string, unknown>;
+  required_approval_types: string[];
+  fallback_department_id: string | null;
+  active: boolean;
+  metadata: Record<string, unknown>;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskRoutingRecordDTO {
+  id: string;
+  organization_id: string;
+  company_id: string;
+  task_lifecycle_id: string;
+  task_record_id: string | null;
+  run_id: string;
+  from_department_id: string | null;
+  to_department_id: string;
+  to_department_name: string;
+  assigned_user_id: string | null;
+  reason: string;
+  status: "queued" | "claimed" | "in_progress" | "blocked" | "completed" | "cancelled" | string;
+  due_at: string | null;
+  sla_breached_at: string | null;
+  resolution: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 type TaskLifecycleStatus =
   | "created"
   | "queued"
@@ -2894,6 +2998,8 @@ export interface TaskRecord {
   organization_id: string;
   execution_id: string;
   agent_id: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
   title: string;
   status: TaskLifecycleStatus;
   priority: "low" | "normal" | "high" | "urgent" | string;
@@ -2950,6 +3056,17 @@ export type TaskJudgeInput = {
   criteria: string[];
   pass_threshold?: number;
   evidence_snapshot?: Record<string, unknown>;
+};
+
+export type TaskRouteInput = {
+  to_department_id: string;
+  from_department_id?: string | null;
+  assigned_user_id?: string | null;
+  reason?: string;
+  status?: "queued" | "claimed" | "in_progress" | "blocked" | "completed" | "cancelled" | string;
+  metadata?: Record<string, unknown>;
+  resolution?: Record<string, unknown>;
+  missing_capability?: Record<string, unknown> | null;
 };
 
 export interface DecisionRecord {
@@ -3676,6 +3793,49 @@ export const agentsApi = {
   },
 };
 
+export const departmentsApi = {
+  list: async (): Promise<DepartmentDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ departments: DepartmentDTO[] }>>(API_PATHS.departments.list);
+    return response.data.data.departments;
+  },
+  get: async (departmentId: string): Promise<DepartmentDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ department: DepartmentDTO }>>(
+      API_PATHS.departments.detail(departmentId),
+    );
+    return response.data.data.department;
+  },
+  listMembers: async (departmentId: string): Promise<DepartmentMembershipDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ memberships: DepartmentMembershipDTO[] }>>(
+      API_PATHS.departments.members(departmentId),
+    );
+    return response.data.data.memberships;
+  },
+};
+
+export const routingApi = {
+  listInbox: async (params?: {
+    department_id?: string;
+    company_id?: string;
+    status?: string;
+  }): Promise<TaskRoutingRecordDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ items: TaskRoutingRecordDTO[] }>>(API_PATHS.routing.inbox, {
+      params,
+    });
+    return response.data.data.items;
+  },
+  listPolicies: async (params?: {
+    department_id?: string;
+    company_id?: string;
+    active?: boolean;
+  }): Promise<RoutingPolicyDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ policies: RoutingPolicyDTO[] }>>(
+      API_PATHS.routing.policies,
+      { params },
+    );
+    return response.data.data.policies;
+  },
+};
+
 export const tasksApi = {
   list: async (status?: string): Promise<TaskRecord[]> => {
     const response = await api.get<ApiSuccessResponse<TaskRecord[]>>(API_PATHS.tasks.list, {
@@ -3686,6 +3846,13 @@ export const tasksApi = {
   get: async (taskId: string): Promise<TaskRecord> => {
     const response = await api.get<ApiSuccessResponse<TaskRecord>>(API_PATHS.tasks.detail(taskId));
     return response.data.data;
+  },
+  route: async (taskId: string, input: TaskRouteInput): Promise<TaskRoutingRecordDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ routing_record: TaskRoutingRecordDTO }>>(
+      API_PATHS.tasks.route(taskId),
+      input,
+    );
+    return response.data.data.routing_record;
   },
   getJudge: async (taskId: string): Promise<TaskJudge | null> => {
     const response = await api.get<ApiSuccessResponse<{ judge: TaskJudge | null }>>(API_PATHS.tasks.judge(taskId));
@@ -4941,6 +5108,284 @@ export type CommunicationAttachmentInput = {
   attachments: Array<{ type: string; id: string; metadata?: Record<string, unknown> }>;
 };
 
+export type WorkWhiteboardRoutingRecordDTO = {
+  id: string;
+  department_id: string;
+  department_name: string;
+  status: string;
+  priority: string;
+  reason: string;
+  created_at: string;
+};
+
+export type WorkWhiteboardPhaseWorkstreamDTO = {
+  id: string;
+  name: string;
+  status: string;
+  required: boolean;
+  output_type?: string;
+  routing_record_id?: string;
+  department_id?: string;
+  department_name?: string;
+  run_id?: string;
+  task_lifecycle_id?: string;
+  asset_id?: string;
+  asset_version_id?: string;
+  reason?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type WorkWhiteboardPhaseGateDTO = {
+  gate_id: string;
+  result?: string;
+  criteria?: Array<Record<string, unknown>>;
+  latest_evaluation?: Record<string, unknown> | null;
+  approval_required?: boolean;
+};
+
+export type WorkWhiteboardPhaseContractDTO = {
+  whiteboard_id: string;
+  phase_id: string;
+  source_policy_id: string;
+  pack_id: string;
+  phase_name: string;
+  workstreams: WorkWhiteboardPhaseWorkstreamDTO[];
+  gate: WorkWhiteboardPhaseGateDTO | null;
+  current_state: {
+    status: string;
+    all_workstreams_completed?: boolean;
+    synthesis?: { asset_id: string; asset_version_id: string; created_at: string } | null;
+    gate?: Record<string, unknown> | null;
+    applied_actions?: Record<string, unknown>;
+  };
+  allowed_actions: string[];
+};
+
+export type WorkWhiteboardStrategyWorkstreamDTO = {
+  id: string;
+  workstream: string;
+  status: string;
+  department_id: string;
+  department_name: string;
+  run_id?: string;
+  task_lifecycle_id?: string;
+  asset_id?: string;
+  asset_version_id?: string;
+  reason: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkWhiteboardStrategyGateDTO = {
+  evaluation_id: string;
+  status: string;
+  score: number;
+  grade: string;
+  gate_passed: boolean;
+  scores: Record<string, unknown>;
+  evaluated_at: string | null;
+};
+
+export type WorkWhiteboardStrategyDTO = {
+  status: string;
+  workstreams: WorkWhiteboardStrategyWorkstreamDTO[];
+  all_workstreams_completed: boolean;
+  synthesis: { asset_id: string; asset_version_id: string; created_at: string } | null;
+  gate: WorkWhiteboardStrategyGateDTO | null;
+  content_unblocked: boolean;
+  content_routing_record_id: string | null;
+};
+
+export type WorkWhiteboardDeploymentChannelDTO = {
+  id: string;
+  display_name: string;
+  status: string;
+  blocked_reason?: string;
+  blocked_reason_code?: string;
+  tool_execution_id?: string;
+  company_signal_id?: string;
+  routing_record_id?: string;
+  approval_task_id?: string;
+  asset_id?: string;
+  asset_version_id?: string;
+  allowed_actions?: string[];
+  department?: string;
+  department_name?: string;
+  required_connector?: string;
+  tool_id?: string;
+  asset_types?: string[];
+  risk_level?: string;
+  receipt?: {
+    tool_execution_id?: string;
+    tool_id?: string;
+    dry_run?: boolean;
+    status?: string;
+    completed_at?: string | null;
+    result?: Record<string, unknown>;
+  };
+};
+
+export type WorkWhiteboardDeploymentContractDTO = {
+  whiteboard_id: string;
+  policy_id: string;
+  source_policy_id: string;
+  pack_id: string;
+  status: string;
+  channels: WorkWhiteboardDeploymentChannelDTO[];
+  current_state: Record<string, unknown>;
+  allowed_actions: string[];
+};
+
+export type WorkWhiteboardPerformanceSourceDTO = {
+  id: string;
+  display_name: string;
+  status: string;
+  blocked_reason?: string;
+  blocked_reason_code?: string;
+  tool_execution_id?: string;
+  company_signal_id?: string;
+  routing_record_id?: string;
+  operation_id?: string;
+  metrics?: Record<string, unknown>;
+  department?: string;
+  department_name?: string;
+  required_connector?: string;
+  tool_id?: string;
+  metric_keys?: string[];
+  receipt?: {
+    tool_execution_id?: string;
+    tool_id?: string;
+    dry_run?: boolean;
+    status?: string;
+    completed_at?: string | null;
+    result?: Record<string, unknown>;
+  };
+};
+
+export type WorkWhiteboardPerformanceContractDTO = {
+  whiteboard_id: string;
+  policy_id: string;
+  source_policy_id: string;
+  pack_id: string;
+  status: string;
+  cadence: string;
+  sources: WorkWhiteboardPerformanceSourceDTO[];
+  current_state: {
+    status?: string;
+    metric_snapshot_id?: string;
+    report_run_id?: string;
+    evaluation_id?: string;
+    period_start?: string;
+    period_end?: string;
+    [key: string]: unknown;
+  };
+  allowed_actions: string[];
+};
+
+export type WorkWhiteboardDTO = {
+  id: string;
+  organization_id: string;
+  company_id: string;
+  service_engagement_id: string | null;
+  communication_thread_id: string | null;
+  source_message_id: string | null;
+  status: string;
+  request_type: string;
+  client_name: string;
+  request_summary: string;
+  objective: string;
+  budget_limit: string;
+  timeline: string;
+  constraints: Record<string, unknown>;
+  target_audience: Record<string, unknown>;
+  brand_context: Record<string, unknown>;
+  product_context: Record<string, unknown>;
+  channel_context: Record<string, unknown>;
+  known_facts: Record<string, unknown>;
+  missing_fields: string[];
+  completion_score: number;
+  redis_snapshot_key?: string;
+  assumptions?: unknown[];
+  metadata?: Record<string, unknown>;
+  routing_records?: WorkWhiteboardRoutingRecordDTO[];
+  phase_contracts?: WorkWhiteboardPhaseContractDTO[];
+  deployment_contract?: WorkWhiteboardDeploymentContractDTO | null;
+  performance_contract?: WorkWhiteboardPerformanceContractDTO | null;
+  strategy?: WorkWhiteboardStrategyDTO;
+  can_update: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkWhiteboardPatchInput = {
+  status?: string;
+  request_type?: string;
+  client_name?: string;
+  request_summary?: string;
+  objective?: string;
+  budget_limit?: string;
+  timeline?: string;
+  constraints?: Record<string, unknown>;
+  target_audience?: Record<string, unknown>;
+  brand_context?: Record<string, unknown>;
+  product_context?: Record<string, unknown>;
+  channel_context?: Record<string, unknown>;
+  known_facts?: Record<string, unknown>;
+  assumptions?: unknown[];
+  metadata?: Record<string, unknown>;
+};
+
+export type WorkWhiteboardStrategySynthesisInput = {
+  scores?: Record<string, unknown>;
+};
+
+export type WorkWhiteboardStrategyResponse = {
+  strategy: WorkWhiteboardStrategyDTO;
+  whiteboard?: WorkWhiteboardDTO;
+};
+
+export type WorkWhiteboardPhaseEvaluationInput = {
+  scorecard?: Record<string, unknown>;
+  scores?: Record<string, unknown>;
+};
+
+export type WorkWhiteboardPhaseResponse = {
+  whiteboard_phase_contract: WorkWhiteboardPhaseContractDTO;
+  whiteboard?: WorkWhiteboardDTO;
+  evaluation_id?: string;
+};
+
+export type WorkWhiteboardDeploymentExecuteInput = {
+  policy_id?: string;
+  dry_run?: boolean;
+  inputs?: Record<string, unknown>;
+};
+
+export type WorkWhiteboardDeploymentResponse = {
+  deployment_contract: WorkWhiteboardDeploymentContractDTO;
+  whiteboard?: WorkWhiteboardDTO;
+  deployment_channel?: WorkWhiteboardDeploymentChannelDTO;
+};
+
+export type WorkWhiteboardPerformanceStartInput = {
+  policy_id?: string;
+  period_start?: string;
+  period_end?: string;
+};
+
+export type WorkWhiteboardPerformanceEvaluationInput = {
+  policy_id?: string;
+  scorecard?: Record<string, unknown>;
+  scores?: Record<string, unknown>;
+};
+
+export type WorkWhiteboardPerformanceResponse = {
+  performance_contract: WorkWhiteboardPerformanceContractDTO;
+  whiteboard?: WorkWhiteboardDTO;
+  evaluation_id?: string;
+};
+
 export type CompanyBlueprintInput = {
   company_name: string;
   objective: string;
@@ -5101,6 +5546,147 @@ export const communicationApi = {
       idempotencyConfig(options),
     );
     return response.data.data.message;
+  },
+};
+
+export const whiteboardsApi = {
+  list: async (params?: { company_id?: string; status?: string }): Promise<WorkWhiteboardDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ whiteboards: WorkWhiteboardDTO[] }>>(
+      API_PATHS.whiteboards.list,
+      { params },
+    );
+    return response.data.data.whiteboards;
+  },
+  get: async (whiteboardId: string): Promise<WorkWhiteboardDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ whiteboard: WorkWhiteboardDTO }>>(
+      API_PATHS.whiteboards.detail(whiteboardId),
+    );
+    return response.data.data.whiteboard;
+  },
+  patch: async (whiteboardId: string, input: WorkWhiteboardPatchInput): Promise<WorkWhiteboardDTO> => {
+    const response = await api.patch<ApiSuccessResponse<{ whiteboard: WorkWhiteboardDTO }>>(
+      API_PATHS.whiteboards.detail(whiteboardId),
+      input,
+    );
+    return response.data.data.whiteboard;
+  },
+  readyForStrategy: async (whiteboardId: string): Promise<WorkWhiteboardDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ whiteboard: WorkWhiteboardDTO }>>(
+      API_PATHS.whiteboards.readyForStrategy(whiteboardId),
+      {},
+    );
+    return response.data.data.whiteboard;
+  },
+  getPhase: async (whiteboardId: string, phaseId: string): Promise<WorkWhiteboardPhaseContractDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ whiteboard_phase_contract: WorkWhiteboardPhaseContractDTO }>>(
+      API_PATHS.whiteboards.phase(whiteboardId, phaseId),
+    );
+    return response.data.data.whiteboard_phase_contract;
+  },
+  startPhase: async (whiteboardId: string, phaseId: string): Promise<WorkWhiteboardPhaseResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPhaseResponse>>(
+      API_PATHS.whiteboards.startPhase(whiteboardId, phaseId),
+      {},
+    );
+    return response.data.data;
+  },
+  synthesizePhase: async (whiteboardId: string, phaseId: string): Promise<WorkWhiteboardPhaseResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPhaseResponse>>(
+      API_PATHS.whiteboards.synthesizePhase(whiteboardId, phaseId),
+      {},
+    );
+    return response.data.data;
+  },
+  evaluatePhase: async (
+    whiteboardId: string,
+    phaseId: string,
+    input: WorkWhiteboardPhaseEvaluationInput,
+  ): Promise<WorkWhiteboardPhaseResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPhaseResponse>>(
+      API_PATHS.whiteboards.evaluatePhase(whiteboardId, phaseId),
+      input,
+    );
+    return response.data.data;
+  },
+  getDeployment: async (whiteboardId: string): Promise<WorkWhiteboardDeploymentContractDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ deployment_contract: WorkWhiteboardDeploymentContractDTO }>>(
+      API_PATHS.whiteboards.deployment(whiteboardId),
+    );
+    return response.data.data.deployment_contract;
+  },
+  prepareDeployment: async (whiteboardId: string): Promise<WorkWhiteboardDeploymentResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardDeploymentResponse>>(
+      API_PATHS.whiteboards.prepareDeployment(whiteboardId),
+      {},
+    );
+    return response.data.data;
+  },
+  executeDeploymentChannel: async (
+    whiteboardId: string,
+    channelId: string,
+    input: WorkWhiteboardDeploymentExecuteInput,
+  ): Promise<WorkWhiteboardDeploymentResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardDeploymentResponse>>(
+      API_PATHS.whiteboards.executeDeploymentChannel(whiteboardId, channelId),
+      input,
+    );
+    return response.data.data;
+  },
+  getPerformance: async (whiteboardId: string): Promise<WorkWhiteboardPerformanceContractDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ performance_contract: WorkWhiteboardPerformanceContractDTO }>>(
+      API_PATHS.whiteboards.performance(whiteboardId),
+    );
+    return response.data.data.performance_contract;
+  },
+  startPerformance: async (
+    whiteboardId: string,
+    input: WorkWhiteboardPerformanceStartInput = {},
+  ): Promise<WorkWhiteboardPerformanceResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPerformanceResponse>>(
+      API_PATHS.whiteboards.startPerformance(whiteboardId),
+      input,
+    );
+    return response.data.data;
+  },
+  reportPerformance: async (whiteboardId: string, policyId = ""): Promise<WorkWhiteboardPerformanceResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPerformanceResponse>>(
+      API_PATHS.whiteboards.reportPerformance(whiteboardId),
+      { policy_id: policyId },
+    );
+    return response.data.data;
+  },
+  evaluatePerformance: async (
+    whiteboardId: string,
+    input: WorkWhiteboardPerformanceEvaluationInput = {},
+  ): Promise<WorkWhiteboardPerformanceResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPerformanceResponse>>(
+      API_PATHS.whiteboards.evaluatePerformance(whiteboardId),
+      input,
+    );
+    return response.data.data;
+  },
+  startStrategy: async (whiteboardId: string): Promise<WorkWhiteboardStrategyResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardStrategyResponse>>(
+      API_PATHS.whiteboards.startStrategy(whiteboardId),
+      {},
+    );
+    return response.data.data;
+  },
+  getStrategy: async (whiteboardId: string): Promise<WorkWhiteboardStrategyDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ strategy: WorkWhiteboardStrategyDTO }>>(
+      API_PATHS.whiteboards.strategy(whiteboardId),
+    );
+    return response.data.data.strategy;
+  },
+  synthesizeStrategy: async (
+    whiteboardId: string,
+    input: WorkWhiteboardStrategySynthesisInput,
+  ): Promise<WorkWhiteboardStrategyResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardStrategyResponse>>(
+      API_PATHS.whiteboards.synthesizeStrategy(whiteboardId),
+      input,
+    );
+    return response.data.data;
   },
 };
 

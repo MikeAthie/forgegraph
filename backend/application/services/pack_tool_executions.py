@@ -12,7 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from application.services.audit_log import record_audit_log
-from application.services.operating_model_packs import load_pack_definition
+from application.services.operating_model_packs import OperatingModelPackError, load_pack_definition
 from application.services.policy_evaluations import evaluate_policy, policy_evaluation_payload
 from infrastructure.orm.models import (
     CompanyOperatingModelInstallation,
@@ -218,7 +218,10 @@ def _tool_definition(*, company: Graph, tool_id: str) -> dict[str, Any]:
     for installation in CompanyOperatingModelInstallation.objects.filter(
         company=company, status="active"
     ):
-        definition = load_pack_definition(installation.pack_id)
+        try:
+            definition = load_pack_definition(installation.pack_id)
+        except OperatingModelPackError:
+            continue
         tools_file = definition.files.get("tools") if isinstance(definition.files, dict) else {}
         for key in ("tool_packages", "department_tools"):
             values = tools_file.get(key) if isinstance(tools_file, dict) else []

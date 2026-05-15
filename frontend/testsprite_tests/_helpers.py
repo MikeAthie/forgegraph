@@ -1,6 +1,5 @@
 import time
 
-from playwright.async_api import expect
 
 BASE_URL = "http://localhost:3000"
 TEST_EMAIL = "test@example.com"
