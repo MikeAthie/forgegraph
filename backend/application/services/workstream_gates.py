@@ -48,6 +48,9 @@ PHASE_CONFIG_KEY = "workstream_phases"
 PHASE_PROJECTION_PREFIX = "workstream_phase"
 SUPPORTED_OPERATORS = {">=", ">", "<=", "<", "==", "!=", "in"}
 VALID_WHITEBOARD_STATUSES = {choice[0] for choice in WorkWhiteboard.STATUS_CHOICES}
+VALID_DEPENDENCY_TYPES = {"hard", "soft", "external", "approval"}
+BLOCKING_DEPENDENCY_TYPES = {"hard", "external", "approval"}
+TERMINAL_WORKSTREAM_STATUSES = {"completed", "cancelled"}
 
 
 class WorkstreamGateError(ValueError):
@@ -217,6 +220,7 @@ def start_phase_for_whiteboard(
             whiteboard.work_status = work_status_for_legacy_status(start_status)
             whiteboard.save(update_fields=["status", "work_status", "updated_at"])
         create_workstreams_from_definition(user=user, whiteboard=whiteboard, definition=resolved)
+        _refresh_phase_dependency_states(whiteboard=whiteboard, definition=resolved)
         existing_state = (
             existing_projection.json_state
             if existing_projection is not None and isinstance(existing_projection.json_state, dict)
@@ -274,6 +278,14 @@ def create_workstreams_from_definition(
             operation=run,
             workstream=workstream,
         )
+        dependency_state = _dependency_state_for_workstream(
+            whiteboard=whiteboard,
+            definition=definition,
+            workstream=workstream,
+        )
+        initial_status = (
+            "blocked" if str(dependency_state.get("status") or "") == "blocked" else "queued"
+        )
         record = route_event_to_department(
             company=whiteboard.company,
             department=department,
@@ -289,7 +301,7 @@ def create_workstreams_from_definition(
                 workstream.get("reason")
                 or f"Complete workstream: {workstream.get('name') or workstream_id}."
             ),
-            status="queued",
+            status=initial_status,
             priority=str(workstream.get("priority") or "normal"),
             idempotency_key=_phase_key(
                 whiteboard=whiteboard, phase_id=phase_id, suffix=f"workstream:{workstream_id}"
@@ -306,7 +318,14 @@ def create_workstreams_from_definition(
                 "asset_version_id": str(version.id),
                 "run_id": str(run.id),
                 "task_lifecycle_id": str(lifecycle.id),
+                "dependencies": list(workstream.get("dependencies") or []),
+                "dependency_state": dependency_state,
             },
+        )
+        _sync_workstream_dependency_record(
+            record=record,
+            workstream=workstream,
+            dependency_state=dependency_state,
         )
         records.append(record)
     return records
@@ -353,6 +372,22 @@ def complete_workstream(
     if record is None:
         raise WorkstreamGateError(
             "workstream_not_found", "Phase workstream has not been started for this whiteboard."
+        )
+    dependency_state = _dependency_state_for_workstream(
+        whiteboard=whiteboard,
+        definition=resolved,
+        workstream=workstream,
+    )
+    if str(dependency_state.get("status") or "") == "blocked":
+        _sync_workstream_dependency_record(
+            record=record,
+            workstream=workstream,
+            dependency_state=dependency_state,
+        )
+        raise WorkstreamGateError(
+            "workstream_dependencies_blocked",
+            "Workstream has unsatisfied blocking dependencies.",
+            details=list(dependency_state.get("blockers") or []),
         )
     with transaction.atomic():
         asset = _asset_for_record(record=record, whiteboard=whiteboard)
@@ -406,6 +441,7 @@ def complete_workstream(
                     "asset_version_id": str(version.id),
                 },
             )
+        _refresh_phase_dependency_states(whiteboard=whiteboard, definition=resolved)
         _upsert_phase_projection(
             whiteboard=whiteboard,
             definition=resolved,
@@ -760,9 +796,41 @@ def _normalize_workstream(value: Any) -> dict[str, Any]:
         )[:64],
         "output_type": str(item.get("output_type") or "")[:80],
         "required": bool(item.get("required", True)),
-        "dependencies": list(item.get("dependencies") or []),
+        "dependencies": _normalize_dependencies(item.get("dependencies") or []),
         "metadata": sanitize_outbox_payload(item.get("metadata") or {}),
     }
+
+
+def _normalize_dependencies(value: Any) -> list[dict[str, Any]]:
+    raw_values = value if isinstance(value, list) else [value]
+    dependencies: list[dict[str, Any]] = []
+    for raw in raw_values:
+        dependency = _normalize_dependency(raw)
+        if dependency is not None:
+            dependencies.append(dependency)
+    return dependencies
+
+
+def _normalize_dependency(value: Any) -> dict[str, Any] | None:
+    item = value if isinstance(value, dict) else {"workstream_id": str(value)}
+    dependency_type = str(item.get("type") or "hard").strip().lower()
+    if dependency_type not in VALID_DEPENDENCY_TYPES:
+        dependency_type = "hard"
+    workstream_id = str(
+        item.get("workstream_id") or item.get("workstream") or item.get("id") or ""
+    ).strip()
+    if not workstream_id and dependency_type not in {"external", "approval"}:
+        return None
+    default_status = "approved" if dependency_type == "approval" else "completed"
+    dependency: dict[str, Any] = {
+        "workstream_id": workstream_id[:120],
+        "type": dependency_type,
+        "required_status": str(item.get("required_status") or default_status)[:32],
+    }
+    for key in ("label", "reason", "evidence_key", "approval_task_id"):
+        if item.get(key):
+            dependency[key] = str(item.get(key))[:255]
+    return sanitize_outbox_payload(dependency)
 
 
 def _normalize_gate(gate: dict[str, Any]) -> dict[str, Any]:
@@ -864,28 +932,37 @@ def _definitions_from_installation(
 def _extract_definitions(source: Any, *, pack_id: str) -> list[dict[str, Any]]:
     if not isinstance(source, dict):
         return []
-    raw = source.get(PHASE_CONFIG_KEY) or source.get("phases")
-    if isinstance(raw, dict):
-        if PHASE_CONFIG_KEY in raw:
-            raw = raw.get(PHASE_CONFIG_KEY)
-        else:
-            raw = list(raw.values())
-    if not isinstance(raw, list):
-        return []
     definitions: list[dict[str, Any]] = []
-    for item in raw:
-        if not isinstance(item, dict):
+    for config in _nested_config_sources(source):
+        raw = config.get(PHASE_CONFIG_KEY) or config.get("phases")
+        if isinstance(raw, dict):
+            if PHASE_CONFIG_KEY in raw:
+                raw = raw.get(PHASE_CONFIG_KEY)
+            else:
+                raw = list(raw.values())
+        if not isinstance(raw, list):
             continue
-        definitions.append(
-            {
-                **item,
-                "pack_id": str(item.get("pack_id") or pack_id),
-                "source_policy_id": str(
-                    item.get("source_policy_id") or f"{pack_id}:{item.get('phase_id', '')}"
-                ),
-            }
-        )
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            definitions.append(
+                {
+                    **item,
+                    "pack_id": str(item.get("pack_id") or pack_id),
+                    "source_policy_id": str(
+                        item.get("source_policy_id") or f"{pack_id}:{item.get('phase_id', '')}"
+                    ),
+                }
+            )
     return definitions
+
+
+def _nested_config_sources(source: dict[str, Any]) -> list[dict[str, Any]]:
+    sources = [source]
+    for value in source.values():
+        if isinstance(value, dict):
+            sources.append(value)
+    return sources
 
 
 def _ensure_can_manage_phase(*, user: User, whiteboard: WorkWhiteboard) -> None:
@@ -1210,6 +1287,230 @@ def _workstream_record(
     )
 
 
+def _dependency_state_for_workstream(
+    *,
+    whiteboard: WorkWhiteboard,
+    definition: dict[str, Any],
+    workstream: dict[str, Any],
+) -> dict[str, Any]:
+    dependencies = [
+        item for item in list(workstream.get("dependencies") or []) if isinstance(item, dict)
+    ]
+    if not dependencies:
+        return {
+            "status": "ready",
+            "dependencies": [],
+            "blockers": [],
+            "provisional": [],
+            "blocker_reason": "",
+        }
+    phase_id = str(definition["phase_id"])
+    records = {
+        str((record.metadata_json or {}).get("workstream_id") or ""): record
+        for record in _workstream_records(whiteboard=whiteboard, phase_id=phase_id)
+    }
+    dependency_items = [
+        _dependency_status_item(whiteboard=whiteboard, records=records, dependency=dependency)
+        for dependency in dependencies
+    ]
+    blockers = [
+        item
+        for item in dependency_items
+        if not bool(item.get("satisfied"))
+        and str(item.get("type") or "") in BLOCKING_DEPENDENCY_TYPES
+    ]
+    provisional = [
+        item
+        for item in dependency_items
+        if not bool(item.get("satisfied")) and str(item.get("type") or "") == "soft"
+    ]
+    status = "blocked" if blockers else "provisional" if provisional else "ready"
+    blocker_reason = _dependency_blocker_reason(blockers)
+    return sanitize_outbox_payload(
+        {
+            "status": status,
+            "dependencies": dependency_items,
+            "blockers": blockers,
+            "provisional": provisional,
+            "blocker_reason": blocker_reason,
+        }
+    )
+
+
+def _dependency_status_item(
+    *,
+    whiteboard: WorkWhiteboard,
+    records: dict[str, TaskRoutingRecord],
+    dependency: dict[str, Any],
+) -> dict[str, Any]:
+    dependency_type = str(dependency.get("type") or "hard")
+    required_status = str(
+        dependency.get("required_status")
+        or ("approved" if dependency_type == "approval" else "completed")
+    )
+    workstream_id = str(dependency.get("workstream_id") or "")
+    current_status = "not_started"
+    source_ref = workstream_id
+    if dependency_type == "approval":
+        current_status = _approval_dependency_status(whiteboard=whiteboard, dependency=dependency)
+        source_ref = str(dependency.get("approval_task_id") or workstream_id or "approval")
+    elif dependency_type == "external" and not workstream_id:
+        current_status = _external_dependency_status(whiteboard=whiteboard, dependency=dependency)
+        source_ref = str(dependency.get("evidence_key") or "external")
+    else:
+        record = records.get(workstream_id)
+        current_status = record.status if record is not None else "not_started"
+    return sanitize_outbox_payload(
+        {
+            "workstream_id": workstream_id,
+            "type": dependency_type,
+            "required_status": required_status,
+            "current_status": current_status,
+            "satisfied": _dependency_status_satisfied(
+                current_status=current_status, required_status=required_status
+            ),
+            "source_ref": source_ref,
+            "label": str(dependency.get("label") or _label(source_ref or dependency_type)),
+        }
+    )
+
+
+def _dependency_status_satisfied(*, current_status: str, required_status: str) -> bool:
+    if required_status == "started":
+        return current_status not in {"not_started", "blocked"}
+    return current_status == required_status
+
+
+def _approval_dependency_status(
+    *, whiteboard: WorkWhiteboard, dependency: dict[str, Any]
+) -> str:
+    approval_task_id = str(dependency.get("approval_task_id") or "").strip()
+    queryset = ApprovalTask.objects.filter(
+        run__organization=whiteboard.organization,
+        run__graph_version__graph=whiteboard.company,
+        payload__whiteboard_id=str(whiteboard.id),
+    )
+    if approval_task_id:
+        queryset = queryset.filter(id=approval_task_id)
+    approval = queryset.order_by("-created_at").first()
+    return str(approval.status) if approval is not None else "not_started"
+
+
+def _external_dependency_status(
+    *, whiteboard: WorkWhiteboard, dependency: dict[str, Any]
+) -> str:
+    evidence_key = str(dependency.get("evidence_key") or "").strip()
+    if not evidence_key:
+        return "blocked"
+    required_status = str(dependency.get("required_status") or "completed")
+    asset_queryset = Asset.objects.filter(
+        organization=whiteboard.organization,
+        company=whiteboard.company,
+        metadata_json__whiteboard_id=str(whiteboard.id),
+        metadata_json__evidence_key=evidence_key,
+    )
+    if asset_queryset.filter(metadata_json__status=required_status).exists():
+        return required_status
+    if asset_queryset.filter(metadata_json__evidence_status=required_status).exists():
+        return required_status
+    record = (
+        TaskRoutingRecord.objects.filter(
+            organization=whiteboard.organization,
+            company=whiteboard.company,
+            metadata_json__whiteboard_id=str(whiteboard.id),
+            metadata_json__evidence_key=evidence_key,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    return str(record.status) if record is not None else "not_started"
+
+
+def _dependency_blocker_reason(blockers: list[dict[str, Any]]) -> str:
+    if not blockers:
+        return ""
+    labels = [str(item.get("label") or item.get("source_ref") or "dependency") for item in blockers]
+    if len(labels) == 1:
+        return f"Waiting for {labels[0]}."
+    return f"Waiting for {len(labels)} dependencies: {', '.join(labels[:3])}."
+
+
+def _sync_workstream_dependency_record(
+    *,
+    record: TaskRoutingRecord,
+    workstream: dict[str, Any],
+    dependency_state: dict[str, Any],
+) -> None:
+    metadata = dict(record.metadata_json or {})
+    previous_state = _dict_or_empty(metadata.get("dependency_state"))
+    was_dependency_blocked = (
+        str(previous_state.get("status") or "") == "blocked"
+        or metadata.get("blocked_reason_code") == "workstream_dependency_blocked"
+    )
+    dependency_status = str(dependency_state.get("status") or "ready")
+    metadata["dependencies"] = list(workstream.get("dependencies") or [])
+    metadata["dependency_state"] = sanitize_outbox_payload(dependency_state)
+    metadata["dependency_status"] = dependency_status
+    metadata["provisional"] = dependency_status == "provisional"
+    resolution = dict(record.resolution_json or {})
+    next_status = record.status
+    if dependency_status == "blocked":
+        reason = str(dependency_state.get("blocker_reason") or "Workstream dependency blocked.")
+        metadata["blocker_reason"] = reason
+        metadata["blocked_reason_code"] = "workstream_dependency_blocked"
+        resolution["blocker_reason"] = reason
+        resolution["reason_code"] = "workstream_dependency_blocked"
+        resolution["dependency_state"] = sanitize_outbox_payload(dependency_state)
+        if record.status not in TERMINAL_WORKSTREAM_STATUSES:
+            next_status = "blocked"
+    else:
+        if metadata.get("blocked_reason_code") == "workstream_dependency_blocked":
+            metadata.pop("blocker_reason", None)
+            metadata.pop("blocked_reason_code", None)
+        if resolution.get("reason_code") == "workstream_dependency_blocked":
+            resolution.pop("blocker_reason", None)
+            resolution.pop("reason_code", None)
+        resolution["dependency_state"] = sanitize_outbox_payload(dependency_state)
+        if record.status == "blocked" and was_dependency_blocked:
+            next_status = "queued"
+    changed = (
+        record.status != next_status
+        or record.metadata_json != metadata
+        or record.resolution_json != resolution
+    )
+    if not changed:
+        return
+    record.status = next_status
+    record.metadata_json = sanitize_outbox_payload(metadata)
+    record.resolution_json = sanitize_outbox_payload(resolution)
+    record.full_clean()
+    record.save(update_fields=["status", "metadata_json", "resolution_json", "updated_at"])
+
+
+def _refresh_phase_dependency_states(
+    *, whiteboard: WorkWhiteboard, definition: dict[str, Any]
+) -> None:
+    phase_id = str(definition["phase_id"])
+    for workstream in _workstreams(definition):
+        record = _workstream_record(
+            whiteboard=whiteboard,
+            phase_id=phase_id,
+            workstream_id=str(workstream["id"]),
+        )
+        if record is None:
+            continue
+        dependency_state = _dependency_state_for_workstream(
+            whiteboard=whiteboard,
+            definition=definition,
+            workstream=workstream,
+        )
+        _sync_workstream_dependency_record(
+            record=record,
+            workstream=workstream,
+            dependency_state=dependency_state,
+        )
+
+
 def _workstream_state(
     *,
     whiteboard: WorkWhiteboard,
@@ -1242,6 +1543,11 @@ def _workstream_state(
             )
         if include_internal:
             item["dependencies"] = list(workstream.get("dependencies") or [])
+            item["dependency_state"] = _dependency_state_for_workstream(
+                whiteboard=whiteboard,
+                definition=definition,
+                workstream=workstream,
+            )
             item["metadata"] = sanitize_outbox_payload(workstream.get("metadata") or {})
         payload.append(item)
     return payload

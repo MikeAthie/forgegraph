@@ -109,6 +109,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - ./operating_model_packs:/operating_model_packs:ro
       - ./docs:/docs:ro
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles
@@ -190,6 +191,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - ./operating_model_packs:/operating_model_packs:ro
       - ./docs:/docs:ro
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles
@@ -267,6 +269,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - ./operating_model_packs:/operating_model_packs:ro
       - ./docs:/docs:ro
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles
@@ -346,6 +349,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - ./operating_model_packs:/operating_model_packs:ro
       - ./docs:/docs:ro
       - backend_venv:/app/.venv
       - backend_static:/app/staticfiles

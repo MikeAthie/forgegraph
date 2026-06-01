@@ -783,12 +783,37 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                         phase.workstreams.map((workstream) => (
                           <div
                             key={workstream.id}
-                            className="flex min-w-0 items-center justify-between gap-3 border-b border-zinc-900/8 py-2 text-xs dark:border-white/8"
+                            className="flex min-w-0 items-start justify-between gap-3 border-b border-zinc-900/8 py-2 text-xs dark:border-white/8"
                           >
-                            <span className="truncate font-medium text-zinc-800 dark:text-zinc-100">
-                              {workstream.name || labelForField(workstream.id)}
-                            </span>
-                            <StatusBadge status={workstream.status} label={labelForField(workstream.status)} />
+                            <div className="min-w-0">
+                              <span className="block truncate font-medium text-zinc-800 dark:text-zinc-100">
+                                {workstream.name || labelForField(workstream.id)}
+                              </span>
+                              {workstream.dependency_state?.status === "blocked" ? (
+                                <span
+                                  data-testid={`whiteboard-phase-workstream-${workstream.id}-dependency-state`}
+                                  className="mt-1 block truncate text-zinc-500 dark:text-zinc-400"
+                                >
+                                  {workstream.dependency_state.blocker_reason || "Waiting for dependencies."}
+                                </span>
+                              ) : workstream.dependency_state?.status === "provisional" ? (
+                                <span
+                                  data-testid={`whiteboard-phase-workstream-${workstream.id}-dependency-state`}
+                                  className="mt-1 block truncate text-zinc-500 dark:text-zinc-400"
+                                >
+                                  Provisional
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                              {workstream.dependencies?.length ? (
+                                <StatusBadge
+                                  status={workstream.dependency_state?.status ?? "ready"}
+                                  label={`${workstream.dependencies.length} deps`}
+                                />
+                              ) : null}
+                              <StatusBadge status={workstream.status} label={labelForField(workstream.status)} />
+                            </div>
                           </div>
                         ))
                       ) : (

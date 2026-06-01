@@ -135,7 +135,7 @@ async function installPlanningAliasMocks(
       board.project.legacy_status = whiteboard.status;
       board.project.completion_score = whiteboard.completion_score;
     }
-    await fulfillJson(route, whiteboard);
+    await fulfillJson(route, { whiteboard });
   });
 
   route(/\/api\/whiteboards\/[^/]+\/start-planning(?:\?.*)?$/, async (route: Route) => {
@@ -319,7 +319,15 @@ test.describe("Company workboard stress flow", () => {
     await expect(page.getByTestId("whiteboard-status")).toContainText(/Work Status/i);
     await expect(page.getByTestId("whiteboard-known-fields")).toContainText(/Work Context/i);
 
+    const readyForPlanningResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === `/api/whiteboards/${legacyMultiPackIds.whiteboard}/ready-for-planning`;
+    });
     await page.getByTestId("whiteboard-mark-ready-button").click();
+    const readyForPlanningResponse = await readyForPlanningResponsePromise;
+    expect(readyForPlanningResponse.ok()).toBe(true);
+    const readyForPlanningBody = await readyForPlanningResponse.json();
+    expect(readyForPlanningBody.data.whiteboard.work_status).toBe("ready_for_planning");
     await expect(page.getByTestId("whiteboard-status")).toContainText(/Ready For Planning/i);
 
     await page.getByTestId("whiteboard-board").scrollIntoViewIfNeeded();
@@ -340,7 +348,7 @@ test.describe("Company workboard stress flow", () => {
 
     await page.getByTestId(`whiteboard-card-evidence-button-${contentCardId}`).click();
     await expect(page.getByTestId(`whiteboard-card-evidence-${contentCardId}`)).toContainText(
-      /Updated from board control/i,
+      /2 evidence refs/i,
     );
     await page.getByTestId(`whiteboard-card-ready-${contentCardId}`).click();
     await expect(page.getByTestId(`whiteboard-card-status-${contentCardId}`)).toContainText(/ready_for_review/i);
