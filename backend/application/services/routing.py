@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from django.conf import settings
@@ -129,9 +129,7 @@ def routing_record_payload(record: TaskRoutingRecord) -> dict[str, Any]:
         "status": record.status,
         "priority": record.priority,
         "due_at": record.due_at.isoformat() if record.due_at else None,
-        "sla_breached_at": record.sla_breached_at.isoformat()
-        if record.sla_breached_at
-        else None,
+        "sla_breached_at": record.sla_breached_at.isoformat() if record.sla_breached_at else None,
         "resolution": dict(record.resolution_json or {}),
         "idempotency_key": record.idempotency_key,
         "metadata": dict(record.metadata_json or {}),
@@ -208,10 +206,13 @@ def register_department(
             "department_required",
             "Department slug and name are required.",
         )
-    if lead_user is not None and not OrganizationMembership.objects.filter(
-        organization=organization,
-        user=lead_user,
-    ).exists():
+    if (
+        lead_user is not None
+        and not OrganizationMembership.objects.filter(
+            organization=organization,
+            user=lead_user,
+        ).exists()
+    ):
         raise RoutingError(
             "lead_user_not_in_organization",
             "Department lead must belong to the department organization.",
@@ -338,10 +339,13 @@ def route_event(
     department = policy.department if policy is not None else _default_traffic_department(company)
     route_status = _normalize_status(status or "queued")
     route_reason = str(reason or "Routed from committed backend event.")
+    organization = _company_organization(company)
     if department is None:
-        department = _ensure_unrouted_department(company.organization)
+        department = _ensure_unrouted_department(organization)
         route_status = "blocked"
-        missing_policy_reason = "No active routing policy or fallback department matched this event."
+        missing_policy_reason = (
+            "No active routing policy or fallback department matched this event."
+        )
         route_reason = (
             f"{route_reason} {missing_policy_reason}" if reason else missing_policy_reason
         )
@@ -363,7 +367,7 @@ def route_event(
             "Routing generic events requires an idempotency key or linked durable target.",
         )
     record = _create_routing_record(
-        organization=company.organization,
+        organization=organization,
         company=company,
         department=department,
         from_department=from_department,
@@ -462,7 +466,7 @@ def route_event_to_department(
         )
     sanitized_metadata = sanitize_outbox_payload(metadata or {})
     record = _create_routing_record(
-        organization=company.organization,
+        organization=_company_organization(company),
         company=company,
         department=department,
         from_department=from_department,
@@ -680,7 +684,10 @@ def route_task(
             "You do not have company access to route this task.",
         )
     source_department = from_department or task.department or _lifecycle_department(task)
-    if source_department is not None and source_department.organization_id != company.organization_id:
+    if (
+        source_department is not None
+        and source_department.organization_id != company.organization_id
+    ):
         raise RoutingError(
             "department_company_mismatch",
             "Source department belongs to a different organization than the task company.",
@@ -825,7 +832,7 @@ def _create_routing_record(
             .first()
         )
         if existing is not None:
-            existing._routing_record_was_created = False
+            cast(Any, existing)._routing_record_was_created = False
             return existing
     record = TaskRoutingRecord(
         organization=organization,
@@ -859,10 +866,10 @@ def _create_routing_record(
                 .first()
             )
             if existing is not None:
-                existing._routing_record_was_created = False
+                cast(Any, existing)._routing_record_was_created = False
                 return existing
         raise
-    record._routing_record_was_created = True
+    cast(Any, record)._routing_record_was_created = True
     return record
 
 
@@ -877,7 +884,7 @@ def _policy_candidates(
     signal_type: str,
 ) -> list[RoutingPolicy]:
     queryset = (
-        RoutingPolicy.objects.filter(organization=company.organization, active=True)
+        RoutingPolicy.objects.filter(organization=_company_organization(company), active=True)
         .filter(company_filter)
         .filter(Q(trigger_type=trigger_type) | Q(trigger_type=""))
         .filter(Q(event_type=event_type) | Q(event_type=""))
@@ -903,7 +910,7 @@ def _policy_candidates(
 def _default_traffic_department(company: Graph) -> DepartmentRegistry | None:
     return (
         DepartmentRegistry.objects.filter(
-            organization=company.organization,
+            organization=_company_organization(company),
             active=True,
         )
         .filter(Q(slug="traffic") | Q(department_type="traffic"))
@@ -943,7 +950,7 @@ def _can_route_between(
     source_department: DepartmentRegistry | None,
     target_department: DepartmentRegistry,
 ) -> bool:
-    if is_department_admin(user, company.organization):
+    if is_department_admin(user, _company_organization(company)):
         return True
     if can_mutate_department_work(user=user, company=company, department=target_department):
         return True
@@ -991,6 +998,8 @@ def _due_at_for_policy(
         if policy is not None and policy.department_id == department.id:
             sla_json = policy.sla_json if isinstance(policy.sla_json, dict) else {}
             target_minutes = sla_json.get("target_minutes")
+    if target_minutes is None:
+        return None
     try:
         minutes = int(target_minutes)
     except (TypeError, ValueError):
@@ -1002,6 +1011,8 @@ def _due_at_for_policy(
 
 def _lifecycle_department(task: TaskRecord) -> DepartmentRegistry | None:
     if task.lifecycle_task_id is None:
+        return None
+    if task.lifecycle_task is None:
         return None
     return task.lifecycle_task.current_department
 
@@ -1018,8 +1029,12 @@ def _active_memberships_for_user(user: User) -> QuerySet[DepartmentMembership]:
 def _task_record_id_for_lifecycle(lifecycle_id: UUID | str | None) -> str | None:
     if not lifecycle_id:
         return None
+    try:
+        lifecycle_uuid = lifecycle_id if isinstance(lifecycle_id, UUID) else UUID(str(lifecycle_id))
+    except ValueError:
+        return None
     task_id = (
-        TaskRecord.objects.filter(lifecycle_task_id=lifecycle_id)
+        TaskRecord.objects.filter(lifecycle_task_id=lifecycle_uuid)
         .order_by("-updated_at")
         .values_list("id", flat=True)
         .first()
@@ -1040,6 +1055,16 @@ def _ensure_unrouted_department(organization: Organization) -> DepartmentRegistr
         },
     )
     return department
+
+
+def _company_organization(company: Graph) -> Organization:
+    organization = company.organization
+    if organization is None:
+        raise RoutingError(
+            "company_organization_required",
+            "Routing requires the company to belong to an organization.",
+        )
+    return organization
 
 
 def _normalize_status(value: str) -> str:
@@ -1093,7 +1118,9 @@ def _communication_routing_metadata(
     extra: dict[str, Any],
 ) -> dict[str, Any]:
     metadata: dict[str, Any] = {}
-    thread_metadata = message.thread.metadata_json if isinstance(message.thread.metadata_json, dict) else {}
+    thread_metadata = (
+        message.thread.metadata_json if isinstance(message.thread.metadata_json, dict) else {}
+    )
     message_metadata = message.metadata_json if isinstance(message.metadata_json, dict) else {}
     metadata.update(thread_metadata)
     metadata.update(message_metadata)
@@ -1122,18 +1149,19 @@ def _create_missing_capability_signal(
     external_key = str(missing_capability.get("external_key") or "").strip()
     if not external_key:
         external_key = f"routing:{task.id}:{routing_record.id}:missing-capability"
-    signal, _ = CompanySignal.objects.get_or_create(
+    signal, created = CompanySignal.objects.get_or_create(
         company=company,
         source="department_routing",
         external_key=external_key,
         defaults={
-            "organization": company.organization,
+            "organization": _company_organization(company),
             "created_by": user,
             "signal_type": "manual",
+            "signal_kind": "capability_gap",
+            "domain_context": "routing",
             "status": "new",
             "title": str(
-                missing_capability.get("title")
-                or f"Missing execution capability: {capability}"
+                missing_capability.get("title") or f"Missing execution capability: {capability}"
             )[:255],
             "summary": str(
                 missing_capability.get("summary")
@@ -1150,6 +1178,12 @@ def _create_missing_capability_signal(
             },
         },
     )
+    if not created and (
+        signal.signal_kind != "capability_gap" or signal.domain_context != "routing"
+    ):
+        signal.signal_kind = "capability_gap"
+        signal.domain_context = "routing"
+        signal.save(update_fields=["signal_kind", "domain_context", "updated_at"])
     return signal
 
 
@@ -1183,7 +1217,7 @@ def _record_missing_capability_note(
         create_message(
             thread=thread,
             sender_kind="system",
-            sender_organization=company.organization,
+            sender_organization=_company_organization(company),
             message_kind="capability_gap",
             body=str(
                 missing_capability.get("internal_note")

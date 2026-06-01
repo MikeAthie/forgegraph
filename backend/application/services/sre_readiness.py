@@ -13,8 +13,11 @@ from django.utils import timezone
 from application.services.backend_watchdog import evaluate_backend_watchdog
 from infrastructure.orm.models import (
     AuditLog,
+    CommunicationEventReceipt,
     CostLedgerEntry,
     DecisionRecord,
+    DomainEventOutbox,
+    EventDeadLetterRecord,
     MemoryObservation,
     RetryOperation,
     Run,
@@ -38,6 +41,8 @@ REQUIRED_SLO_IDS = {
 }
 
 REQUIRED_DASHBOARD_IDS = {
+    "communication_kafka_outbox_backlog",
+    "communication_kafka_consumer_failures",
     "runtime_intent_backlog",
     "runtime_intent_lag",
     "dead_letter_count",
@@ -58,6 +63,8 @@ REQUIRED_DASHBOARD_IDS = {
 }
 
 REQUIRED_ALERT_IDS = {
+    "communication_kafka_backlog_growing",
+    "communication_kafka_consumer_failures",
     "intent_backlog_growing",
     "no_progress_despite_backlog",
     "dead_letter_spike",
@@ -359,6 +366,18 @@ def _build_dashboard_panels(
     objective_by_id = {item["id"]: item for item in objectives}
     return [
         _panel(
+            "communication_kafka_outbox_backlog",
+            "Communication Kafka outbox backlog",
+            _communication_kafka_outbox_backlog(),
+            "count",
+        ),
+        _panel(
+            "communication_kafka_consumer_failures",
+            "Communication Kafka consumer failures",
+            _communication_kafka_consumer_failures_since(since),
+            "count",
+        ),
+        _panel(
             "runtime_intent_backlog",
             "Runtime intent backlog",
             runtime_transport_metrics.backlog,
@@ -468,6 +487,8 @@ def _evaluate_alerts(
     panel_by_id = {item["id"]: item for item in dashboard_panels}
     watchdog = evaluate_backend_watchdog()
     dead_letters = _dead_letter_count()
+    kafka_backlog = _communication_kafka_outbox_backlog()
+    kafka_failures = _communication_kafka_consumer_failures_since(since)
     rate_limit_breaches = _sample_count("api_rate_limit_breach", since)
     llm_queue_depth, llm_queue_missing = _latest_sample_value("llm_queue_depth", since)
     llm_timeouts = _sample_count("llm_timeout", since)
@@ -475,6 +496,17 @@ def _evaluate_alerts(
     max_org_cost = max((float(item["total_cost_usd"]) for item in cost_values), default=0.0)
 
     return [
+        _alert(
+            "communication_kafka_backlog_growing",
+            active=kafka_backlog
+            > int(getattr(settings, "COMMUNICATION_KAFKA_OUTBOX_BACKLOG_READY_THRESHOLD", 1000)),
+            evidence={"backlog": kafka_backlog},
+        ),
+        _alert(
+            "communication_kafka_consumer_failures",
+            active=kafka_failures > 0,
+            evidence={"failures": kafka_failures},
+        ),
         _alert(
             "intent_backlog_growing",
             active=runtime_transport_metrics.backlog
@@ -712,6 +744,27 @@ def _dead_letter_count() -> int:
     )
 
 
+def _communication_kafka_outbox_backlog() -> int:
+    return int(
+        DomainEventOutbox.objects.filter(
+            topic=str(getattr(settings, "COMMUNICATION_KAFKA_TOPIC", ""))
+            or "forgegraph.communication.events.v1",
+            status__in=["pending", "failed", "deferred"],
+        ).count()
+    )
+
+
+def _communication_kafka_consumer_failures_since(since: Any) -> int:
+    return int(
+        CommunicationEventReceipt.objects.filter(status="failed", received_at__gte=since).count()
+        + EventDeadLetterRecord.objects.filter(
+            source="communication_kafka_consumer",
+            status__in={"active", "replay_requested"},
+            last_seen_at__gte=since,
+        ).count()
+    )
+
+
 def _cost_by_org_since(since: Any) -> list[dict[str, Any]]:
     rows = (
         CostLedgerEntry.objects.filter(occurred_at__gte=since)
@@ -767,6 +820,8 @@ def _alert(
         "org_rate_limit_breach": "warning",
         "llm_queue_saturation": "warning",
         "cost_anomaly": "warning",
+        "communication_kafka_backlog_growing": "warning",
+        "communication_kafka_consumer_failures": "warning",
     }.get(alert_id, "warning")
     return {
         "id": alert_id,

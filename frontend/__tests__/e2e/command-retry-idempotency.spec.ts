@@ -25,16 +25,18 @@ test.describe("Command retry idempotency", () => {
       "Idempotency-Key": commandId,
     };
 
-    const { first, second } = await request.post(`${API_BASE_URL}/api/runs/${fixture.runIds.running}/cancel`, {
-      headers,
-      data: {},
-    }).then(async (first) => ({
-      first,
-      second: await request.post(`${API_BASE_URL}/api/runs/${fixture.runIds.running}/cancel`, {
+    const { first, second } = await request
+      .post(`${API_BASE_URL}/api/runs/${fixture.runIds.running}/cancel`, {
         headers,
         data: {},
-      }),
-    }));
+      })
+      .then(async (first) => ({
+        first,
+        second: await request.post(`${API_BASE_URL}/api/runs/${fixture.runIds.running}/cancel`, {
+          headers,
+          data: {},
+        }),
+      }));
 
     expect(first.ok()).toBeTruthy();
     expect(second.ok()).toBeTruthy();

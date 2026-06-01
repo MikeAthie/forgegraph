@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, cast
 
 from django.db import IntegrityError, transaction
 from django.db.models import Max
@@ -14,9 +14,14 @@ from application.services.company_access import has_company_access
 from application.services.company_ops import create_company_signal
 from application.services.domain_event_outbox import sanitize_outbox_payload
 from application.services.operating_model_packs import OperatingModelPackError, load_pack_definition
-from application.services.pack_tool_executions import PackToolExecutionError, execute_pack_tool
+from application.services.pack_tool_executions import (
+    DEPLOYMENT_EVIDENCE_TOOL_IDS,
+    PackToolExecutionError,
+    execute_pack_tool,
+)
 from application.services.rbac import has_min_role
 from application.services.routing import register_department, route_event_to_department
+from application.services.task_lifecycle import get_or_create_backend_operation_run
 from infrastructure.orm.models import (
     CompanyOperatingModelInstallation,
     CompanyProgram,
@@ -56,6 +61,10 @@ class PerformanceOrchestrationError(ValueError):
         super().__init__(message)
 
 
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def load_performance_policy(
     *,
     whiteboard: WorkWhiteboard,
@@ -85,13 +94,17 @@ def load_performance_policy(
             continue
         return _normalize_policy(
             sanitize_outbox_payload(candidate),
-            source_policy_id=str(candidate.get("source_policy_id") or candidate.get("pack_id") or ""),
+            source_policy_id=str(
+                candidate.get("source_policy_id") or candidate.get("pack_id") or ""
+            ),
             pack_id=str(candidate.get("pack_id") or ""),
         )
     if not requested and candidates:
         return _normalize_policy(
             sanitize_outbox_payload(candidates[0]),
-            source_policy_id=str(candidates[0].get("source_policy_id") or candidates[0].get("pack_id") or ""),
+            source_policy_id=str(
+                candidates[0].get("source_policy_id") or candidates[0].get("pack_id") or ""
+            ),
             pack_id=str(candidates[0].get("pack_id") or ""),
         )
     raise PerformanceOrchestrationError(
@@ -112,7 +125,7 @@ def list_available_performance_policies(*, whiteboard: WorkWhiteboard) -> list[d
         seen.add(policy_id)
     projection = _performance_projection(whiteboard)
     if projection is not None and isinstance(projection.json_state, dict):
-        definition = projection.json_state.get("policy") if isinstance(projection.json_state.get("policy"), dict) else {}
+        definition = _dict_or_empty(projection.json_state.get("policy"))
         policy_id = str(definition.get("policy_id") or "")
         if policy_id and policy_id not in seen:
             policies.append(definition)
@@ -133,11 +146,13 @@ def performance_contract_for_whiteboard(
         projection = _performance_projection(whiteboard)
         if projection is None or not isinstance(projection.json_state, dict):
             return None
-        policy = projection.json_state.get("policy") if isinstance(projection.json_state.get("policy"), dict) else {}
+        policy = _dict_or_empty(projection.json_state.get("policy"))
         if not policy:
             return None
     internal = include_internal or _can_manage_performance(user=user, whiteboard=whiteboard)
-    return _performance_contract(whiteboard=whiteboard, policy=policy, user=user, include_internal=internal)
+    return _performance_contract(
+        whiteboard=whiteboard, policy=policy, user=user, include_internal=internal
+    )
 
 
 def list_performance_state(
@@ -152,7 +167,9 @@ def list_performance_state(
             "permission_denied",
             "You do not have access to this whiteboard performance state.",
         )
-    policy = load_performance_policy(whiteboard=whiteboard, policy_id=policy_id, definition=definition)
+    policy = load_performance_policy(
+        whiteboard=whiteboard, policy_id=policy_id, definition=definition
+    )
     return _performance_contract(
         whiteboard=whiteboard,
         policy=policy,
@@ -173,7 +190,9 @@ def start_performance_review_for_whiteboard(
     """Start or replay a generic performance review loop for one whiteboard."""
 
     _ensure_can_manage_performance(user=user, whiteboard=whiteboard)
-    policy = load_performance_policy(whiteboard=whiteboard, policy_id=policy_id, definition=definition)
+    policy = load_performance_policy(
+        whiteboard=whiteboard, policy_id=policy_id, definition=definition
+    )
     _ensure_review_start_allowed(whiteboard=whiteboard, policy=policy)
     period = _review_period(policy=policy, period_start=period_start, period_end=period_end)
     existing = _performance_state(whiteboard)
@@ -183,7 +202,9 @@ def start_performance_review_for_whiteboard(
         and existing.get("period_end") == period["period_end"]
         and existing.get("sources")
     ):
-        return _performance_contract(whiteboard=whiteboard, policy=policy, user=user, include_internal=True)
+        return _performance_contract(
+            whiteboard=whiteboard, policy=policy, user=user, include_internal=True
+        )
 
     with transaction.atomic():
         sources = create_metric_collection_tasks(
@@ -217,7 +238,9 @@ def start_performance_review_for_whiteboard(
             },
         )
     _refresh_whiteboard_snapshot(whiteboard)
-    return _performance_contract(whiteboard=whiteboard, policy=policy, user=user, include_internal=True)
+    return _performance_contract(
+        whiteboard=whiteboard, policy=policy, user=user, include_internal=True
+    )
 
 
 def create_metric_collection_tasks(
@@ -335,7 +358,9 @@ def create_metric_snapshot(
 ) -> MetricSnapshot | None:
     """Create or return the performance metric snapshot for this whiteboard period."""
 
-    key = _performance_key(whiteboard=whiteboard, policy=policy, suffix=f"snapshot:{period_start}:{period_end}")
+    key = _performance_key(
+        whiteboard=whiteboard, policy=policy, suffix=f"snapshot:{period_start}:{period_end}"
+    )
     existing = MetricSnapshot.objects.filter(
         organization=whiteboard.organization,
         company=whiteboard.company,
@@ -354,9 +379,7 @@ def create_metric_snapshot(
         "idempotency_key": key,
         "sources": _source_refs(sources),
         "blocked_sources": [
-            _source_ref(item)
-            for item in sources
-            if str(item.get("status") or "") == "blocked"
+            _source_ref(item) for item in sources if str(item.get("status") or "") == "blocked"
         ],
     }
     return MetricSnapshot.objects.create(
@@ -381,7 +404,9 @@ def create_performance_report(
     definition: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _ensure_can_manage_performance(user=user, whiteboard=whiteboard)
-    policy = load_performance_policy(whiteboard=whiteboard, policy_id=policy_id, definition=definition)
+    policy = load_performance_policy(
+        whiteboard=whiteboard, policy_id=policy_id, definition=definition
+    )
     state = _performance_state(whiteboard)
     snapshot = _metric_snapshot_from_state(whiteboard=whiteboard, state=state)
     if snapshot is None:
@@ -390,10 +415,18 @@ def create_performance_report(
             "Performance report requires a started review with a metric snapshot.",
         )
     existing_id = str(state.get("report_run_id") or "")
-    existing = ReportRun.objects.filter(id=existing_id, company=whiteboard.company).first() if existing_id else None
+    existing = (
+        ReportRun.objects.filter(id=existing_id, company=whiteboard.company).first()
+        if existing_id
+        else None
+    )
     if existing is not None:
-        return _performance_contract(whiteboard=whiteboard, policy=policy, user=user, include_internal=True)
-    report = _assemble_performance_report(user=user, whiteboard=whiteboard, policy=policy, snapshot=snapshot, state=state)
+        return _performance_contract(
+            whiteboard=whiteboard, policy=policy, user=user, include_internal=True
+        )
+    report = _assemble_performance_report(
+        user=user, whiteboard=whiteboard, policy=policy, snapshot=snapshot, state=state
+    )
     _upsert_performance_projection(
         whiteboard=whiteboard,
         policy=policy,
@@ -405,7 +438,9 @@ def create_performance_report(
         },
     )
     _refresh_whiteboard_snapshot(whiteboard)
-    return _performance_contract(whiteboard=whiteboard, policy=policy, user=user, include_internal=True)
+    return _performance_contract(
+        whiteboard=whiteboard, policy=policy, user=user, include_internal=True
+    )
 
 
 def evaluate_performance(
@@ -419,7 +454,9 @@ def evaluate_performance(
     """Evaluate performance using policy-defined generic criteria."""
 
     _ensure_can_manage_performance(user=user, whiteboard=whiteboard)
-    policy = load_performance_policy(whiteboard=whiteboard, policy_id=policy_id, definition=definition)
+    policy = load_performance_policy(
+        whiteboard=whiteboard, policy_id=policy_id, definition=definition
+    )
     state = _performance_state(whiteboard)
     snapshot = _metric_snapshot_from_state(whiteboard=whiteboard, state=state)
     if snapshot is None:
@@ -428,7 +465,9 @@ def evaluate_performance(
             "Performance evaluation requires a started review with a metric snapshot.",
         )
     submitted = _evaluation_inputs(snapshot=snapshot, state=state, scorecard=scorecard or {})
-    criteria_results = [_criterion_result(criterion, submitted) for criterion in _evaluation_criteria(policy)]
+    criteria_results = [
+        _criterion_result(criterion, submitted) for criterion in _evaluation_criteria(policy)
+    ]
     result = _evaluation_result(criteria_results)
     composite = _composite_score(criteria_results)
     with transaction.atomic():
@@ -453,10 +492,21 @@ def evaluate_performance(
                     "policy_id": policy["policy_id"],
                     "source_policy_id": policy.get("source_policy_id"),
                     "pack_id": policy.get("pack_id"),
+                    "allow_sandbox_deployment_evidence": policy.get(
+                        "allow_sandbox_deployment_evidence"
+                    ),
+                    "allow_web_automation_deployment_evidence": policy.get(
+                        "allow_web_automation_deployment_evidence"
+                    ),
+                    "allow_manual_publish_deployment_evidence": policy.get(
+                        "allow_manual_publish_deployment_evidence"
+                    ),
                     "performance_result": result,
                     "criteria_results": criteria_results,
                     "submitted_scorecard": sanitize_outbox_payload(scorecard or {}),
-                    "conditions": _matched_conditions(state=state, criteria_results=criteria_results, submitted=submitted),
+                    "conditions": _matched_conditions(
+                        state=state, criteria_results=criteria_results, submitted=submitted
+                    ),
                 }
             ),
             created_by=user,
@@ -466,7 +516,9 @@ def evaluate_performance(
             evaluation=evaluation,
             organization=whiteboard.organization,
             company=whiteboard.company,
-            dimensions_json=sanitize_outbox_payload({"criteria": criteria_results, "submitted_scorecard": scorecard or {}}),
+            dimensions_json=sanitize_outbox_payload(
+                {"criteria": criteria_results, "submitted_scorecard": scorecard or {}}
+            ),
             composite_score=composite,
             grade=_grade(composite),
         )
@@ -545,7 +597,10 @@ def route_optimization_work(
                 service_engagement=whiteboard.service_engagement,
                 operation=evaluation.operation,
                 company_signal=signal,
-                reason=str(rule.get("reason") or f"Route optimization for condition: {condition or 'policy_match'}."),
+                reason=str(
+                    rule.get("reason")
+                    or f"Route optimization for condition: {condition or 'policy_match'}."
+                ),
                 status=str(rule.get("status") or "queued"),
                 priority=str(rule.get("priority") or "normal"),
                 idempotency_key=_performance_key(
@@ -594,8 +649,12 @@ def _performance_contract(
                 tool_execution_id=str(previous.get("tool_execution_id") or ""),
                 company_signal_id=str(previous.get("company_signal_id") or ""),
                 routing_record_id=str(previous.get("routing_record_id") or ""),
-                metrics=previous.get("metrics") if isinstance(previous.get("metrics"), dict) else {},
-                receipt=previous.get("receipt") if isinstance(previous.get("receipt"), dict) else None,
+                metrics=previous.get("metrics")
+                if isinstance(previous.get("metrics"), dict)
+                else {},
+                receipt=previous.get("receipt")
+                if isinstance(previous.get("receipt"), dict)
+                else None,
                 include_internal=include_internal,
             )
         )
@@ -608,7 +667,9 @@ def _performance_contract(
         "cadence": str(policy.get("cadence") or ""),
         "sources": sources,
         "current_state": _current_state_payload(state=state, include_internal=include_internal),
-        "allowed_actions": _allowed_actions(whiteboard=whiteboard, state=state, policy=policy) if manage else [],
+        "allowed_actions": _allowed_actions(whiteboard=whiteboard, state=state, policy=policy)
+        if manage
+        else [],
     }
     if include_internal:
         contract["evaluation_criteria"] = list(policy.get("evaluation_criteria") or [])
@@ -616,11 +677,19 @@ def _performance_contract(
     return sanitize_outbox_payload(contract)
 
 
-def _normalize_policy(policy: dict[str, Any], *, source_policy_id: str, pack_id: str) -> dict[str, Any]:
+def _normalize_policy(
+    policy: dict[str, Any], *, source_policy_id: str, pack_id: str
+) -> dict[str, Any]:
     policy_id = str(policy.get("policy_id") or policy.get("id") or "").strip()
     if not policy_id:
-        raise PerformanceOrchestrationError("performance_policy_id_required", "Performance policy requires an id.")
-    sources = [_normalize_source(item) for item in list(policy.get("metric_sources") or []) if isinstance(item, dict)]
+        raise PerformanceOrchestrationError(
+            "performance_policy_id_required", "Performance policy requires an id."
+        )
+    sources = [
+        _normalize_source(item)
+        for item in list(policy.get("metric_sources") or [])
+        if isinstance(item, dict)
+    ]
     if not sources:
         raise PerformanceOrchestrationError(
             "performance_metric_sources_required",
@@ -628,13 +697,35 @@ def _normalize_policy(policy: dict[str, Any], *, source_policy_id: str, pack_id:
         )
     return {
         "policy_id": policy_id[:160],
-        "source_policy_id": str(policy.get("source_policy_id") or source_policy_id or policy_id)[:200],
+        "source_policy_id": str(policy.get("source_policy_id") or source_policy_id or policy_id)[
+            :200
+        ],
         "pack_id": str(policy.get("pack_id") or pack_id or "")[:160],
         "required_whiteboard_status": policy.get("required_whiteboard_status") or "",
         "cadence": str(policy.get("cadence") or policy.get("review_cadence") or "weekly")[:32],
+        "allow_sandbox_deployment_evidence": bool(
+            policy.get("allow_sandbox_deployment_evidence", False)
+            or policy.get("allow_sandbox_evidence", False)
+        ),
+        "allow_web_automation_deployment_evidence": bool(
+            policy.get("allow_web_automation_deployment_evidence", False)
+            or policy.get("allow_web_automation_evidence", False)
+        ),
+        "allow_manual_publish_deployment_evidence": bool(
+            policy.get("allow_manual_publish_deployment_evidence", False)
+            or policy.get("allow_manual_publish_evidence", False)
+        ),
         "metric_sources": sources,
-        "evaluation_criteria": [_normalize_criterion(item) for item in list(policy.get("evaluation_criteria") or []) if isinstance(item, dict)],
-        "routing_rules": [sanitize_outbox_payload(item) for item in list(policy.get("routing_rules") or []) if isinstance(item, dict)],
+        "evaluation_criteria": [
+            _normalize_criterion(item)
+            for item in list(policy.get("evaluation_criteria") or [])
+            if isinstance(item, dict)
+        ],
+        "routing_rules": [
+            sanitize_outbox_payload(item)
+            for item in list(policy.get("routing_rules") or [])
+            if isinstance(item, dict)
+        ],
         "on_complete": sanitize_outbox_payload(policy.get("on_complete") or {}),
         "on_blocked": sanitize_outbox_payload(policy.get("on_blocked") or {}),
         "metadata": sanitize_outbox_payload(policy.get("metadata") or {}),
@@ -644,19 +735,31 @@ def _normalize_policy(policy: dict[str, Any], *, source_policy_id: str, pack_id:
 def _normalize_source(item: dict[str, Any]) -> dict[str, Any]:
     source_id = str(item.get("id") or "").strip()
     if not source_id:
-        raise PerformanceOrchestrationError("performance_source_id_required", "Metric source requires an id.")
+        raise PerformanceOrchestrationError(
+            "performance_source_id_required", "Metric source requires an id."
+        )
     return {
         "id": source_id[:120],
-        "display_name": str(item.get("display_name") or item.get("name") or _label(source_id))[:160],
-        "department": str(item.get("department") or item.get("department_slug") or "analytics")[:160],
-        "department_name": str(item.get("department_name") or _label(str(item.get("department") or "analytics")))[:255],
-        "department_type": str(item.get("department_type") or item.get("department") or "analytics")[:64],
+        "display_name": str(item.get("display_name") or item.get("name") or _label(source_id))[
+            :160
+        ],
+        "department": str(item.get("department") or item.get("department_slug") or "analytics")[
+            :160
+        ],
+        "department_name": str(
+            item.get("department_name") or _label(str(item.get("department") or "analytics"))
+        )[:255],
+        "department_type": str(
+            item.get("department_type") or item.get("department") or "analytics"
+        )[:64],
         "required_connector": str(item.get("required_connector") or "")[:160],
         "tool_id": str(item.get("tool_id") or "")[:160],
         "metrics": [str(value)[:160] for value in list(item.get("metrics") or [])],
         "required": bool(item.get("required", True)),
         "priority": str(item.get("priority") or "normal")[:16],
-        "sample_metrics": sanitize_outbox_payload(item.get("sample_metrics") or item.get("metric_values") or {}),
+        "sample_metrics": sanitize_outbox_payload(
+            item.get("sample_metrics") or item.get("metric_values") or {}
+        ),
         "metadata": sanitize_outbox_payload(item.get("metadata") or {}),
     }
 
@@ -706,17 +809,23 @@ def _program_for_whiteboard(whiteboard: WorkWhiteboard) -> CompanyProgram | None
     for program_id in candidates:
         if not program_id:
             continue
-        program = CompanyProgram.objects.filter(
-            organization=whiteboard.organization,
-            company=whiteboard.company,
-            id=program_id,
-        ).select_related("installation", "installation__pack_release").first()
+        program = (
+            CompanyProgram.objects.filter(
+                organization=whiteboard.organization,
+                company=whiteboard.company,
+                id=program_id,
+            )
+            .select_related("installation", "installation__pack_release")
+            .first()
+        )
         if program is not None:
             return program
     return None
 
 
-def _policies_from_installation(installation: CompanyOperatingModelInstallation | None) -> list[dict[str, Any]]:
+def _policies_from_installation(
+    installation: CompanyOperatingModelInstallation | None,
+) -> list[dict[str, Any]]:
     if installation is None:
         return []
     sources = [
@@ -765,7 +874,7 @@ def _ensure_review_start_allowed(*, whiteboard: WorkWhiteboard, policy: dict[str
     statuses = set(required_status if isinstance(required_status, list) else [required_status])
     if whiteboard.status in statuses:
         return
-    deployment_status = _deployment_status(whiteboard)
+    deployment_status = _deployment_status(whiteboard, policy=policy)
     if deployment_status in DEPLOYMENT_READY_STATUSES:
         return
     raise PerformanceOrchestrationError(
@@ -775,7 +884,7 @@ def _ensure_review_start_allowed(*, whiteboard: WorkWhiteboard, policy: dict[str
     )
 
 
-def _deployment_status(whiteboard: WorkWhiteboard) -> str:
+def _deployment_status(whiteboard: WorkWhiteboard, *, policy: dict[str, Any] | None = None) -> str:
     projection = StateProjection.objects.filter(
         organization=whiteboard.organization,
         company=whiteboard.company,
@@ -784,7 +893,122 @@ def _deployment_status(whiteboard: WorkWhiteboard) -> str:
     ).first()
     if projection is None or not isinstance(projection.json_state, dict):
         return ""
-    return str(projection.json_state.get("status") or "")
+    state = projection.json_state
+    status = str(state.get("status") or "")
+    channels = [item for item in list(state.get("channels") or []) if isinstance(item, dict)]
+    if not channels or not any(_is_deployment_evidence_channel(item) for item in channels):
+        return status
+    if any(
+        _has_qualifying_deployment_evidence(item, state=state, policy=policy or {})
+        for item in channels
+    ):
+        return status
+    return ""
+
+
+def _is_deployment_evidence_channel(channel: dict[str, Any]) -> bool:
+    return str(channel.get("tool_id") or "").strip() in DEPLOYMENT_EVIDENCE_TOOL_IDS
+
+
+def _has_qualifying_deployment_evidence(
+    channel: dict[str, Any],
+    *,
+    state: dict[str, Any],
+    policy: dict[str, Any],
+) -> bool:
+    if not _is_deployment_evidence_channel(channel):
+        return False
+    if str(channel.get("status") or "") != "executed":
+        return False
+    receipt = _dict_or_empty(channel.get("receipt"))
+    result = _dict_or_empty(receipt.get("result"))
+    if (
+        str(result.get("status") or "") == "accepted"
+        and str(result.get("evidence_mode") or "") == "provider_publish"
+    ):
+        return True
+    if (
+        str(result.get("status") or "") == "recorded"
+        and str(result.get("evidence_mode") or "") == "manual_publish"
+    ):
+        return _manual_publish_evidence_allowed(channel=channel, state=state, policy=policy)
+    if (
+        str(result.get("status") or "") == "accepted"
+        and str(result.get("evidence_mode") or "") == "provider_send"
+    ):
+        return True
+    if (
+        str(result.get("status") or "") == "accepted"
+        and str(result.get("evidence_mode") or "") == "web_automation"
+    ):
+        return _web_automation_evidence_allowed(channel=channel, state=state, policy=policy)
+    sandbox_status = str(result.get("status") or "")
+    sandbox_evidence = str(result.get("evidence_mode") or "") == "sandbox" or str(
+        result.get("mode") or ""
+    ) in {
+        "dry_run",
+        "sandbox",
+    }
+    if sandbox_status in {"dry_run", "captured", "accepted"} and sandbox_evidence:
+        return _sandbox_evidence_allowed(channel=channel, state=state, policy=policy)
+    return False
+
+
+def _web_automation_evidence_allowed(
+    *,
+    channel: dict[str, Any],
+    state: dict[str, Any],
+    policy: dict[str, Any],
+) -> bool:
+    if bool(policy.get("allow_web_automation_deployment_evidence", False)):
+        return True
+    if bool(channel.get("allow_web_automation_evidence", False)):
+        return True
+    deployment_policy = _dict_or_empty(state.get("policy"))
+    for item in list(deployment_policy.get("channels") or []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id") or "") == str(channel.get("id") or ""):
+            return bool(item.get("allow_web_automation_evidence", False))
+    return False
+
+
+def _manual_publish_evidence_allowed(
+    *,
+    channel: dict[str, Any],
+    state: dict[str, Any],
+    policy: dict[str, Any],
+) -> bool:
+    if bool(policy.get("allow_manual_publish_deployment_evidence", False)):
+        return True
+    if bool(channel.get("allow_manual_publish_evidence", False)):
+        return True
+    deployment_policy = _dict_or_empty(state.get("policy"))
+    for item in list(deployment_policy.get("channels") or []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id") or "") == str(channel.get("id") or ""):
+            return bool(item.get("allow_manual_publish_evidence", False))
+    return False
+
+
+def _sandbox_evidence_allowed(
+    *,
+    channel: dict[str, Any],
+    state: dict[str, Any],
+    policy: dict[str, Any],
+) -> bool:
+    if bool(policy.get("allow_sandbox_deployment_evidence", False)):
+        return True
+    if bool(channel.get("allow_sandbox_evidence", False)):
+        return True
+    deployment_policy = _dict_or_empty(state.get("policy"))
+    for item in list(deployment_policy.get("channels") or []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id") or "") == str(channel.get("id") or ""):
+            return bool(item.get("allow_sandbox_evidence", False))
+    return False
 
 
 def _readiness_for_source(*, whiteboard: WorkWhiteboard, source: dict[str, Any]) -> dict[str, Any]:
@@ -872,7 +1096,11 @@ def _connector_status_available(item: dict[str, Any]) -> bool:
 def _tool_available(*, company: Graph, tool_id: str) -> bool:
     if not tool_id:
         return False
-    for installation in CompanyOperatingModelInstallation.objects.filter(company=company, status="active"):
+    if tool_id in DEPLOYMENT_EVIDENCE_TOOL_IDS:
+        return True
+    for installation in CompanyOperatingModelInstallation.objects.filter(
+        company=company, status="active"
+    ):
         try:
             definition = load_pack_definition(installation.pack_id)
         except OperatingModelPackError:
@@ -903,6 +1131,8 @@ def _mark_source_blocked(
         company=whiteboard.company,
         actor=user,
         signal_type="manual",
+        signal_kind="capability_gap",
+        domain_context="performance",
         source="performance_orchestration",
         external_key=_performance_key(
             whiteboard=whiteboard,
@@ -970,8 +1200,13 @@ def _blocked_department(
     policy: dict[str, Any],
     source: dict[str, Any],
 ) -> DepartmentRegistry:
-    blocked = policy.get("on_blocked") if isinstance(policy.get("on_blocked"), dict) else {}
-    slug = str(blocked.get("route_to_department") or blocked.get("route_to") or source.get("department") or "analytics")
+    blocked = _dict_or_empty(policy.get("on_blocked"))
+    slug = str(
+        blocked.get("route_to_department")
+        or blocked.get("route_to")
+        or source.get("department")
+        or "analytics"
+    )
     name = str(source.get("department_name") or _label(slug))
     return register_department(
         organization=whiteboard.organization,
@@ -996,6 +1231,8 @@ def _optimization_signal(
         company=whiteboard.company,
         actor=user,
         signal_type="manual",
+        signal_kind="metric_change",
+        domain_context="performance",
         source="performance_orchestration",
         external_key=_performance_key(
             whiteboard=whiteboard,
@@ -1003,7 +1240,9 @@ def _optimization_signal(
             suffix=f"optimization-signal:{evaluation.id}:{condition}",
         ),
         title=str(rule.get("signal_title") or "Performance optimization signal")[:255],
-        summary=str(rule.get("signal_summary") or f"Performance condition matched: {condition}")[:2000],
+        summary=str(rule.get("signal_summary") or f"Performance condition matched: {condition}")[
+            :2000
+        ],
         metadata={
             "whiteboard_id": str(whiteboard.id),
             "policy_id": policy.get("policy_id"),
@@ -1015,19 +1254,38 @@ def _optimization_signal(
 
 def _performance_graph_version(*, company: Graph, policy_id: str) -> GraphVersion:
     key = f"performance:{policy_id}"[:255]
-    existing = GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first()
+    existing = cast(
+        GraphVersion | None,
+        GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first(),
+    )
     if existing is not None:
         return existing
-    version = (GraphVersion.objects.filter(graph=company).aggregate(max_version=Max("version"))["max_version"] or 0) + 1
+    version = (
+        GraphVersion.objects.filter(graph=company).aggregate(max_version=Max("version"))[
+            "max_version"
+        ]
+        or 0
+    ) + 1
     try:
-        return GraphVersion.objects.create(
-            graph=company,
-            version=version,
-            external_idempotency_key=key,
-            graph_json={"nodes": [], "edges": [], "source": "performance_orchestration", "policy_id": policy_id},
+        return cast(
+            GraphVersion,
+            GraphVersion.objects.create(
+                graph=company,
+                version=version,
+                external_idempotency_key=key,
+                graph_json={
+                    "nodes": [],
+                    "edges": [],
+                    "source": "performance_orchestration",
+                    "policy_id": policy_id,
+                },
+            ),
         )
     except IntegrityError:
-        existing = GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first()
+        existing = cast(
+            GraphVersion | None,
+            GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first(),
+        )
         if existing is not None:
             return existing
         raise
@@ -1044,21 +1302,16 @@ def _performance_run(
     source_id = str(source["id"])
     graph_version = _performance_graph_version(company=whiteboard.company, policy_id=policy_id)
     key = _performance_key(whiteboard=whiteboard, policy=policy, suffix=f"run:{source_id}")
-    run = Run.objects.filter(
-        organization=whiteboard.organization,
-        graph_version__graph=whiteboard.company,
-        input_json__idempotency_key=key,
-    ).first()
-    if run is not None:
-        return run
-    return Run.objects.create(
+    now = timezone.now()
+    return get_or_create_backend_operation_run(
         owner=user,
         organization=whiteboard.organization,
         thread_id=whiteboard.communication_thread_id,
         graph_version=graph_version,
+        idempotency_key=key,
         status="succeeded",
-        started_at=timezone.now(),
-        ended_at=timezone.now(),
+        started_at=now,
+        ended_at=now,
         input_json={
             "idempotency_key": key,
             "whiteboard_id": str(whiteboard.id),
@@ -1067,7 +1320,11 @@ def _performance_run(
             "pack_id": policy.get("pack_id"),
             "metric_source_id": source_id,
         },
-        output_json={"whiteboard_id": str(whiteboard.id), "policy_id": policy_id, "metric_source_id": source_id},
+        output_json={
+            "whiteboard_id": str(whiteboard.id),
+            "policy_id": policy_id,
+            "metric_source_id": source_id,
+        },
         dispatch_graph_json=graph_version.graph_json,
     )
 
@@ -1129,7 +1386,13 @@ def _assemble_performance_report(
             "summary": {
                 "status": state.get("status"),
                 "source_count": len(list(state.get("sources") or [])),
-                "blocked_source_count": len([item for item in list(state.get("sources") or []) if item.get("status") == "blocked"]),
+                "blocked_source_count": len(
+                    [
+                        item
+                        for item in list(state.get("sources") or [])
+                        if item.get("status") == "blocked"
+                    ]
+                ),
             },
             "metric_snapshot": {
                 "id": str(snapshot.id),
@@ -1156,7 +1419,9 @@ def _assemble_performance_report(
     )
 
 
-def _metric_snapshot_from_state(*, whiteboard: WorkWhiteboard, state: dict[str, Any]) -> MetricSnapshot | None:
+def _metric_snapshot_from_state(
+    *, whiteboard: WorkWhiteboard, state: dict[str, Any]
+) -> MetricSnapshot | None:
     snapshot_id = str(state.get("metric_snapshot_id") or "")
     if not snapshot_id:
         return None
@@ -1181,7 +1446,7 @@ def _source_payload(
     receipt: dict[str, Any] | None = None,
     include_internal: bool = True,
 ) -> dict[str, Any]:
-    item = {
+    item: dict[str, Any] = {
         "id": str(source["id"]),
         "display_name": str(source.get("display_name") or _label(str(source["id"]))),
         "status": status,
@@ -1211,7 +1476,7 @@ def _source_payload(
 
 
 def _receipt_payload(receipt: dict[str, Any]) -> dict[str, Any]:
-    result = receipt.get("result") if isinstance(receipt.get("result"), dict) else {}
+    result = _dict_or_empty(receipt.get("result"))
     return sanitize_outbox_payload(
         {
             "tool_execution_id": receipt.get("tool_execution_id"),
@@ -1222,7 +1487,15 @@ def _receipt_payload(receipt: dict[str, Any]) -> dict[str, Any]:
             "result": {
                 "provider": result.get("provider"),
                 "mode": result.get("mode"),
+                "evidence_mode": result.get("evidence_mode"),
                 "status": result.get("status"),
+                "sanitized": result.get("sanitized") is not False,
+                "recipient_count": result.get("recipient_count"),
+                "recipient_domains": result.get("recipient_domains"),
+                "recipient_hashes": result.get("recipient_hashes"),
+                "allowlist_matched": result.get("allowlist_matched"),
+                "session_required": result.get("session_required"),
+                "session_status": result.get("session_status"),
             },
         }
     )
@@ -1241,7 +1514,9 @@ def _review_period(
         )
     if period_start is not None and period_end is not None:
         if period_end < period_start:
-            raise PerformanceOrchestrationError("invalid_period", "Period end cannot precede start.")
+            raise PerformanceOrchestrationError(
+                "invalid_period", "Period end cannot precede start."
+            )
         return {"period_start": period_start.isoformat(), "period_end": period_end.isoformat()}
     today = timezone.localdate()
     cadence = str(policy.get("cadence") or "weekly")
@@ -1260,7 +1535,7 @@ def _parse_date(value: str) -> date:
 
 
 def _source_metric_values(source: dict[str, Any]) -> dict[str, Any]:
-    values = source.get("sample_metrics") if isinstance(source.get("sample_metrics"), dict) else {}
+    values = _dict_or_empty(source.get("sample_metrics"))
     allowed = {str(item) for item in list(source.get("metrics") or [])}
     if not allowed:
         return sanitize_outbox_payload(values)
@@ -1427,7 +1702,11 @@ def _metric_sources(policy: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _evaluation_criteria(policy: dict[str, Any]) -> list[dict[str, Any]]:
-    return [item for item in list(policy.get("evaluation_criteria") or []) if isinstance(item, dict) and item.get("key")]
+    return [
+        item
+        for item in list(policy.get("evaluation_criteria") or [])
+        if isinstance(item, dict) and item.get("key")
+    ]
 
 
 def _routing_rules(policy: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1442,7 +1721,14 @@ def _upsert_performance_projection(
 ) -> StateProjection:
     existing = _performance_projection(whiteboard)
     merged = {
-        **((existing.json_state if existing is not None and isinstance(existing.json_state, dict) else {}) or {}),
+        **(
+            (
+                existing.json_state
+                if existing is not None and isinstance(existing.json_state, dict)
+                else {}
+            )
+            or {}
+        ),
         **sanitize_outbox_payload(state),
         "schema_version": PERFORMANCE_SCHEMA_VERSION,
         "whiteboard_id": str(whiteboard.id),
@@ -1457,7 +1743,9 @@ def _upsert_performance_projection(
         projection_type=_performance_projection_type(whiteboard),
         defaults={
             "display_label": "Whiteboard performance",
-            "source_refs_json": [{"whiteboard_id": str(whiteboard.id), "policy_id": str(policy["policy_id"])}],
+            "source_refs_json": [
+                {"whiteboard_id": str(whiteboard.id), "policy_id": str(policy["policy_id"])}
+            ],
             "json_state": merged,
             "markdown_summary": "Whiteboard performance state from configured policy.",
             "generated_by": "system",
@@ -1493,6 +1781,13 @@ def _policy_snapshot(policy: dict[str, Any]) -> dict[str, Any]:
             "source_policy_id": policy.get("source_policy_id"),
             "pack_id": policy.get("pack_id"),
             "required_whiteboard_status": policy.get("required_whiteboard_status"),
+            "allow_sandbox_deployment_evidence": policy.get("allow_sandbox_deployment_evidence"),
+            "allow_web_automation_deployment_evidence": policy.get(
+                "allow_web_automation_deployment_evidence"
+            ),
+            "allow_manual_publish_deployment_evidence": policy.get(
+                "allow_manual_publish_deployment_evidence"
+            ),
             "cadence": policy.get("cadence"),
             "metric_sources": list(policy.get("metric_sources") or []),
             "evaluation_criteria": list(policy.get("evaluation_criteria") or []),
@@ -1523,7 +1818,9 @@ def _current_state_payload(*, state: dict[str, Any], include_internal: bool) -> 
     return sanitize_outbox_payload(payload)
 
 
-def _allowed_actions(*, whiteboard: WorkWhiteboard, state: dict[str, Any], policy: dict[str, Any]) -> list[str]:
+def _allowed_actions(
+    *, whiteboard: WorkWhiteboard, state: dict[str, Any], policy: dict[str, Any]
+) -> list[str]:
     actions: list[str] = []
     if not state.get("sources"):
         actions.append("start")
@@ -1531,7 +1828,7 @@ def _allowed_actions(*, whiteboard: WorkWhiteboard, state: dict[str, Any], polic
         actions.append("report")
     if state.get("metric_snapshot_id") and not state.get("evaluation_id"):
         actions.append("evaluate")
-    if not actions and _deployment_status(whiteboard) in DEPLOYMENT_READY_STATUSES:
+    if not actions and _deployment_status(whiteboard, policy=policy) in DEPLOYMENT_READY_STATUSES:
         actions.append("start")
     if not actions and not policy.get("required_whiteboard_status"):
         actions.append("start")

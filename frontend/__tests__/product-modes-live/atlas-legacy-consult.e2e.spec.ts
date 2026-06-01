@@ -98,7 +98,11 @@ test.describe("Live ATLAS Legacy consulting product mode", () => {
       fixture.installedPacks.filter((pack) => pack.role === "addon").length,
     );
 
-    const { launch, completedRun, attempts: liveRunAttempts } = await withLiveLlmExecutionLock(testInfo, async () => {
+    const {
+      launch,
+      completedRun,
+      attempts: liveRunAttempts,
+    } = await withLiveLlmExecutionLock(testInfo, async () => {
       const launchRun = await launchAndWaitForLiveOperationFromUi(
         page,
         request,
@@ -147,7 +151,13 @@ test.describe("Live ATLAS Legacy consulting product mode", () => {
     expect(runOutputText).toMatch(/approval|checkpoint|execute|execution|step/i);
     expect(runOutputText).toMatch(/missing|capabilit|tool|connector/i);
 
-    const report = await createLiveReportFromCompletedRun(request, fixture.accessToken, fixture, completedRun, testInfo);
+    const report = await createLiveReportFromCompletedRun(
+      request,
+      fixture.accessToken,
+      fixture,
+      completedRun,
+      testInfo,
+    );
     const reportArtifactBeforeDelivery = report.reportRun.artifact;
     expect(reportArtifactBeforeDelivery).toBeTruthy();
     if (!reportArtifactBeforeDelivery) {
@@ -199,10 +209,12 @@ test.describe("Live ATLAS Legacy consulting product mode", () => {
 
     expect(emailSandboxReceipt.company_id).toBe(fixture.companyId);
     expect(emailSandboxReceipt.operation_id).toBe(completedRun.id);
-    expect(emailSandboxReceipt.tool_id).toBe("email_service_connector");
-    expect(emailSandboxReceipt.result?.mode).toBe("sandbox");
-    expect(emailSandboxReceipt.result?.status).toBe("captured");
+    expect(emailSandboxReceipt.tool_id).toBe("email.send_dry_run");
+    expect(emailSandboxReceipt.result?.mode).toBe("dry_run");
+    expect(emailSandboxReceipt.result?.evidence_mode).toBe("sandbox");
+    expect(emailSandboxReceipt.result?.status).toBe("dry_run");
     expect(emailSandboxReceipt.result?.recipient_domains).toEqual(["legacy.example"]);
+    expect(emailSandboxReceipt.result?.recipient_hashes?.[0]).toMatch(/^sha256:/);
     expect(JSON.stringify(emailSandboxReceipt.result)).not.toMatch(/owner@legacy\.example|Private draft body/i);
     expect(reportBuilderReceipt.company_id).toBe(fixture.companyId);
     expect(reportBuilderReceipt.operation_id).toBe(completedRun.id);
@@ -426,10 +438,7 @@ async function expectNoFunctionCompanies(page: Page): Promise<void> {
   }
 }
 
-function assertReviewBoardSection(
-  label: string,
-  section: AtlasLegacyConsultQualityScorecard["atlas"],
-): void {
+function assertReviewBoardSection(label: string, section: AtlasLegacyConsultQualityScorecard["atlas"]): void {
   expect(section.average).toBeGreaterThanOrEqual(1);
   expect(section.average).toBeLessThanOrEqual(5);
   expect(section.scores.length).toBeGreaterThanOrEqual(6);
@@ -463,9 +472,12 @@ async function expectLegacyOwnerCanReadDeliverableWithoutInternalNotes(
   request: APIRequestContext,
   fixture: LiveAtlasLegacyConsultFixture,
 ): Promise<void> {
-  const engagementResponse = await request.get(`${API_BASE_URL}/api/service-engagements/${fixture.serviceEngagement.id}`, {
-    headers: authHeaders(fixture.legacyOwnerAccessToken),
-  });
+  const engagementResponse = await request.get(
+    `${API_BASE_URL}/api/service-engagements/${fixture.serviceEngagement.id}`,
+    {
+      headers: authHeaders(fixture.legacyOwnerAccessToken),
+    },
+  );
   expect(engagementResponse.ok()).toBe(true);
   const engagementBody = (await engagementResponse.json()) as { data: { engagement: Record<string, unknown> } };
   expect(engagementBody.data.engagement.company_id).toBe(fixture.companyId);
@@ -494,11 +506,7 @@ async function validateAtlasLegacyCommunicationScenario(
   signalId: string,
   testInfo: TestInfo,
 ): Promise<{ threadId: string }> {
-  const keyPrefix = [
-    liveProductModeRunNamespace(testInfo),
-    fixture.companyId,
-    "communication",
-  ].join(":");
+  const keyPrefix = [liveProductModeRunNamespace(testInfo), fixture.companyId, "communication"].join(":");
   const threadResponse = await request.post(`${API_BASE_URL}/api/communication/threads`, {
     headers: authHeaders(fixture.accessToken, `${keyPrefix}:thread`),
     data: {
@@ -536,8 +544,7 @@ async function validateAtlasLegacyCommunicationScenario(
     headers: authHeaders(fixture.accessToken, `${keyPrefix}:atlas-reply`),
     data: {
       message_kind: "response",
-      body:
-        "WhatsApp is recommended as a manual first step. Automation requires connecting a WhatsApp/Twilio/Brevo capability.",
+      body: "WhatsApp is recommended as a manual first step. Automation requires connecting a WhatsApp/Twilio/Brevo capability.",
       body_format: "markdown",
       visibility: "customer",
       metadata: {},
@@ -550,8 +557,7 @@ async function validateAtlasLegacyCommunicationScenario(
     headers: authHeaders(fixture.accessToken, `${keyPrefix}:internal-note`),
     data: {
       message_kind: "agent_observation",
-      body:
-        "Execution remains blocked until WhatsApp provider is configured. Keep missing-capability recommendation open.",
+      body: "Execution remains blocked until WhatsApp provider is configured. Keep missing-capability recommendation open.",
       body_format: "markdown",
       visibility: "internal",
       metadata: {},

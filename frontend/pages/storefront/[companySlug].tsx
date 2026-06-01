@@ -106,7 +106,10 @@ export default function StorefrontPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          dispatch({ type: "loadFailed", error: err instanceof Error ? err.message : "Storefront could not be loaded." });
+          dispatch({
+            type: "loadFailed",
+            error: err instanceof Error ? err.message : "Storefront could not be loaded.",
+          });
         }
       }
     };
@@ -161,7 +164,10 @@ export default function StorefrontPage() {
       );
       window.location.href = result.checkout_url;
     } catch (err) {
-      dispatch({ type: "checkoutFailed", error: err instanceof Error ? err.message : "Checkout could not be started." });
+      dispatch({
+        type: "checkoutFailed",
+        error: err instanceof Error ? err.message : "Checkout could not be started.",
+      });
     }
   };
 

@@ -1,4 +1,4 @@
-import { companyBlueprintsApi, credentialsApi, graphsApi, runsApi, approvalsApi } from "@/lib/api";
+import { approvalsApi, companiesApi, companyBlueprintsApi, credentialsApi, runsApi } from "@/lib/api";
 import {
   buildCompanyGraphJson,
   buildCompanyProfile,
@@ -24,11 +24,13 @@ function sortOperations<T extends { startedAt: string | null }>(operations: T[])
 export const companyRepository = {
   list: async (): Promise<CompanyVM[]> => {
     const [companies, operations, approvals] = await Promise.all([
-      graphsApi.list(),
+      companiesApi.list(),
       runsApi.list(),
       approvalsApi.list("pending"),
     ]);
-    const setupVersions = await Promise.all(companies.map((company) => graphsApi.getLatestVersion(company.id)));
+    const setupVersions = await Promise.all(
+      companies.map((company) => companiesApi.getLatestOperatingModelVersion(company.id)),
+    );
 
     return companies.map((company, index) => {
       const companyOperations = operations
@@ -43,8 +45,8 @@ export const companyRepository = {
 
   getWorkspace: async (companyId: string): Promise<CompanyWorkspaceVM> => {
     const [company, setupVersion, operations, approvals] = await Promise.all([
-      graphsApi.get(companyId),
-      graphsApi.getLatestVersion(companyId),
+      companiesApi.get(companyId),
+      companiesApi.getLatestOperatingModelVersion(companyId),
       runsApi.list(),
       approvalsApi.list("pending"),
     ]);
@@ -65,7 +67,7 @@ export const companyRepository = {
     });
     const detailedOperations = await Promise.all(detailedOperationIds.map((operationId) => runsApi.get(operationId)));
     const detailById = new Map(
-      detailedOperations.map((operation) => [operation.id, toOperationVM(operation, setupVersion?.graph_json ?? null)]),
+      detailedOperations.map((operation) => [operation.id, toOperationVM(operation, setupVersion?.model_json ?? null)]),
     );
     const translatedOperations = sortOperations(
       companyOperationList.slice(0, 6).map((operation) => detailById.get(operation.id) ?? toOperationListVM(operation)),
@@ -121,12 +123,12 @@ export const companyRepository = {
       };
     }
 
-    const company = await graphsApi.create({
+    const company = await companiesApi.create({
       name: profile.companyName,
       description: profile.objective,
     });
-    const setup = await graphsApi.createVersion(company.id, {
-      graph_json: buildCompanyGraphJson(profile),
+    const setup = await companiesApi.createOperatingModelVersion(company.id, {
+      model_json: buildCompanyGraphJson(profile),
     });
     if (!setup.id) {
       throw new Error("Graph version creation did not return an id.");
@@ -144,7 +146,7 @@ export const companyRepository = {
       input_json: buildOperationInput(profile, input.operationBrief),
     });
 
-    return { companyId: company.id, firstOperation: toOperationVM(operation, setup.graph_json) };
+    return { companyId: company.id, firstOperation: toOperationVM(operation, setup.model_json) };
   },
 
   saveSettings: async (input: CompanyUpdateInputVM): Promise<void> => {
@@ -156,12 +158,12 @@ export const companyRepository = {
       companyStatus: input.paused ? "Paused by operator" : "Ready to launch",
     });
 
-    await graphsApi.update(input.companyId, {
+    await companiesApi.update(input.companyId, {
       name: nextProfile.companyName,
       description: nextProfile.objective,
     });
-    await graphsApi.createVersion(input.companyId, {
-      graph_json: buildCompanyGraphJson(nextProfile),
+    await companiesApi.createOperatingModelVersion(input.companyId, {
+      model_json: buildCompanyGraphJson(nextProfile),
     });
   },
 

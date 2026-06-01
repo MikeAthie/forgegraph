@@ -139,7 +139,13 @@ function approvalsPageReducer(state: ApprovalsPageState, action: ApprovalsPageAc
   }
 }
 
-function ApprovalInspector({ approval, impact }: { approval: ApprovalVM | null; impact: ReturnType<typeof estimateImpact> }) {
+function ApprovalInspector({
+  approval,
+  impact,
+}: {
+  approval: ApprovalVM | null;
+  impact: ReturnType<typeof estimateImpact>;
+}) {
   if (!approval) {
     return null;
   }
@@ -268,7 +274,12 @@ function ApprovalQueuePanel({
         items={approvals}
         selectedId={selectedApproval.id}
         onSelect={onSelectApproval}
-        empty={<EmptyBlock title="No items in this filter" description="Try another approval state to review earlier approvals." />}
+        empty={
+          <EmptyBlock
+            title="No items in this filter"
+            description="Try another approval state to review earlier approvals."
+          />
+        }
       >
         {(approval, { selected }) => {
           const approvalImpact = estimateImpact(approval);
@@ -343,7 +354,10 @@ export default function ApprovalsPage() {
   }, [selectedApproval?.id]);
 
   useEffect(() => {
-    dispatchApprovals({ type: "decision-state", decisionState: approvalStatusToDecisionState(selectedApproval?.status) });
+    dispatchApprovals({
+      type: "decision-state",
+      decisionState: approvalStatusToDecisionState(selectedApproval?.status),
+    });
   }, [selectedApproval?.id, selectedApproval?.status]);
 
   useRunLiveUpdates(selectedApproval?.operationId, async () => {

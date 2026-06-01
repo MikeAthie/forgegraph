@@ -52,7 +52,21 @@ class CheckpointContext:
 
     @classmethod
     def from_run(cls, run: Run) -> CheckpointContext:
-        snapshot = get_snapshot(run.id)
+        try:
+            snapshot = get_snapshot(run.id)
+        except Exception:
+            logger.warning(
+                "run_checkpoint_snapshot_unavailable",
+                exc_info=True,
+                extra={
+                    "run_id": str(run.id),
+                    "trace_id": run.trace_id,
+                    "status": run.status,
+                    "recovery_policy": run.recovery_policy,
+                    "engine_instance_id": run.engine_instance_id,
+                },
+            )
+            return cls(checkpoint_available=False)
         if snapshot is None:
             return cls(checkpoint_available=False)
         return cls(

@@ -139,13 +139,7 @@ interface PortTypeIndicatorProps {
 /**
  * Type indicator for node ports (input/output handles)
  */
-function PortTypeIndicator({
-  type,
-  isInput = true,
-  isRequired = false,
-  portName,
-  className,
-}: PortTypeIndicatorProps) {
+function PortTypeIndicator({ type, isInput = true, isRequired = false, portName, className }: PortTypeIndicatorProps) {
   const typeInfo = getDataTypeInfo(type);
   const tooltipText = `${portName ? `${portName}: ` : ""}${typeInfo.label}${isRequired ? " (required)" : ""}`;
 

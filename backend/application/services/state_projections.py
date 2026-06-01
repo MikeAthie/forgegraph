@@ -259,6 +259,8 @@ def _signal_ref(signal: CompanySignal) -> dict[str, Any]:
     return {
         "id": str(signal.id),
         "signal_type": signal.signal_type,
+        "signal_kind": signal.signal_kind,
+        "domain_context": signal.domain_context,
         "title": signal.title,
         "summary": signal.summary,
         "status": signal.status,

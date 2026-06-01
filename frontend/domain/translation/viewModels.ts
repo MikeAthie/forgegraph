@@ -176,6 +176,7 @@ export type ApprovalVM = {
   result: Record<string, unknown> | null;
   createdAt: string;
   resolvedAt: string | null;
+  resolutionMode: "resume_run" | "direct" | string;
   estimatedCost: number;
   risk: ApprovalRiskVM;
   consequence: string;

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any
+from typing import Any, cast
 
 from django.db import IntegrityError, transaction
 from django.db.models import Max, QuerySet
@@ -16,6 +16,14 @@ from application.services.company_ops import create_company_signal
 from application.services.domain_event_outbox import sanitize_outbox_payload
 from application.services.rbac import has_min_role
 from application.services.routing import register_department, route_event_to_department
+from application.services.task_lifecycle import (
+    complete_backend_lifecycle_task,
+    complete_backend_operation_run,
+    create_backend_approval_task,
+    get_or_create_backend_lifecycle_task,
+    get_or_create_backend_operation_run,
+)
+from application.services.work_whiteboards import work_status_for_legacy_status
 from infrastructure.orm.models import (
     ApprovalTask,
     Asset,
@@ -58,6 +66,10 @@ class WorkstreamGateError(ValueError):
         super().__init__(message)
 
 
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def load_phase_definition(
     *,
     whiteboard: WorkWhiteboard,
@@ -78,7 +90,9 @@ def load_phase_definition(
             return _normalize_definition(
                 sanitize_outbox_payload(candidate),
                 phase_id=phase_id,
-                source_policy_id=str(candidate.get("source_policy_id") or candidate.get("pack_id") or ""),
+                source_policy_id=str(
+                    candidate.get("source_policy_id") or candidate.get("pack_id") or ""
+                ),
                 pack_id=str(candidate.get("pack_id") or ""),
             )
     raise WorkstreamGateError(
@@ -100,7 +114,9 @@ def list_available_phase_definitions(*, whiteboard: WorkWhiteboard) -> list[dict
                 _normalize_definition(
                     sanitize_outbox_payload(candidate),
                     phase_id=phase_id,
-                    source_policy_id=str(candidate.get("source_policy_id") or candidate.get("pack_id") or ""),
+                    source_policy_id=str(
+                        candidate.get("source_policy_id") or candidate.get("pack_id") or ""
+                    ),
                     pack_id=str(candidate.get("pack_id") or ""),
                 )
             )
@@ -109,7 +125,7 @@ def list_available_phase_definitions(*, whiteboard: WorkWhiteboard) -> list[dict
             continue
     for projection in _phase_projections_for_whiteboard(whiteboard):
         state = projection.json_state if isinstance(projection.json_state, dict) else {}
-        definition = state.get("definition") if isinstance(state.get("definition"), dict) else {}
+        definition = _dict_or_empty(state.get("definition"))
         phase_id = str(definition.get("phase_id") or state.get("phase_id") or "")
         if phase_id and phase_id not in seen:
             try:
@@ -136,7 +152,11 @@ def list_whiteboard_phase_contracts(
     internal = include_internal or _can_manage_phase(user=user, whiteboard=whiteboard)
     contracts: list[dict[str, Any]] = []
     for definition in list_available_phase_definitions(whiteboard=whiteboard):
-        contracts.append(_phase_contract(whiteboard=whiteboard, definition=definition, user=user, include_internal=internal))
+        contracts.append(
+            _phase_contract(
+                whiteboard=whiteboard, definition=definition, user=user, include_internal=internal
+            )
+        )
     return contracts
 
 
@@ -148,8 +168,12 @@ def get_phase_contract(
     definition: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not has_company_access(user, whiteboard.company, "viewer"):
-        raise WorkstreamGateError("permission_denied", "You do not have access to this whiteboard phase.")
-    resolved = load_phase_definition(whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+        raise WorkstreamGateError(
+            "permission_denied", "You do not have access to this whiteboard phase."
+        )
+    resolved = load_phase_definition(
+        whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
     return _phase_contract(
         whiteboard=whiteboard,
         definition=resolved,
@@ -168,20 +192,30 @@ def start_phase_for_whiteboard(
     """Start a pack-defined phase and create whiteboard-scoped workstreams."""
 
     _ensure_can_manage_phase(user=user, whiteboard=whiteboard)
-    resolved = load_phase_definition(whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    resolved = load_phase_definition(
+        whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
     phase_id = str(resolved["phase_id"])
     existing_projection = _phase_projection(whiteboard=whiteboard, phase_id=phase_id)
-    already_started = existing_projection is not None or _workstream_records(
-        whiteboard=whiteboard,
-        phase_id=phase_id,
-    ).exists()
+    already_started = (
+        existing_projection is not None
+        or _workstream_records(
+            whiteboard=whiteboard,
+            phase_id=phase_id,
+        ).exists()
+    )
     if not already_started:
         _validate_required_status(whiteboard=whiteboard, definition=resolved)
     with transaction.atomic():
         start_status = str(resolved.get("set_status_on_start") or "")
-        if not already_started and start_status in VALID_WHITEBOARD_STATUSES and whiteboard.status != start_status:
+        if (
+            not already_started
+            and start_status in VALID_WHITEBOARD_STATUSES
+            and whiteboard.status != start_status
+        ):
             whiteboard.status = start_status
-            whiteboard.save(update_fields=["status", "updated_at"])
+            whiteboard.work_status = work_status_for_legacy_status(start_status)
+            whiteboard.save(update_fields=["status", "work_status", "updated_at"])
         create_workstreams_from_definition(user=user, whiteboard=whiteboard, definition=resolved)
         existing_state = (
             existing_projection.json_state
@@ -194,11 +228,15 @@ def start_phase_for_whiteboard(
             state={
                 "status": "started",
                 "started_at": existing_state.get("started_at") or timezone.now().isoformat(),
-                "workstreams": _workstream_state(whiteboard=whiteboard, definition=resolved, include_internal=True),
+                "workstreams": _workstream_state(
+                    whiteboard=whiteboard, definition=resolved, include_internal=True
+                ),
             },
         )
     _refresh_whiteboard_snapshot(whiteboard)
-    return _phase_contract(whiteboard=whiteboard, definition=resolved, user=user, include_internal=True)
+    return _phase_contract(
+        whiteboard=whiteboard, definition=resolved, user=user, include_internal=True
+    )
 
 
 def create_workstreams_from_definition(
@@ -247,10 +285,15 @@ def create_workstreams_from_definition(
             communication_message=whiteboard.source_message,
             service_engagement=whiteboard.service_engagement,
             operation=run,
-            reason=str(workstream.get("reason") or f"Complete workstream: {workstream.get('name') or workstream_id}."),
+            reason=str(
+                workstream.get("reason")
+                or f"Complete workstream: {workstream.get('name') or workstream_id}."
+            ),
             status="queued",
             priority=str(workstream.get("priority") or "normal"),
-            idempotency_key=_phase_key(whiteboard=whiteboard, phase_id=phase_id, suffix=f"workstream:{workstream_id}"),
+            idempotency_key=_phase_key(
+                whiteboard=whiteboard, phase_id=phase_id, suffix=f"workstream:{workstream_id}"
+            ),
             metadata={
                 "whiteboard_id": str(whiteboard.id),
                 "phase_id": phase_id,
@@ -276,8 +319,12 @@ def list_phase_workstreams(
     definition: dict[str, Any] | None = None,
     include_internal: bool = True,
 ) -> list[dict[str, Any]]:
-    resolved = load_phase_definition(whiteboard=whiteboard, phase_id=phase_id, definition=definition)
-    return _workstream_state(whiteboard=whiteboard, definition=resolved, include_internal=include_internal)
+    resolved = load_phase_definition(
+        whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
+    return _workstream_state(
+        whiteboard=whiteboard, definition=resolved, include_internal=include_internal
+    )
 
 
 def complete_workstream(
@@ -292,13 +339,21 @@ def complete_workstream(
     """Mark one whiteboard-scoped phase workstream complete."""
 
     _ensure_can_manage_phase(user=user, whiteboard=whiteboard)
-    resolved = load_phase_definition(whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    resolved = load_phase_definition(
+        whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
     workstream = _workstream_definition(resolved, workstream_id)
     if workstream is None:
-        raise WorkstreamGateError("unknown_workstream", "Phase workstream is not defined by the source policy.")
-    record = _workstream_record(whiteboard=whiteboard, phase_id=phase_id, workstream_id=workstream_id)
+        raise WorkstreamGateError(
+            "unknown_workstream", "Phase workstream is not defined by the source policy."
+        )
+    record = _workstream_record(
+        whiteboard=whiteboard, phase_id=phase_id, workstream_id=workstream_id
+    )
     if record is None:
-        raise WorkstreamGateError("workstream_not_found", "Phase workstream has not been started for this whiteboard.")
+        raise WorkstreamGateError(
+            "workstream_not_found", "Phase workstream has not been started for this whiteboard."
+        )
     with transaction.atomic():
         asset = _asset_for_record(record=record, whiteboard=whiteboard)
         if asset is None:
@@ -325,29 +380,25 @@ def complete_workstream(
             "canonical_asset_version_id": str(version.id),
         }
         asset.save(update_fields=["metadata_json", "updated_at"])
+        completed_at = timezone.now()
         record.status = "completed"
         record.metadata_json = {
             **(record.metadata_json or {}),
             "asset_id": str(asset.id),
             "asset_version_id": str(version.id),
-            "completed_at": timezone.now().isoformat(),
+            "completed_at": completed_at.isoformat(),
         }
         record.full_clean()
         record.save(update_fields=["status", "metadata_json", "updated_at"])
-        if record.task_lifecycle_id:
-            TaskLifecycleRecord.objects.filter(
-                id=record.task_lifecycle_id,
-                organization=whiteboard.organization,
-            ).update(status="completed", ended_at=timezone.now(), last_transition_at=timezone.now())
-        if record.operation_id:
-            Run.objects.filter(
-                id=record.operation_id,
-                organization=whiteboard.organization,
-                graph_version__graph=whiteboard.company,
-                input_json__whiteboard_id=str(whiteboard.id),
-            ).update(
-                status="succeeded",
-                ended_at=timezone.now(),
+        if record.task_lifecycle is not None:
+            complete_backend_lifecycle_task(
+                lifecycle_task=record.task_lifecycle,
+                ended_at=completed_at,
+            )
+        if record.operation is not None:
+            complete_backend_operation_run(
+                run=record.operation,
+                ended_at=completed_at,
                 output_json={
                     "whiteboard_id": str(whiteboard.id),
                     "phase_id": phase_id,
@@ -358,12 +409,21 @@ def complete_workstream(
         _upsert_phase_projection(
             whiteboard=whiteboard,
             definition=resolved,
-            state={"status": "in_progress", "workstreams": _workstream_state(whiteboard=whiteboard, definition=resolved, include_internal=True)},
+            state={
+                "status": "in_progress",
+                "workstreams": _workstream_state(
+                    whiteboard=whiteboard, definition=resolved, include_internal=True
+                ),
+            },
         )
     _refresh_whiteboard_snapshot(whiteboard)
-    refreshed = _workstream_record(whiteboard=whiteboard, phase_id=phase_id, workstream_id=workstream_id)
+    refreshed = _workstream_record(
+        whiteboard=whiteboard, phase_id=phase_id, workstream_id=workstream_id
+    )
     if refreshed is None:
-        raise WorkstreamGateError("workstream_not_found", "Completed workstream could not be reloaded.")
+        raise WorkstreamGateError(
+            "workstream_not_found", "Completed workstream could not be reloaded."
+        )
     return _workstream_payload(refreshed, include_internal=True)
 
 
@@ -377,17 +437,24 @@ def synthesize_phase_outputs(
     """Create a whiteboard-scoped synthesis artifact from completed required workstreams."""
 
     _ensure_can_manage_phase(user=user, whiteboard=whiteboard)
-    resolved = load_phase_definition(whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    resolved = load_phase_definition(
+        whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
     incomplete = [
         item
-        for item in _workstream_state(whiteboard=whiteboard, definition=resolved, include_internal=True)
+        for item in _workstream_state(
+            whiteboard=whiteboard, definition=resolved, include_internal=True
+        )
         if item.get("required") and item.get("status") != "completed"
     ]
     if incomplete:
         raise WorkstreamGateError(
             "workstreams_incomplete",
             "Phase synthesis requires all required workstreams to be completed.",
-            details=[{"workstream_id": item.get("id"), "status": item.get("status")} for item in incomplete],
+            details=[
+                {"workstream_id": item.get("id"), "status": item.get("status")}
+                for item in incomplete
+            ],
         )
     with transaction.atomic():
         asset = _get_or_create_asset(
@@ -408,7 +475,11 @@ def synthesize_phase_outputs(
             asset=asset,
             label="synthesis",
             content=content,
-            metadata={"whiteboard_id": str(whiteboard.id), "phase_id": phase_id, "artifact_type": "phase_synthesis"},
+            metadata={
+                "whiteboard_id": str(whiteboard.id),
+                "phase_id": phase_id,
+                "artifact_type": "phase_synthesis",
+            },
         )
         asset.metadata_json = {
             **(asset.metadata_json or {}),
@@ -426,7 +497,9 @@ def synthesize_phase_outputs(
                     "asset_version_id": str(version.id),
                     "created_at": version.created_at.isoformat(),
                 },
-                "workstreams": _workstream_state(whiteboard=whiteboard, definition=resolved, include_internal=True),
+                "workstreams": _workstream_state(
+                    whiteboard=whiteboard, definition=resolved, include_internal=True
+                ),
             },
             source_refs=[{"asset_id": str(asset.id), "asset_version_id": str(version.id)}],
             summary="Phase synthesis generated from completed workstreams.",
@@ -446,13 +519,17 @@ def evaluate_gate(
     """Evaluate a pack-defined gate without hardcoding criterion names."""
 
     _ensure_can_manage_phase(user=user, whiteboard=whiteboard)
-    resolved = load_phase_definition(whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    resolved = load_phase_definition(
+        whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
     gate = _gate(resolved)
     if not gate:
         raise WorkstreamGateError("gate_not_defined", "Phase definition does not define a gate.")
     synthesis = _synthesis_asset(whiteboard=whiteboard, phase_id=phase_id)
     if synthesis is None:
-        raise WorkstreamGateError("synthesis_required", "Gate evaluation requires a phase synthesis artifact.")
+        raise WorkstreamGateError(
+            "synthesis_required", "Gate evaluation requires a phase synthesis artifact."
+        )
     asset, version = synthesis
     submitted = sanitize_outbox_payload(scorecard or {})
     criteria_results = [_criterion_result(criterion, submitted) for criterion in _criteria(gate)]
@@ -493,7 +570,9 @@ def evaluate_gate(
             evaluation=evaluation,
             organization=whiteboard.organization,
             company=whiteboard.company,
-            dimensions_json=sanitize_outbox_payload({"criteria": criteria_results, "submitted_scorecard": submitted}),
+            dimensions_json=sanitize_outbox_payload(
+                {"criteria": criteria_results, "submitted_scorecard": submitted}
+            ),
             composite_score=composite_score,
             grade=_grade(composite_score),
         )
@@ -503,11 +582,19 @@ def evaluate_gate(
             state={
                 "status": "evaluated",
                 "gate": _gate_payload(evaluation=evaluation, include_internal=True),
-                "workstreams": _workstream_state(whiteboard=whiteboard, definition=resolved, include_internal=True),
+                "workstreams": _workstream_state(
+                    whiteboard=whiteboard, definition=resolved, include_internal=True
+                ),
                 "synthesis": _synthesis_payload(whiteboard=whiteboard, phase_id=phase_id),
             },
         )
-        apply_gate_result(user=user, whiteboard=whiteboard, phase_id=phase_id, evaluation=evaluation, definition=resolved)
+        apply_gate_result(
+            user=user,
+            whiteboard=whiteboard,
+            phase_id=phase_id,
+            evaluation=evaluation,
+            definition=resolved,
+        )
     _refresh_whiteboard_snapshot(whiteboard)
     return evaluation
 
@@ -523,15 +610,20 @@ def apply_gate_result(
     """Apply generic gate pass/fail actions from the policy definition."""
 
     _ensure_can_manage_phase(user=user, whiteboard=whiteboard)
-    resolved = load_phase_definition(whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    resolved = load_phase_definition(
+        whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
     result = _result_json(evaluation).get("gate_result")
     gate = _gate(resolved)
-    action = dict(gate.get("on_pass") or {}) if result == "pass" else dict(gate.get("on_fail") or {})
+    action = (
+        dict(gate.get("on_pass") or {}) if result == "pass" else dict(gate.get("on_fail") or {})
+    )
     artifacts: dict[str, Any] = {}
     status = str(action.get("set_whiteboard_status") or "")
     if status in VALID_WHITEBOARD_STATUSES and whiteboard.status != status:
         whiteboard.status = status
-        whiteboard.save(update_fields=["status", "updated_at"])
+        whiteboard.work_status = work_status_for_legacy_status(status)
+        whiteboard.save(update_fields=["status", "work_status", "updated_at"])
     route_slug = str(action.get("route_to_department") or action.get("route_to") or "").strip()
     if route_slug:
         routing_record = _route_gate_outcome(
@@ -544,10 +636,14 @@ def apply_gate_result(
         )
         artifacts["routing_record_id"] = str(routing_record.id)
     if result == "pass" and bool(action.get("approval_required") or gate.get("approval_required")):
-        approval = _approval_for_gate(user=user, whiteboard=whiteboard, definition=resolved, evaluation=evaluation)
+        approval = _approval_for_gate(
+            user=user, whiteboard=whiteboard, definition=resolved, evaluation=evaluation
+        )
         artifacts["approval_task_id"] = str(approval.id)
     if result != "pass" and bool(action.get("create_signal") or gate.get("signal_on_fail")):
-        signal = _gate_failure_signal(user=user, whiteboard=whiteboard, definition=resolved, evaluation=evaluation)
+        signal = _gate_failure_signal(
+            user=user, whiteboard=whiteboard, definition=resolved, evaluation=evaluation
+        )
         artifacts["company_signal_id"] = str(signal.id)
     _upsert_phase_projection(
         whiteboard=whiteboard,
@@ -556,7 +652,9 @@ def apply_gate_result(
             "status": "passed" if result == "pass" else "revision_required",
             "gate": _gate_payload(evaluation=evaluation, include_internal=True),
             "applied_actions": artifacts,
-            "workstreams": _workstream_state(whiteboard=whiteboard, definition=resolved, include_internal=True),
+            "workstreams": _workstream_state(
+                whiteboard=whiteboard, definition=resolved, include_internal=True
+            ),
             "synthesis": _synthesis_payload(whiteboard=whiteboard, phase_id=phase_id),
         },
     )
@@ -571,8 +669,12 @@ def phase_state_payload(
     definition: dict[str, Any] | None = None,
     include_internal: bool = True,
 ) -> dict[str, Any]:
-    resolved = load_phase_definition(whiteboard=whiteboard, phase_id=phase_id, definition=definition)
-    return _current_state(whiteboard=whiteboard, definition=resolved, include_internal=include_internal)
+    resolved = load_phase_definition(
+        whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
+    return _current_state(
+        whiteboard=whiteboard, definition=resolved, include_internal=include_internal
+    )
 
 
 def _phase_contract(
@@ -590,10 +692,18 @@ def _phase_contract(
         "source_policy_id": str(definition.get("source_policy_id") or ""),
         "pack_id": str(definition.get("pack_id") or ""),
         "phase_name": str(definition.get("phase_name") or _label(phase_id)),
-        "workstreams": _workstream_state(whiteboard=whiteboard, definition=definition, include_internal=include_internal),
-        "gate": _definition_gate_payload(definition=definition, whiteboard=whiteboard, include_internal=include_internal),
-        "current_state": _current_state(whiteboard=whiteboard, definition=definition, include_internal=include_internal),
-        "allowed_actions": _allowed_actions(whiteboard=whiteboard, definition=definition) if manage else [],
+        "workstreams": _workstream_state(
+            whiteboard=whiteboard, definition=definition, include_internal=include_internal
+        ),
+        "gate": _definition_gate_payload(
+            definition=definition, whiteboard=whiteboard, include_internal=include_internal
+        ),
+        "current_state": _current_state(
+            whiteboard=whiteboard, definition=definition, include_internal=include_internal
+        ),
+        "allowed_actions": _allowed_actions(whiteboard=whiteboard, definition=definition)
+        if manage
+        else [],
     }
     return sanitize_outbox_payload(contract)
 
@@ -606,17 +716,23 @@ def _normalize_definition(
     pack_id: str,
 ) -> dict[str, Any]:
     if str(definition.get("phase_id") or "") != phase_id:
-        raise WorkstreamGateError("phase_id_mismatch", "Phase definition does not match the requested phase.")
+        raise WorkstreamGateError(
+            "phase_id_mismatch", "Phase definition does not match the requested phase."
+        )
     workstreams = list(definition.get("workstreams") or [])
     if not workstreams:
-        raise WorkstreamGateError("workstreams_required", "Phase definition must include at least one workstream.")
+        raise WorkstreamGateError(
+            "workstreams_required", "Phase definition must include at least one workstream."
+        )
     normalized_workstreams = [_normalize_workstream(item) for item in workstreams]
-    gate = definition.get("gate") if isinstance(definition.get("gate"), dict) else {}
+    gate = _dict_or_empty(definition.get("gate"))
     return {
         "phase_id": phase_id,
         "source_policy_id": str(definition.get("source_policy_id") or source_policy_id or phase_id),
         "pack_id": str(definition.get("pack_id") or pack_id or ""),
-        "phase_name": str(definition.get("phase_name") or definition.get("name") or _label(phase_id))[:160],
+        "phase_name": str(
+            definition.get("phase_name") or definition.get("name") or _label(phase_id)
+        )[:160],
         "whiteboard_required_status": definition.get("whiteboard_required_status") or "",
         "set_status_on_start": str(definition.get("set_status_on_start") or ""),
         "workstreams": normalized_workstreams,
@@ -633,9 +749,15 @@ def _normalize_workstream(value: Any) -> dict[str, Any]:
     return {
         "id": workstream_id[:120],
         "name": str(item.get("name") or _label(workstream_id))[:160],
-        "department": str(item.get("department") or item.get("department_slug") or "operations")[:160],
-        "department_name": str(item.get("department_name") or _label(str(item.get("department") or "operations")))[:255],
-        "department_type": str(item.get("department_type") or item.get("department") or "operations")[:64],
+        "department": str(item.get("department") or item.get("department_slug") or "operations")[
+            :160
+        ],
+        "department_name": str(
+            item.get("department_name") or _label(str(item.get("department") or "operations"))
+        )[:255],
+        "department_type": str(
+            item.get("department_type") or item.get("department") or "operations"
+        )[:64],
         "output_type": str(item.get("output_type") or "")[:80],
         "required": bool(item.get("required", True)),
         "dependencies": list(item.get("dependencies") or []),
@@ -655,7 +777,9 @@ def _normalize_gate(gate: dict[str, Any]) -> dict[str, Any]:
         criteria.append(
             {
                 "key": key[:160],
-                "value_type": str(criterion.get("value_type") or criterion.get("type") or "number")[:24],
+                "value_type": str(criterion.get("value_type") or criterion.get("type") or "number")[
+                    :24
+                ],
                 "operator": operator,
                 "threshold": criterion.get("threshold"),
                 "expected": criterion.get("expected"),
@@ -706,17 +830,23 @@ def _program_for_whiteboard(whiteboard: WorkWhiteboard) -> CompanyProgram | None
     for program_id in candidates:
         if not program_id:
             continue
-        program = CompanyProgram.objects.filter(
-            organization=whiteboard.organization,
-            company=whiteboard.company,
-            id=program_id,
-        ).select_related("installation", "installation__pack_release").first()
+        program = (
+            CompanyProgram.objects.filter(
+                organization=whiteboard.organization,
+                company=whiteboard.company,
+                id=program_id,
+            )
+            .select_related("installation", "installation__pack_release")
+            .first()
+        )
         if program is not None:
             return program
     return None
 
 
-def _definitions_from_installation(installation: CompanyOperatingModelInstallation | None) -> list[dict[str, Any]]:
+def _definitions_from_installation(
+    installation: CompanyOperatingModelInstallation | None,
+) -> list[dict[str, Any]]:
     if installation is None:
         return []
     sources = [
@@ -750,7 +880,9 @@ def _extract_definitions(source: Any, *, pack_id: str) -> list[dict[str, Any]]:
             {
                 **item,
                 "pack_id": str(item.get("pack_id") or pack_id),
-                "source_policy_id": str(item.get("source_policy_id") or f"{pack_id}:{item.get('phase_id', '')}"),
+                "source_policy_id": str(
+                    item.get("source_policy_id") or f"{pack_id}:{item.get('phase_id', '')}"
+                ),
             }
         )
     return definitions
@@ -783,7 +915,9 @@ def _validate_required_status(*, whiteboard: WorkWhiteboard, definition: dict[st
         raise WorkstreamGateError(
             "whiteboard_status_mismatch",
             "Whiteboard status does not satisfy this phase definition.",
-            details=[{"status": whiteboard.status, "required": sorted(str(item) for item in statuses)}],
+            details=[
+                {"status": whiteboard.status, "required": sorted(str(item) for item in statuses)}
+            ],
         )
 
 
@@ -792,7 +926,7 @@ def _workstreams(definition: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _gate(definition: dict[str, Any]) -> dict[str, Any]:
-    return definition.get("gate") if isinstance(definition.get("gate"), dict) else {}
+    return _dict_or_empty(definition.get("gate"))
 
 
 def _criteria(gate: dict[str, Any]) -> list[dict[str, Any]]:
@@ -806,7 +940,9 @@ def _workstream_definition(definition: dict[str, Any], workstream_id: str) -> di
     return None
 
 
-def _ensure_phase_department(*, whiteboard: WorkWhiteboard, workstream: dict[str, Any]) -> DepartmentRegistry:
+def _ensure_phase_department(
+    *, whiteboard: WorkWhiteboard, workstream: dict[str, Any]
+) -> DepartmentRegistry:
     slug = str(workstream.get("department") or "operations").strip()
     return register_department(
         organization=whiteboard.organization,
@@ -820,24 +956,38 @@ def _ensure_phase_department(*, whiteboard: WorkWhiteboard, workstream: dict[str
 
 def _phase_graph_version(*, company: Graph, phase_id: str) -> GraphVersion:
     key = f"workstream-phase:{phase_id}"[:255]
-    existing = GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first()
+    existing = cast(
+        GraphVersion | None,
+        GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first(),
+    )
     if existing is not None:
         return existing
-    version = (GraphVersion.objects.filter(graph=company).aggregate(max_version=Max("version"))["max_version"] or 0) + 1
+    version = (
+        GraphVersion.objects.filter(graph=company).aggregate(max_version=Max("version"))[
+            "max_version"
+        ]
+        or 0
+    ) + 1
     try:
-        return GraphVersion.objects.create(
-            graph=company,
-            version=version,
-            external_idempotency_key=key,
-            graph_json={
-                "nodes": [],
-                "edges": [],
-                "source": "workstream_gates",
-                "phase_id": phase_id,
-            },
+        return cast(
+            GraphVersion,
+            GraphVersion.objects.create(
+                graph=company,
+                version=version,
+                external_idempotency_key=key,
+                graph_json={
+                    "nodes": [],
+                    "edges": [],
+                    "source": "workstream_gates",
+                    "phase_id": phase_id,
+                },
+            ),
         )
     except IntegrityError:
-        existing = GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first()
+        existing = cast(
+            GraphVersion | None,
+            GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first(),
+        )
         if existing is not None:
             return existing
         raise
@@ -854,18 +1004,12 @@ def _phase_run(
     phase_id = str(definition["phase_id"])
     workstream_id = str(workstream["id"])
     key = _phase_key(whiteboard=whiteboard, phase_id=phase_id, suffix=f"run:{workstream_id}")
-    run = Run.objects.filter(
-        organization=whiteboard.organization,
-        graph_version__graph=whiteboard.company,
-        input_json__idempotency_key=key,
-    ).first()
-    if run is not None:
-        return run
-    return Run.objects.create(
+    return get_or_create_backend_operation_run(
         owner=user,
         organization=whiteboard.organization,
         thread_id=whiteboard.communication_thread_id,
         graph_version=graph_version,
+        idempotency_key=key,
         status="pending",
         input_json={
             "idempotency_key": key,
@@ -885,18 +1029,12 @@ def _gate_run(*, user: User, whiteboard: WorkWhiteboard, definition: dict[str, A
     gate_id = str(_gate(definition).get("gate_id") or phase_id)
     graph_version = _phase_graph_version(company=whiteboard.company, phase_id=phase_id)
     key = _phase_key(whiteboard=whiteboard, phase_id=phase_id, suffix=f"gate-run:{gate_id}")
-    run = Run.objects.filter(
-        organization=whiteboard.organization,
-        graph_version__graph=whiteboard.company,
-        input_json__idempotency_key=key,
-    ).first()
-    if run is not None:
-        return run
-    return Run.objects.create(
+    return get_or_create_backend_operation_run(
         owner=user,
         organization=whiteboard.organization,
         thread_id=whiteboard.communication_thread_id,
         graph_version=graph_version,
+        idempotency_key=key,
         status="succeeded",
         input_json={
             "idempotency_key": key,
@@ -920,22 +1058,21 @@ def _phase_lifecycle(
 ) -> TaskLifecycleRecord:
     phase_id = str(definition["phase_id"])
     workstream_id = str(workstream["id"])
-    lifecycle, _created = TaskLifecycleRecord.objects.get_or_create(
+    return get_or_create_backend_lifecycle_task(
         organization=whiteboard.organization,
-        external_key=_phase_key(whiteboard=whiteboard, phase_id=phase_id, suffix=f"lifecycle:{workstream_id}"),
-        defaults={
-            "run": run,
-            "source_node_id": workstream_id,
-            "node_type": "workstream_phase",
-            "title": str(workstream.get("name") or _label(workstream_id))[:255],
-            "status": "queued",
-            "priority": "normal",
-            "summary": f"Workstream for phase {definition['phase_name']}.",
-            "current_department": department,
-            "last_transition_at": timezone.now(),
-        },
+        external_key=_phase_key(
+            whiteboard=whiteboard, phase_id=phase_id, suffix=f"lifecycle:{workstream_id}"
+        ),
+        run=run,
+        source_node_id=workstream_id,
+        node_type="workstream_phase",
+        title=str(workstream.get("name") or _label(workstream_id))[:255],
+        status="queued",
+        priority="normal",
+        summary=f"Workstream for phase {definition['phase_name']}.",
+        current_department=department,
+        last_transition_at=timezone.now(),
     )
-    return lifecycle
 
 
 def _phase_asset_shell(
@@ -950,7 +1087,9 @@ def _phase_asset_shell(
     asset = _get_or_create_asset(
         company=whiteboard.company,
         title=f"{definition['phase_name']}: {workstream.get('name') or _label(workstream_id)}",
-        source_key=_phase_key(whiteboard=whiteboard, phase_id=phase_id, suffix=f"workstream:{workstream_id}"),
+        source_key=_phase_key(
+            whiteboard=whiteboard, phase_id=phase_id, suffix=f"workstream:{workstream_id}"
+        ),
         origin_operation=operation,
         metadata={
             "artifact_type": "phase_workstream",
@@ -974,7 +1113,10 @@ def _phase_asset_shell(
             },
             metadata={"phase_id": phase_id, "workstream_id": workstream_id, "status": "queued"},
         )
-        asset.metadata_json = {**(asset.metadata_json or {}), "canonical_asset_version_id": str(version.id)}
+        asset.metadata_json = {
+            **(asset.metadata_json or {}),
+            "canonical_asset_version_id": str(version.id),
+        }
         asset.save(update_fields=["metadata_json", "updated_at"])
     return asset, version
 
@@ -1015,7 +1157,12 @@ def _create_asset_version(
     existing = AssetVersion.objects.filter(asset=asset, content_hash=digest).first()
     if existing is not None:
         return existing
-    version_number = (AssetVersion.objects.filter(asset=asset).aggregate(max_version=Max("version_number"))["max_version"] or 0) + 1
+    version_number = (
+        AssetVersion.objects.filter(asset=asset).aggregate(max_version=Max("version_number"))[
+            "max_version"
+        ]
+        or 0
+    ) + 1
     return AssetVersion.objects.create(
         asset=asset,
         version_number=version_number,
@@ -1032,7 +1179,9 @@ def _create_asset_version(
     )
 
 
-def _workstream_records(*, whiteboard: WorkWhiteboard, phase_id: str) -> QuerySet[TaskRoutingRecord]:
+def _workstream_records(
+    *, whiteboard: WorkWhiteboard, phase_id: str
+) -> QuerySet[TaskRoutingRecord]:
     return (
         TaskRoutingRecord.objects.filter(
             organization=whiteboard.organization,
@@ -1052,9 +1201,13 @@ def _workstream_record(
     phase_id: str,
     workstream_id: str,
 ) -> TaskRoutingRecord | None:
-    return _workstream_records(whiteboard=whiteboard, phase_id=phase_id).filter(
-        metadata_json__workstream_id=workstream_id,
-    ).first()
+    return (
+        _workstream_records(whiteboard=whiteboard, phase_id=phase_id)
+        .filter(
+            metadata_json__workstream_id=workstream_id,
+        )
+        .first()
+    )
 
 
 def _workstream_state(
@@ -1084,7 +1237,9 @@ def _workstream_state(
             item = _workstream_payload(record, include_internal=include_internal)
             item["name"] = str(workstream.get("name") or item.get("name") or _label(workstream_id))
             item["required"] = bool(workstream.get("required", True))
-            item["output_type"] = str(workstream.get("output_type") or item.get("output_type") or "")
+            item["output_type"] = str(
+                workstream.get("output_type") or item.get("output_type") or ""
+            )
         if include_internal:
             item["dependencies"] = list(workstream.get("dependencies") or [])
             item["metadata"] = sanitize_outbox_payload(workstream.get("metadata") or {})
@@ -1097,7 +1252,9 @@ def _workstream_payload(record: TaskRoutingRecord, *, include_internal: bool) ->
     payload = {
         "id": str(metadata.get("workstream_id") or record.id),
         "routing_record_id": str(record.id) if include_internal else "",
-        "name": str(metadata.get("workstream_name") or _label(str(metadata.get("workstream_id") or ""))),
+        "name": str(
+            metadata.get("workstream_name") or _label(str(metadata.get("workstream_id") or ""))
+        ),
         "status": record.status,
         "required": True,
         "output_type": str(metadata.get("output_type") or ""),
@@ -1109,8 +1266,12 @@ def _workstream_payload(record: TaskRoutingRecord, *, include_internal: bool) ->
             {
                 "department_id": str(record.to_department_id),
                 "department_name": record.to_department.name,
-                "run_id": str(record.operation_id) if record.operation_id else str(metadata.get("run_id") or ""),
-                "task_lifecycle_id": str(record.task_lifecycle_id) if record.task_lifecycle_id else str(metadata.get("task_lifecycle_id") or ""),
+                "run_id": str(record.operation_id)
+                if record.operation_id
+                else str(metadata.get("run_id") or ""),
+                "task_lifecycle_id": str(record.task_lifecycle_id)
+                if record.task_lifecycle_id
+                else str(metadata.get("task_lifecycle_id") or ""),
                 "asset_id": str(metadata.get("asset_id") or ""),
                 "asset_version_id": str(metadata.get("asset_version_id") or ""),
                 "reason": record.reason,
@@ -1140,11 +1301,15 @@ def _synthesis_content(*, whiteboard: WorkWhiteboard, definition: dict[str, Any]
         "pack_id": definition.get("pack_id"),
         "request_summary": whiteboard.request_summary,
         "objective": whiteboard.objective,
-        "workstreams": _workstream_state(whiteboard=whiteboard, definition=definition, include_internal=True),
+        "workstreams": _workstream_state(
+            whiteboard=whiteboard, definition=definition, include_internal=True
+        ),
     }
 
 
-def _synthesis_asset(*, whiteboard: WorkWhiteboard, phase_id: str) -> tuple[Asset, AssetVersion] | None:
+def _synthesis_asset(
+    *, whiteboard: WorkWhiteboard, phase_id: str
+) -> tuple[Asset, AssetVersion] | None:
     asset = Asset.objects.filter(
         organization=whiteboard.organization,
         company=whiteboard.company,
@@ -1153,8 +1318,12 @@ def _synthesis_asset(*, whiteboard: WorkWhiteboard, phase_id: str) -> tuple[Asse
     ).first()
     if asset is None:
         return None
-    version_id = (asset.metadata_json or {}).get("phase_synthesis_version_id") or (asset.metadata_json or {}).get("canonical_asset_version_id")
-    version = AssetVersion.objects.filter(asset=asset, id=version_id).first() if version_id else None
+    version_id = (asset.metadata_json or {}).get("phase_synthesis_version_id") or (
+        asset.metadata_json or {}
+    ).get("canonical_asset_version_id")
+    version = (
+        AssetVersion.objects.filter(asset=asset, id=version_id).first() if version_id else None
+    )
     if version is None:
         version = AssetVersion.objects.filter(asset=asset).order_by("-version_number").first()
     return (asset, version) if version is not None else None
@@ -1165,7 +1334,11 @@ def _synthesis_payload(*, whiteboard: WorkWhiteboard, phase_id: str) -> dict[str
     if pair is None:
         return None
     asset, version = pair
-    return {"asset_id": str(asset.id), "asset_version_id": str(version.id), "created_at": version.created_at.isoformat()}
+    return {
+        "asset_id": str(asset.id),
+        "asset_version_id": str(version.id),
+        "created_at": version.created_at.isoformat(),
+    }
 
 
 def _criterion_result(criterion: dict[str, Any], submitted: dict[str, Any]) -> dict[str, Any]:
@@ -1273,7 +1446,9 @@ def _latest_gate_evaluation(*, whiteboard: WorkWhiteboard, phase_id: str) -> Eva
     )
 
 
-def _gate_payload(*, evaluation: EvaluationRun | None, include_internal: bool) -> dict[str, Any] | None:
+def _gate_payload(
+    *, evaluation: EvaluationRun | None, include_internal: bool
+) -> dict[str, Any] | None:
     if evaluation is None:
         return None
     result = _result_json(evaluation)
@@ -1286,8 +1461,16 @@ def _gate_payload(*, evaluation: EvaluationRun | None, include_internal: bool) -
         "evaluated_at": evaluation.evaluated_at.isoformat() if evaluation.evaluated_at else None,
     }
     if include_internal:
-        payload["criteria_results"] = result.get("criteria_results") if isinstance(result.get("criteria_results"), list) else []
-        payload["submitted_scorecard"] = result.get("submitted_scorecard") if isinstance(result.get("submitted_scorecard"), dict) else {}
+        payload["criteria_results"] = (
+            result.get("criteria_results")
+            if isinstance(result.get("criteria_results"), list)
+            else []
+        )
+        payload["submitted_scorecard"] = (
+            result.get("submitted_scorecard")
+            if isinstance(result.get("submitted_scorecard"), dict)
+            else {}
+        )
     return payload
 
 
@@ -1300,10 +1483,14 @@ def _definition_gate_payload(
     gate = _gate(definition)
     if not gate:
         return None
-    evaluation = _latest_gate_evaluation(whiteboard=whiteboard, phase_id=str(definition["phase_id"]))
+    evaluation = _latest_gate_evaluation(
+        whiteboard=whiteboard, phase_id=str(definition["phase_id"])
+    )
     payload: dict[str, Any] = {
         "gate_id": str(gate.get("gate_id") or ""),
-        "result": _result_json(evaluation).get("gate_result") if evaluation is not None else "pending",
+        "result": _result_json(evaluation).get("gate_result")
+        if evaluation is not None
+        else "pending",
     }
     if include_internal:
         payload.update(
@@ -1319,15 +1506,32 @@ def _definition_gate_payload(
     return payload
 
 
-def _current_state(*, whiteboard: WorkWhiteboard, definition: dict[str, Any], include_internal: bool) -> dict[str, Any]:
+def _current_state(
+    *, whiteboard: WorkWhiteboard, definition: dict[str, Any], include_internal: bool
+) -> dict[str, Any]:
     phase_id = str(definition["phase_id"])
     projection = _phase_projection(whiteboard=whiteboard, phase_id=phase_id)
-    state = projection.json_state if projection is not None and isinstance(projection.json_state, dict) else {}
-    workstreams = _workstream_state(whiteboard=whiteboard, definition=definition, include_internal=include_internal)
-    all_completed = all(item.get("status") == "completed" for item in workstreams if item.get("required", True))
+    state = (
+        projection.json_state
+        if projection is not None and isinstance(projection.json_state, dict)
+        else {}
+    )
+    workstreams = _workstream_state(
+        whiteboard=whiteboard, definition=definition, include_internal=include_internal
+    )
+    all_completed = all(
+        item.get("status") == "completed" for item in workstreams if item.get("required", True)
+    )
     latest_gate = _latest_gate_evaluation(whiteboard=whiteboard, phase_id=phase_id)
     payload: dict[str, Any] = {
-        "status": str(state.get("status") or ("started" if any(item["status"] != "not_started" for item in workstreams) else "not_started")),
+        "status": str(
+            state.get("status")
+            or (
+                "started"
+                if any(item["status"] != "not_started" for item in workstreams)
+                else "not_started"
+            )
+        ),
         "all_workstreams_completed": all_completed,
         "synthesis": _synthesis_payload(whiteboard=whiteboard, phase_id=phase_id),
         "gate": _gate_payload(evaluation=latest_gate, include_internal=include_internal),
@@ -1341,7 +1545,12 @@ def _current_state(*, whiteboard: WorkWhiteboard, definition: dict[str, Any], in
 def _allowed_actions(*, whiteboard: WorkWhiteboard, definition: dict[str, Any]) -> list[str]:
     phase_id = str(definition["phase_id"])
     actions: list[str] = []
-    if any(item["status"] != "not_started" for item in _workstream_state(whiteboard=whiteboard, definition=definition, include_internal=False)):
+    if any(
+        item["status"] != "not_started"
+        for item in _workstream_state(
+            whiteboard=whiteboard, definition=definition, include_internal=False
+        )
+    ):
         actions.extend(["synthesize", "evaluate"])
     else:
         actions.append("start")
@@ -1381,7 +1590,9 @@ def _route_gate_outcome(
         reason=f"Gate {result} for phase {definition['phase_name']}.",
         status="queued" if result == "pass" else "blocked",
         priority="normal",
-        idempotency_key=_phase_key(whiteboard=whiteboard, phase_id=phase_id, suffix=f"gate:{result}:{department_slug}"),
+        idempotency_key=_phase_key(
+            whiteboard=whiteboard, phase_id=phase_id, suffix=f"gate:{result}:{department_slug}"
+        ),
         metadata={
             "whiteboard_id": str(whiteboard.id),
             "phase_id": phase_id,
@@ -1407,12 +1618,15 @@ def _approval_for_gate(
     existing = ApprovalTask.objects.filter(run=run, node_id=node_id, status="pending").first()
     if existing is not None:
         return existing
-    return ApprovalTask.objects.create(
+    return create_backend_approval_task(
         run=run,
         node_id=node_id,
+        assignee=None,
         status="pending",
         payload=sanitize_outbox_payload(
             {
+                "prompt_message": f"Review {definition['phase_name']} gate result before the next phase continues.",
+                "required_fields": [],
                 "whiteboard_id": str(whiteboard.id),
                 "phase_id": phase_id,
                 "source_policy_id": definition.get("source_policy_id"),
@@ -1440,8 +1654,12 @@ def _gate_failure_signal(
         company=whiteboard.company,
         actor=user,
         signal_type="manual",
+        signal_kind="risk",
+        domain_context="workstream",
         source="workstream_gates",
-        external_key=_phase_key(whiteboard=whiteboard, phase_id=phase_id, suffix=f"gate-signal:{evaluation.id}"),
+        external_key=_phase_key(
+            whiteboard=whiteboard, phase_id=phase_id, suffix=f"gate-signal:{evaluation.id}"
+        ),
         title=f"{definition['phase_name']} gate revision required",
         summary="A pack-defined phase gate did not pass.",
         metadata={
@@ -1464,7 +1682,14 @@ def _upsert_phase_projection(
     phase_id = str(definition["phase_id"])
     existing = _phase_projection(whiteboard=whiteboard, phase_id=phase_id)
     merged_state = {
-        **((existing.json_state if existing is not None and isinstance(existing.json_state, dict) else {}) or {}),
+        **(
+            (
+                existing.json_state
+                if existing is not None and isinstance(existing.json_state, dict)
+                else {}
+            )
+            or {}
+        ),
         **sanitize_outbox_payload(state),
         "schema_version": PHASE_SCHEMA_VERSION,
         "whiteboard_id": str(whiteboard.id),
@@ -1480,7 +1705,8 @@ def _upsert_phase_projection(
             "display_label": str(definition.get("phase_name") or _label(phase_id))[:160],
             "source_refs_json": sanitize_outbox_payload(source_refs or []),
             "json_state": merged_state,
-            "markdown_summary": summary or f"Current state for phase {definition.get('phase_name') or phase_id}.",
+            "markdown_summary": summary
+            or f"Current state for phase {definition.get('phase_name') or phase_id}.",
             "generated_by": "workstream_gates",
         },
     )

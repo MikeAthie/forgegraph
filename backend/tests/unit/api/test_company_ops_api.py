@@ -167,8 +167,36 @@ def test_company_signal_api_is_idempotent(authenticated_client, user):
     assert first.status_code == 201
     assert second.status_code == 201
     assert second.json()["data"]["duplicate"] is True
+    assert first.json()["data"]["signal"]["signal_kind"] == "opportunity"
+    assert first.json()["data"]["signal"]["domain_context"] == "general"
+    assert first.json()["data"]["signal"]["semantic_aliases"]["signal_type"] == "demand"
     assert CompanySignal.objects.filter(company=company).count() == 1
     assert "buyer@example.com" not in str(first.json()["data"]["signal"]["metadata"])
+
+
+def test_company_signal_api_accepts_generic_semantic_fields(authenticated_client, user):
+    company = _create_company(user)
+
+    response = authenticated_client.post(
+        "/api/company-ops/signals",
+        data={
+            "company_id": str(company.id),
+            "signal_type": "manual",
+            "signal_kind": "capability_gap",
+            "domain_context": "connector",
+            "source": "manual",
+            "external_key": "gap-1",
+            "title": "Connector missing",
+        },
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="generic-signal-create",
+    )
+
+    assert response.status_code == 201
+    signal = response.json()["data"]["signal"]
+    assert signal["signal_type"] == "manual"
+    assert signal["signal_kind"] == "capability_gap"
+    assert signal["domain_context"] == "connector"
 
 
 def test_company_signal_qualify_creates_opportunity(authenticated_client, user):
@@ -278,6 +306,8 @@ def test_company_operation_launch_api_creates_inspectable_operation(authenticate
         data={
             "company_id": str(company.id),
             "operation_type": "daily_operating_brief",
+            "operation_family": "brief",
+            "domain_context": "general",
             "context_note": "Daily loop",
         },
         format="json",
@@ -287,9 +317,12 @@ def test_company_operation_launch_api_creates_inspectable_operation(authenticate
     assert response.status_code == 201
     operation = response.json()["data"]["operation"]
     assert operation["operation_type"] == "daily_operating_brief"
+    assert operation["operation_family"] == "brief"
+    assert operation["domain_context"] == "general"
     assert operation["context_pack_id"]
     assert operation["objective_contract_id"]
     assert operation["objective_contract"]["run_type"] == "rehearsal"
+    assert operation["objective_contract"]["operation_family"] == "brief"
 
 
 def test_company_operation_objective_evaluation_api_records_result(authenticated_client, user):
@@ -299,7 +332,7 @@ def test_company_operation_objective_evaluation_api_records_result(authenticated
         data={
             "company_id": str(company.id),
             "operation_type": "daily_operating_brief",
-            "run_goal": "Rehearse sell-through learning.",
+            "run_goal": "Rehearse company next-action learning.",
         },
         format="json",
         HTTP_IDEMPOTENCY_KEY="launch-objective",
@@ -313,7 +346,7 @@ def test_company_operation_objective_evaluation_api_records_result(authenticated
             "miss_analysis": "No miss; rehearsal produced the next action.",
             "next_decision": "Run the first content-drop rehearsal.",
             "integrity_gates": {
-                "stock_drift": {"observed": 0, "status": "pass"},
+                "state_drift": {"observed": 0, "status": "pass"},
             },
         },
         format="json",

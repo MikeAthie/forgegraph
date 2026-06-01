@@ -29,6 +29,8 @@ type mockRepository struct {
 	checkpoints map[string]mockCheckpointState
 	snapshots   map[string]*port.RunResumeSnapshot
 	cache       map[string]mockCacheEntry
+
+	loadRunSnapshotErr error
 }
 
 type mockPauseState struct {
@@ -219,6 +221,10 @@ func (r *mockRepository) ClearCheckpoints(ctx context.Context, runID string) err
 }
 
 func (r *mockRepository) LoadRunSnapshot(ctx context.Context, runID string) (*port.RunResumeSnapshot, error) {
+	if r.loadRunSnapshotErr != nil {
+		return nil, r.loadRunSnapshotErr
+	}
+
 	r.snapshotsMu.RLock()
 	defer r.snapshotsMu.RUnlock()
 

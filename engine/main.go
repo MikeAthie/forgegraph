@@ -6,15 +6,18 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/forgegraph/engine/adapter/executor"
@@ -92,6 +95,51 @@ type Config struct {
 	RuntimeIntentStreamMaxLen            int64
 	RuntimeIntentOutcomeWaitTimeoutMs    int
 	RuntimeIntentOutcomePollIntervalMs   int
+}
+
+type runtimeIntentRedisClient interface {
+	gateway.RuntimeIntentStreamClient
+	Ping(context.Context) *redis.StatusCmd
+	Close() error
+}
+
+type redisStatusPinger struct {
+	client interface {
+		Ping(context.Context) *redis.StatusCmd
+	}
+}
+
+func (p redisStatusPinger) Ping(ctx context.Context) error {
+	if p.client == nil {
+		return fmt.Errorf("runtime intent redis client is not configured")
+	}
+	return p.client.Ping(ctx).Err()
+}
+
+type grpcLifecycleServer interface {
+	GracefulStop()
+	Stop()
+}
+
+type eventEmitterCloser interface {
+	Close(context.Context) error
+}
+
+type stoppableWorker interface {
+	Stop()
+}
+
+type closeableResource interface {
+	Close() error
+}
+
+type engineRuntimeResources struct {
+	cancel              context.CancelFunc
+	grpcServer          grpcLifecycleServer
+	metricsServer       *http.Server
+	eventEmitter        eventEmitterCloser
+	summarizationWorker stoppableWorker
+	redisClient         closeableResource
 }
 
 const (
@@ -335,7 +383,7 @@ func parseCSVStrings(raw string) []string {
 	return values
 }
 
-func buildRuntimeIntentRedisClient(cfg *Config) (gateway.RuntimeIntentStreamClient, error) {
+func buildRuntimeIntentRedisClient(cfg *Config) (runtimeIntentRedisClient, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("runtime intent redis config is required")
 	}
@@ -444,22 +492,126 @@ func buildGRPCServerOptions(cfg *Config) ([]grpc.ServerOption, bool, error) {
 	return []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsConfig))}, true, nil
 }
 
+func readinessReady(cfg *Config, grpcReady bool, redisHealth store.HealthStatus) bool {
+	if !grpcReady {
+		return false
+	}
+	if cfg == nil || !hasRuntimeIntentRedisConfig(cfg) {
+		return true
+	}
+	return redisHealth.Healthy
+}
+
+func readinessHTTPStatus(cfg *Config, grpcReady bool, redisHealth store.HealthStatus) int {
+	if readinessReady(cfg, grpcReady, redisHealth) {
+		return http.StatusOK
+	}
+	return http.StatusServiceUnavailable
+}
+
 func readinessPayload(cfg *Config, grpcReady bool, redisHealth store.HealthStatus) map[string]any {
-	redisConfigured := cfg != nil && strings.TrimSpace(cfg.RedisAddr) != ""
-	ready := grpcReady && (!redisConfigured || redisHealth.Healthy)
+	redisConfigured := hasRuntimeIntentRedisConfig(cfg)
+	ready := readinessReady(cfg, grpcReady, redisHealth)
 	statusValue := "not_ready"
 	if ready {
 		statusValue = "ready"
 	}
-	return map[string]any{
-		"status":                   statusValue,
-		"grpc_ready":               grpcReady,
-		"redis_configured":         redisConfigured,
-		"redis_healthy":            redisHealth.Healthy,
-		"redis_error":              redisHealth.Error,
-		"run_state_mode":           cfg.RunStateMode,
-		"control_plane_configured": hasControlPlaneRepositoryConfig(cfg),
+	runStateMode := ""
+	if cfg != nil {
+		runStateMode = cfg.RunStateMode
 	}
+	return map[string]any{
+		"status":                    statusValue,
+		"grpc_ready":                grpcReady,
+		"redis_configured":          redisConfigured,
+		"redis_healthy":             redisHealth.Healthy,
+		"redis_error":               redisHealth.Error,
+		"redis_mode":                runtimeIntentRedisMode(cfg),
+		"runtime_intent_redis_mode": runtimeIntentRedisMode(cfg),
+		"run_state_mode":            runStateMode,
+		"control_plane_configured":  hasControlPlaneRepositoryConfig(cfg),
+	}
+}
+
+func defaultRuntimeIntentRedisHealth(cfg *Config) store.HealthStatus {
+	status := store.HealthStatus{CheckedAt: time.Now().UTC()}
+	if hasRuntimeIntentRedisConfig(cfg) {
+		status.Healthy = false
+		status.Error = "runtime intent redis health checker is not configured"
+		return status
+	}
+	status.Healthy = true
+	return status
+}
+
+func runtimeRedisHealthPayload(cfg *Config, redisHealth store.HealthStatus) map[string]any {
+	return map[string]any{
+		"transport":                 "runtime_intents",
+		"configured":                hasRuntimeIntentRedisConfig(cfg),
+		"mode":                      runtimeIntentRedisMode(cfg),
+		"redis_mode":                runtimeIntentRedisMode(cfg),
+		"runtime_intent_redis_mode": runtimeIntentRedisMode(cfg),
+		"healthy":                   redisHealth.Healthy,
+		"latency_ms":                redisHealth.LatencyMs,
+		"checked_at":                redisHealth.CheckedAt,
+		"error":                     redisHealth.Error,
+	}
+}
+
+func gracefulStopGRPC(ctx context.Context, server grpcLifecycleServer) error {
+	if server == nil {
+		return nil
+	}
+
+	done := make(chan struct{})
+	go func() {
+		server.GracefulStop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		server.Stop()
+		<-done
+		return ctx.Err()
+	}
+}
+
+func shutdownEngineRuntime(ctx context.Context, resources engineRuntimeResources) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var shutdownErrors []error
+
+	if resources.cancel != nil {
+		resources.cancel()
+	}
+	if resources.grpcServer != nil {
+		if err := gracefulStopGRPC(ctx, resources.grpcServer); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("grpc shutdown: %w", err))
+		}
+	}
+	if resources.metricsServer != nil {
+		if err := resources.metricsServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("metrics shutdown: %w", err))
+		}
+	}
+	if resources.summarizationWorker != nil {
+		resources.summarizationWorker.Stop()
+	}
+	if resources.eventEmitter != nil {
+		if err := resources.eventEmitter.Close(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("event emitter shutdown: %w", err))
+		}
+	}
+	if resources.redisClient != nil {
+		if err := resources.redisClient.Close(); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("redis close: %w", err))
+		}
+	}
+	return errors.Join(shutdownErrors...)
 }
 
 // EngineServer implements the Engine gRPC service
@@ -630,6 +782,9 @@ func (s *EngineServer) ResumeRun(ctx context.Context, req *ResumeRunRequest) (*R
 }
 
 func main() {
+	rootCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
 	// Initialize structured logger
 	logCfg := logger.ConfigFromEnv()
 	log := logger.New(logCfg)
@@ -670,7 +825,12 @@ func main() {
 	var repo port.RunRepository
 	var memoryStore port.MemoryStore
 	var runtimeIntentPublisher port.RuntimeIntentPublisher
+	var runtimeIntentRedisClient runtimeIntentRedisClient
+	var redisHealthChecker *store.RedisHealthChecker
 	var llmMetricsSnapshot func() gateway.LLMMetricsSnapshot
+	var httpEventEmitter *gateway.HTTPEventEmitter
+	var summaryWorker *usecase.SummarizationWorker
+	var metricsServer *http.Server
 	var err error
 	repoDriver, err := selectRunRepositoryDriver(cfg)
 	if err != nil {
@@ -700,13 +860,14 @@ func main() {
 		)
 		os.Exit(1)
 	}
-	runtimeIntentClient, err := buildRuntimeIntentRedisClient(cfg)
+	runtimeIntentRedisClient, err = buildRuntimeIntentRedisClient(cfg)
 	if err != nil {
 		log.Error("runtime_intent_publisher_config_invalid", "error", err.Error())
 		os.Exit(1)
 	}
+	redisHealthChecker = store.NewRedisHealthChecker(redisStatusPinger{client: runtimeIntentRedisClient})
 	runtimeIntentPublisher, err = gateway.NewRedisRuntimeIntentPublisherWithConfig(
-		runtimeIntentClient,
+		runtimeIntentRedisClient,
 		cfg.RuntimeIntentStream,
 		gateway.RuntimeIntentPublisherConfig{
 			InitialBackoff: time.Duration(cfg.RuntimeIntentPublishInitialBackoffMs) * time.Millisecond,
@@ -787,11 +948,12 @@ func main() {
 	emitterCfg.SpoolPath = resolveEventSpoolPath(cfg, callbackURL)
 	emitterCfg.EventVerbosity = cfg.EventVerbosity
 	emitterCfg.EngineInstanceID = resolveEngineInstanceID(cfg)
-	emitter, err = gateway.NewHTTPEventEmitter(emitterCfg)
+	httpEventEmitter, err = gateway.NewHTTPEventEmitter(emitterCfg)
 	if err != nil {
 		log.Error("event_emitter_init_failed", "error", err.Error())
 		os.Exit(1)
 	}
+	emitter = httpEventEmitter
 	log.Info("event_emitter_initialized", "callback_url", callbackURL, "spool_path", emitterCfg.SpoolPath)
 
 	// Initialize node executors
@@ -822,7 +984,7 @@ func main() {
 	lastManifestChecksum := ""
 	if manifestClient != nil && cfg.TenantID != "" {
 		lastManifestChecksum = refreshMarketplaceManifests(
-			context.Background(),
+			rootCtx,
 			log.WithComponent("marketplace"),
 			manifestClient,
 			toolRegistry,
@@ -834,9 +996,14 @@ func main() {
 				ticker := time.NewTicker(time.Duration(cfg.MarketplaceManifestRefreshSeconds) * time.Second)
 				defer ticker.Stop()
 				manifestLog := log.WithComponent("marketplace")
-				for range ticker.C {
+				for {
+					select {
+					case <-rootCtx.Done():
+						return
+					case <-ticker.C:
+					}
 					lastManifestChecksum = refreshMarketplaceManifests(
-						context.Background(),
+						rootCtx,
 						manifestLog,
 						manifestClient,
 						toolRegistry,
@@ -946,48 +1113,57 @@ func main() {
 
 	if llmClient != nil {
 		summaryAdapter := summarizer.NewLLMSummarizerWithTracker(llmClient, "", nil)
-		summaryWorker := usecase.NewSummarizationWorker(summaryAdapter, 2, 100)
-		summaryWorker.Start(context.Background())
+		summaryWorker = usecase.NewSummarizationWorker(summaryAdapter, 2, 100)
+		summaryWorker.Start(rootCtx)
 		scheduler.SetSummarizationWorker(summaryWorker)
 		log.Info("backend_memory_summary_intents_initialized", "persistence", "backend_event_intents")
 	}
 
 	// Metrics & health server
 	if cfg.MetricsPort != "" {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+			redisStatus := defaultRuntimeIntentRedisHealth(cfg)
+			if redisHealthChecker != nil {
+				redisStatus = redisHealthChecker.Check(r.Context())
+			}
+			payload, _ := json.Marshal(readinessPayload(cfg, grpcReady.Load(), redisStatus))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(readinessHTTPStatus(cfg, grpcReady.Load(), redisStatus))
+			_, _ = w.Write(payload)
+		})
+		mux.HandleFunc("/health/redis", func(w http.ResponseWriter, r *http.Request) {
+			redisStatus := defaultRuntimeIntentRedisHealth(cfg)
+			if redisHealthChecker != nil {
+				redisStatus = redisHealthChecker.Check(r.Context())
+			}
+			payload, _ := json.Marshal(runtimeRedisHealthPayload(cfg, redisStatus))
+			w.Header().Set("Content-Type", "application/json")
+			if redisStatus.Healthy || !hasRuntimeIntentRedisConfig(cfg) {
+				w.WriteHeader(http.StatusOK)
+			} else {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}
+			_, _ = w.Write(payload)
+		})
+		mux.HandleFunc("/metrics/llm", func(w http.ResponseWriter, r *http.Request) {
+			snapshot := gateway.LLMMetricsSnapshot{}
+			if llmMetricsSnapshot != nil {
+				snapshot = llmMetricsSnapshot()
+			}
+			payload, _ := json.Marshal(snapshot)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(payload)
+		})
+		metricsServer = &http.Server{
+			Addr:    ":" + cfg.MetricsPort,
+			Handler: mux,
+		}
 		go func() {
-			mux := http.NewServeMux()
-			mux.Handle("/metrics", promhttp.Handler())
-			mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-				redisStatus := store.HealthStatus{Healthy: true}
-				payload, _ := json.Marshal(readinessPayload(cfg, grpcReady.Load(), redisStatus))
-				w.Header().Set("Content-Type", "application/json")
-				if grpcReady.Load() {
-					w.WriteHeader(http.StatusOK)
-				} else {
-					w.WriteHeader(http.StatusServiceUnavailable)
-				}
-				_, _ = w.Write(payload)
-			})
-			mux.HandleFunc("/health/redis", func(w http.ResponseWriter, r *http.Request) {
-				status := store.HealthStatus{Healthy: false, Error: "engine product-memory redis disabled; backend owns durable memory"}
-				payload, _ := json.Marshal(status)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write(payload)
-			})
-			mux.HandleFunc("/metrics/llm", func(w http.ResponseWriter, r *http.Request) {
-				snapshot := gateway.LLMMetricsSnapshot{}
-				if llmMetricsSnapshot != nil {
-					snapshot = llmMetricsSnapshot()
-				}
-				payload, _ := json.Marshal(snapshot)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write(payload)
-			})
-
 			log.Info("metrics_server_listening", "port", cfg.MetricsPort)
-			if err := http.ListenAndServe(":"+cfg.MetricsPort, mux); err != nil {
+			if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				log.Error("metrics_server_failed", "error", err.Error())
 			}
 		}()
@@ -1020,8 +1196,33 @@ func main() {
 	}
 	grpcReady.Store(true)
 
-	if err := grpcServer.Serve(listener); err != nil {
-		log.Error("grpc_serve_failed", "error", err.Error())
-		os.Exit(1)
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- grpcServer.Serve(listener)
+	}()
+
+	select {
+	case err := <-serveErr:
+		if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			log.Error("grpc_serve_failed", "error", err.Error())
+			os.Exit(1)
+		}
+	case <-rootCtx.Done():
+		log.Info("engine_shutdown_started", "reason", rootCtx.Err().Error())
+		grpcReady.Store(false)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := shutdownEngineRuntime(shutdownCtx, engineRuntimeResources{
+			cancel:              stopSignals,
+			grpcServer:          grpcServer,
+			metricsServer:       metricsServer,
+			eventEmitter:        httpEventEmitter,
+			summarizationWorker: summaryWorker,
+			redisClient:         runtimeIntentRedisClient,
+		}); err != nil {
+			log.Error("engine_shutdown_failed", "error", err.Error())
+			os.Exit(1)
+		}
+		log.Info("engine_shutdown_complete")
 	}
 }

@@ -124,7 +124,9 @@ def can_mutate_department_work(
     return has_department_role(user, department, "lead")
 
 
-def department_payload(department: DepartmentRegistry, *, user: User | None = None) -> dict[str, Any]:
+def department_payload(
+    department: DepartmentRegistry, *, user: User | None = None
+) -> dict[str, Any]:
     payload = {
         "id": str(department.id),
         "organization_id": str(department.organization_id),

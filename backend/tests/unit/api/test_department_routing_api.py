@@ -113,7 +113,10 @@ def _task(
     version = GraphVersion.objects.create(
         graph=company,
         version=1,
-        graph_json={"nodes": [{"id": "creative", "type": "agent", "name": "Creative"}], "edges": []},
+        graph_json={
+            "nodes": [{"id": "creative", "type": "agent", "name": "Creative"}],
+            "edges": [],
+        },
     )
     run = Run.objects.create(
         owner=owner,
@@ -234,7 +237,9 @@ def test_company_member_without_department_membership_cannot_read_or_route(api_c
     assert route.status_code == 403
 
 
-def test_department_lead_with_company_access_can_route_and_projection_is_idempotent(api_client) -> None:
+def test_department_lead_with_company_access_can_route_and_projection_is_idempotent(
+    api_client,
+) -> None:
     org = Organization.objects.create(name="ATLAS")
     owner = _user(org, "owner-lead@example.com", "owner")
     lead = _user(org, "creative-lead@example.com", "member")
@@ -257,7 +262,9 @@ def test_department_lead_with_company_access_can_route_and_projection_is_idempot
     )
 
     assert response.status_code == 201, response.json()
-    routing_record = TaskRoutingRecord.objects.get(id=response.json()["data"]["routing_record"]["id"])
+    routing_record = TaskRoutingRecord.objects.get(
+        id=response.json()["data"]["routing_record"]["id"]
+    )
     assert routing_record.to_department_id == department.id
     assert routing_record.due_at is not None
 
@@ -266,7 +273,9 @@ def test_department_lead_with_company_access_can_route_and_projection_is_idempot
     assert lifecycle.current_department_id == department.id
     assert task_record.department_id == department.id
 
-    event = DomainEvent.objects.get(event_type="task.routing_created", aggregate_id=routing_record.id)
+    event = DomainEvent.objects.get(
+        event_type="task.routing_created", aggregate_id=routing_record.id
+    )
     apply_task_projection(event)
     apply_task_projection(event)
     task_record.refresh_from_db()
@@ -332,7 +341,9 @@ def test_assigned_user_must_belong_to_target_department_and_company(api_client) 
     assert no_company.json()["error"]["code"] == "ASSIGNED_USER_COMPANY_ACCESS_REQUIRED"
 
 
-def test_missing_connector_records_signal_and_internal_note_without_fake_execution(api_client) -> None:
+def test_missing_connector_records_signal_and_internal_note_without_fake_execution(
+    api_client,
+) -> None:
     org = Organization.objects.create(name="ATLAS")
     owner = _user(org, "owner-gap@example.com", "owner")
     lead = _user(org, "lead-gap@example.com", "member")
@@ -364,10 +375,7 @@ def test_missing_connector_records_signal_and_internal_note_without_fake_executi
     assert response.status_code == 201, response.json()
     signal = CompanySignal.objects.get(company=company, source="department_routing")
     assert signal.channel == "whatsapp"
-    assert (
-        signal.metadata_json["execution_status"]
-        == "blocked_until_missing_capabilities_resolved"
-    )
+    assert signal.metadata_json["execution_status"] == "blocked_until_missing_capabilities_resolved"
     thread = CommunicationThread.objects.get(thread_type="capability_gap")
     assert thread.visibility_mode == "operator"
     assert thread.department_id == department.id
@@ -476,9 +484,12 @@ def test_communication_message_routes_to_policy_department_idempotently() -> Non
     assert first.due_at is not None
     assert message.body == before_body
     assert message.thread.status == before_thread_status
-    assert TaskRoutingRecord.objects.filter(
-        idempotency_key=f"routing:communication-message:{message.id}"
-    ).count() == 1
+    assert (
+        TaskRoutingRecord.objects.filter(
+            idempotency_key=f"routing:communication-message:{message.id}"
+        ).count()
+        == 1
+    )
     event = DomainEvent.objects.get(event_type="task.routing_created", aggregate_id=first.id)
     event_text = str(event.payload)
     assert "Can you explain why WhatsApp" not in event_text
@@ -619,6 +630,9 @@ def test_optional_kafka_receipt_handler_routes_once() -> None:
     assert second is not None
     assert first.id == second.id
     assert first.to_department_id == department.id
-    assert TaskRoutingRecord.objects.filter(
-        idempotency_key=f"routing:communication-receipt:{receipt.id}"
-    ).count() == 1
+    assert (
+        TaskRoutingRecord.objects.filter(
+            idempotency_key=f"routing:communication-receipt:{receipt.id}"
+        ).count()
+        == 1
+    )

@@ -44,29 +44,57 @@ from infrastructure.orm.models import (
 
 OPERATION_TEMPLATES = {
     "daily_operating_brief": "Review current company state and produce the next operating brief.",
-    "content_drop_planning": "Draft a content drop plan from current inventory, media, demand, and policies.",
-    "paid_order_follow_up": "Prepare safe follow-up work for a paid order without exposing private buyer data.",
-    "fulfillment_exception_review": "Review a fulfillment issue and propose the next operator-safe action.",
-    "sold_out_demand_capture": "Capture sold-out demand and summarize reorder evidence.",
-    "reorder_procurement_approval": "Draft a procurement recommendation and request human approval.",
+    "content_drop_planning": "Plan a human-gated communication package from current evidence and policies.",
+    "paid_order_follow_up": "Prepare safe follow-up work for a completed commerce milestone.",
+    "fulfillment_exception_review": "Review a blocked operations exception and propose the next safe action.",
+    "sold_out_demand_capture": "Capture constrained-availability evidence for future planning.",
+    "reorder_procurement_approval": "Draft a resource commitment recommendation and request human approval.",
 }
 
-SELL_THROUGH_LEARNING_OBJECTIVE = (
-    "Turn limited inventory into validated sell-through learning while preserving "
-    "stock, cash, approval, and customer-data integrity."
+SIGNAL_TYPE_GENERIC_ALIASES: dict[str, dict[str, str]] = {
+    "demand": {"signal_kind": "opportunity", "domain_context": "general"},
+    "lead": {"signal_kind": "opportunity", "domain_context": "general"},
+    "stockout": {"signal_kind": "risk", "domain_context": "inventory"},
+    "content_response": {"signal_kind": "feedback", "domain_context": "content"},
+    "fulfillment_issue": {"signal_kind": "exception", "domain_context": "operations"},
+    "paid_order": {"signal_kind": "milestone", "domain_context": "commerce"},
+    "manual": {"signal_kind": "manual", "domain_context": "general"},
+}
+
+OPERATION_TYPE_GENERIC_ALIASES: dict[str, dict[str, str]] = {
+    "daily_operating_brief": {"operation_family": "brief", "domain_context": "general"},
+    "content_drop_planning": {"operation_family": "planning", "domain_context": "content"},
+    "paid_order_follow_up": {"operation_family": "follow_up", "domain_context": "commerce"},
+    "fulfillment_exception_review": {
+        "operation_family": "exception_review",
+        "domain_context": "operations",
+    },
+    "sold_out_demand_capture": {
+        "operation_family": "evidence_capture",
+        "domain_context": "inventory",
+    },
+    "reorder_procurement_approval": {
+        "operation_family": "approval_request",
+        "domain_context": "procurement",
+    },
+}
+
+COMPANY_PROGRESS_OBJECTIVE = (
+    "Turn backend-owned company context into validated next-action evidence while "
+    "preserving approval, data, and operational integrity."
 )
 
 FIRST_REHEARSAL_GOAL = (
-    "Produce the first sell-through operating brief from real inventory, identify "
-    "the best first drop, generate draft content direction, surface stock/cash/"
-    "reorder risks, and define the next action without touching real buyers."
+    "Produce the first operating brief from backend-owned company context, identify "
+    "the highest-priority next action, surface dependencies and risks, and avoid "
+    "external side effects."
 )
 
 DEFAULT_INTEGRITY_GATES: dict[str, dict[str, str | int]] = {
-    "stock_drift": {"target": 0, "status": "pending"},
-    "duplicate_reservation_order_cash": {"target": 0, "status": "pending"},
-    "private_data_to_gemini": {"target": 0, "status": "pending"},
-    "ungated_publication_or_procurement": {"target": 0, "status": "pending"},
+    "state_drift": {"target": 0, "status": "pending"},
+    "duplicate_work_or_cost": {"target": 0, "status": "pending"},
+    "private_data_exposure": {"target": 0, "status": "pending"},
+    "ungated_external_action": {"target": 0, "status": "pending"},
     "raw_log_dependency": {"target": 0, "status": "pending"},
 }
 
@@ -83,24 +111,24 @@ DEPARTMENT_OBJECTIVE_ACTION_PLAN: list[dict[str, str]] = [
         "responsibility": "Frame the run goal, score success, explain misses, and choose the next decision.",
     },
     {
-        "department": "Content Studio",
-        "responsibility": "Turn inventory and scarcity into draft content direction and media-safe briefs.",
+        "department": "Planning Desk",
+        "responsibility": "Turn company evidence into human-gated planning artifacts.",
     },
     {
-        "department": "Social Desk",
-        "responsibility": "Prepare publication and demand-capture work without external posting by default.",
+        "department": "Channel Desk",
+        "responsibility": "Prepare channel work without external action by default.",
     },
     {
-        "department": "Sales Desk",
-        "responsibility": "Translate demand into qualified opportunities and safe checkout follow-up work.",
+        "department": "Customer Operations",
+        "responsibility": "Translate requests and signals into qualified next actions.",
     },
     {
-        "department": "Ops & Inventory",
-        "responsibility": "Protect stock truth, reservations, fulfillment visibility, and stockout evidence.",
+        "department": "Operations Desk",
+        "responsibility": "Protect operational state, dependencies, and exception visibility.",
     },
     {
-        "department": "Finance & Procurement",
-        "responsibility": "Explain cash/reorder implications and draft human-gated procurement work when justified.",
+        "department": "Resource Desk",
+        "responsibility": "Explain resource implications and draft human-gated commitment work.",
     },
 ]
 
@@ -112,6 +140,57 @@ class CompanyOpsError(ValueError):
         self.code = code
         self.message = message
         super().__init__(message)
+
+
+def signal_semantic_aliases(
+    *,
+    signal_type: str,
+    signal_kind: str = "",
+    domain_context: str = "",
+) -> dict[str, str]:
+    """Return Company-facing generic signal semantics for a compatibility type."""
+
+    derived = SIGNAL_TYPE_GENERIC_ALIASES.get(
+        signal_type,
+        {"signal_kind": "manual", "domain_context": "general"},
+    )
+    clean_kind = _clean_key(signal_kind or derived["signal_kind"], limit=32)
+    allowed = {item[0] for item in CompanySignal.SIGNAL_KIND_CHOICES}
+    if clean_kind not in allowed:
+        raise CompanyOpsError("invalid_signal_kind", "signal_kind is not supported.")
+    clean_domain = _clean_key(domain_context or derived["domain_context"], limit=64)
+    return {
+        "signal_type": signal_type,
+        "signal_kind": clean_kind,
+        "domain_context": clean_domain or "general",
+    }
+
+
+def operation_semantic_aliases(
+    *,
+    operation_type: str,
+    operation_family: str = "",
+    domain_context: str = "",
+) -> dict[str, str]:
+    """Return Company-facing generic operation semantics for a compatibility type."""
+
+    derived = OPERATION_TYPE_GENERIC_ALIASES.get(
+        operation_type,
+        {"operation_family": "brief", "domain_context": "general"},
+    )
+    clean_family = _clean_key(operation_family or derived["operation_family"], limit=32)
+    allowed = {item[0] for item in CompanyOperationObjective.OPERATION_FAMILY_CHOICES}
+    if clean_family not in allowed:
+        raise CompanyOpsError(
+            "invalid_operation_family",
+            "operation_family is not supported.",
+        )
+    clean_domain = _clean_key(domain_context or derived["domain_context"], limit=64)
+    return {
+        "operation_type": operation_type,
+        "operation_family": clean_family,
+        "domain_context": clean_domain or "general",
+    }
 
 
 def company_ops_overview_payload(company: Graph) -> dict[str, Any]:
@@ -182,7 +261,9 @@ def recommended_operations(company: Graph) -> list[dict[str, str]]:
     recommendations: list[dict[str, str]] = [
         {
             "operation_type": "daily_operating_brief",
-            "label": "Daily operating brief",
+            "operation_family": "brief",
+            "domain_context": "general",
+            "label": "Operating brief",
             "reason": "Refresh the company state and decide the next move.",
         }
     ]
@@ -190,40 +271,50 @@ def recommended_operations(company: Graph) -> list[dict[str, str]]:
         recommendations.append(
             {
                 "operation_type": "sold_out_demand_capture",
-                "label": "Sold-out demand capture",
-                "reason": "Stockout signals can become reorder evidence.",
+                "operation_family": "evidence_capture",
+                "domain_context": "inventory",
+                "label": "Evidence capture",
+                "reason": "Risk signals can become durable planning evidence.",
             }
         )
     if InventoryOrderShell.objects.filter(company=company, status="paid").exists():
         recommendations.append(
             {
                 "operation_type": "paid_order_follow_up",
-                "label": "Paid-order follow-up",
-                "reason": "Paid orders need safe follow-through and learnings.",
+                "operation_family": "follow_up",
+                "domain_context": "commerce",
+                "label": "Follow-up review",
+                "reason": "Completed milestones need safe follow-through.",
             }
         )
     if CommerceFulfillment.objects.filter(company=company, status="blocked").exists():
         recommendations.append(
             {
                 "operation_type": "fulfillment_exception_review",
-                "label": "Fulfillment exception review",
-                "reason": "Blocked fulfillment needs an operator-visible resolution.",
+                "operation_family": "exception_review",
+                "domain_context": "operations",
+                "label": "Exception review",
+                "reason": "Blocked work needs an operator-visible resolution.",
             }
         )
     if PublicationDraft.objects.filter(company=company, status="draft").exists():
         recommendations.append(
             {
                 "operation_type": "content_drop_planning",
-                "label": "Content drop planning",
-                "reason": "Draft content is ready for review and packaging.",
+                "operation_family": "planning",
+                "domain_context": "content",
+                "label": "Planning review",
+                "reason": "Draft work is ready for review and packaging.",
             }
         )
     if CompanySignal.objects.filter(company=company, status="qualified").exists():
         recommendations.append(
             {
                 "operation_type": "reorder_procurement_approval",
-                "label": "Procurement approval",
-                "reason": "Qualified demand can support a human-gated procurement draft.",
+                "operation_family": "approval_request",
+                "domain_context": "procurement",
+                "label": "Approval request",
+                "reason": "Qualified signals can support a human-gated commitment draft.",
             }
         )
     return recommendations[:6]
@@ -235,6 +326,8 @@ def create_company_signal(
     actor: User | None = None,
     signal_type: str,
     title: str,
+    signal_kind: str = "",
+    domain_context: str = "",
     summary: str = "",
     source: str = "manual",
     external_key: str = "",
@@ -248,6 +341,11 @@ def create_company_signal(
     """Create or replay a sanitized company signal."""
 
     _assert_choice(signal_type, dict(CompanySignal.SIGNAL_TYPE_CHOICES), "signal_type")
+    semantics = signal_semantic_aliases(
+        signal_type=signal_type,
+        signal_kind=signal_kind,
+        domain_context=domain_context,
+    )
     organization = _organization_for_company(company)
     product = _resolve_product(company=company, product_id=product_id)
     order = _resolve_order(company=company, order_id=order_id)
@@ -261,6 +359,8 @@ def create_company_signal(
         "order": order,
         "fulfillment": fulfillment,
         "signal_type": signal_type,
+        "signal_kind": semantics["signal_kind"],
+        "domain_context": semantics["domain_context"],
         "status": "new",
         "title": _safe_text(title or signal_type.replace("_", " ").title(), limit=255),
         "summary": _safe_text(summary, limit=2000),
@@ -560,6 +660,8 @@ def request_procurement_approval(
 def build_operation_objective_contract(
     *,
     operation_type: str,
+    operation_family: str = "",
+    domain_context: str = "",
     run_type: str = "rehearsal",
     run_goal: str = "",
     hypothesis: str = "",
@@ -569,8 +671,15 @@ def build_operation_objective_contract(
 
     _assert_choice(operation_type, OPERATION_TEMPLATES, "operation_type")
     _assert_choice(run_type, dict(CompanyOperationObjective.RUN_TYPE_CHOICES), "run_type")
+    semantics = operation_semantic_aliases(
+        operation_type=operation_type,
+        operation_family=operation_family,
+        domain_context=domain_context,
+    )
     return {
         "run_type": run_type,
+        "operation_family": semantics["operation_family"],
+        "domain_context": semantics["domain_context"],
         "run_goal": _safe_text(
             run_goal or _default_run_goal(operation_type=operation_type, run_type=run_type),
             limit=2000,
@@ -653,6 +762,8 @@ def launch_company_operation(
     actor: User | None,
     operation_type: str,
     source_signal: CompanySignal | None = None,
+    operation_family: str = "",
+    domain_context: str = "",
     context_note: str = "",
     run_type: str = "rehearsal",
     run_goal: str = "",
@@ -678,6 +789,8 @@ def launch_company_operation(
         )
     objective_contract = build_operation_objective_contract(
         operation_type=operation_type,
+        operation_family=operation_family,
+        domain_context=domain_context,
         run_type=run_type,
         run_goal=run_goal,
         hypothesis=hypothesis,
@@ -692,11 +805,15 @@ def launch_company_operation(
     input_json = {
         "company_name": company.name,
         "operation_type": operation_type,
+        "operation_family": objective_contract["operation_family"],
+        "domain_context": objective_contract["domain_context"],
         "operation_brief": OPERATION_TEMPLATES[operation_type],
         "company_ops_context_pack_id": str(context_pack.id),
         "objective_contract": _objective_contract_input_payload(objective_contract),
         "company_ops": {
             "operation_type": operation_type,
+            "operation_family": objective_contract["operation_family"],
+            "domain_context": objective_contract["domain_context"],
             "source_signal_id": str(source_signal.id) if source_signal else None,
             "context_note": _safe_text(context_note, limit=1000),
             "run_type": run_type,
@@ -707,6 +824,8 @@ def launch_company_operation(
     metadata["context_pack_id"] = str(context_pack.id)
     metadata["context_pack"] = context_pack_payload(context_pack)
     metadata["company_ops_operation_type"] = operation_type
+    metadata["company_ops_operation_family"] = objective_contract["operation_family"]
+    metadata["company_ops_domain_context"] = objective_contract["domain_context"]
     metadata["objective_contract"] = _objective_contract_input_payload(objective_contract)
     dispatch_graph_json["metadata"] = metadata
     run = create_backend_owned_run(
@@ -752,6 +871,8 @@ def trigger_paid_order_follow_up(
         company=order.company,
         actor=actor,
         signal_type="paid_order",
+        signal_kind="milestone",
+        domain_context="commerce",
         source="commerce",
         external_key=f"paid_order:{order.id}",
         title=f"Paid order {order.public_reference or order.order_number}",
@@ -765,6 +886,8 @@ def trigger_paid_order_follow_up(
         company=order.company,
         actor=actor,
         operation_type="paid_order_follow_up",
+        operation_family="follow_up",
+        domain_context="commerce",
         source_signal=signal,
     )
     return signal, run
@@ -779,6 +902,8 @@ def trigger_fulfillment_exception(
         company=fulfillment.company,
         actor=actor,
         signal_type="fulfillment_issue",
+        signal_kind="exception",
+        domain_context="operations",
         source="commerce",
         external_key=f"fulfillment_issue:{fulfillment.id}",
         title=f"Fulfillment issue for {fulfillment.order.public_reference or fulfillment.order.order_number}",
@@ -793,6 +918,8 @@ def trigger_fulfillment_exception(
         company=fulfillment.company,
         actor=actor,
         operation_type="fulfillment_exception_review",
+        operation_family="exception_review",
+        domain_context="operations",
         source_signal=signal,
     )
     return signal, run
@@ -808,8 +935,15 @@ def build_company_ops_context_pack(
     _assert_choice(operation_type, OPERATION_TEMPLATES, "operation_type")
     organization = _organization_for_company(company)
     brief = current_brief_payload(company=company).get("brief")
+    operation_semantics = operation_semantic_aliases(
+        operation_type=operation_type,
+        operation_family=str((objective_contract or {}).get("operation_family") or ""),
+        domain_context=str((objective_contract or {}).get("domain_context") or ""),
+    )
     scope = {
         "operation_type": operation_type,
+        "operation_family": operation_semantics["operation_family"],
+        "domain_context": operation_semantics["domain_context"],
         "context_note": _safe_text(context_note, limit=1000),
         "objective_contract": _objective_contract_input_payload(objective_contract or {}),
         "business_context": _business_context(company),
@@ -845,6 +979,13 @@ def company_signal_payload(signal: CompanySignal) -> dict[str, Any]:
         "fulfillment_id": str(signal.fulfillment_id) if signal.fulfillment_id else None,
         "operation_id": str(signal.operation_id) if signal.operation_id else None,
         "signal_type": signal.signal_type,
+        "signal_kind": signal.signal_kind,
+        "domain_context": signal.domain_context,
+        "semantic_aliases": {
+            "signal_type": signal.signal_type,
+            "signal_kind": signal.signal_kind,
+            "domain_context": signal.domain_context,
+        },
         "status": signal.status,
         "source": signal.source,
         "external_key": signal.external_key,
@@ -949,12 +1090,27 @@ def operation_payload(run: Run) -> dict[str, Any]:
         objective = run.company_objective
     except CompanyOperationObjective.DoesNotExist:
         objective = None
+    operation_type = str(input_json.get("operation_type") or "")
+    if objective is not None:
+        operation_family = objective.operation_family
+        domain_context = objective.domain_context
+    else:
+        semantics = operation_semantic_aliases(operation_type=operation_type)
+        operation_family = semantics["operation_family"]
+        domain_context = semantics["domain_context"]
     return {
         "id": str(run.id),
         "company_id": str(run.graph_version.graph_id),
         "graph_version_id": str(run.graph_version_id),
         "status": run.status,
-        "operation_type": input_json.get("operation_type"),
+        "operation_type": operation_type,
+        "operation_family": operation_family,
+        "domain_context": domain_context,
+        "semantic_aliases": {
+            "operation_type": operation_type,
+            "operation_family": operation_family,
+            "domain_context": domain_context,
+        },
         "operation_brief": input_json.get("operation_brief"),
         "context_pack_id": input_json.get("company_ops_context_pack_id"),
         "objective_contract_id": input_json.get("company_ops_objective_id"),
@@ -971,6 +1127,13 @@ def operation_objective_payload(objective: CompanyOperationObjective) -> dict[st
         "operation_id": str(objective.operation_id),
         "source_signal_id": str(objective.source_signal_id) if objective.source_signal_id else None,
         "run_type": objective.run_type,
+        "operation_family": objective.operation_family,
+        "domain_context": objective.domain_context,
+        "semantic_aliases": {
+            "operation_family": objective.operation_family,
+            "domain_context": objective.domain_context,
+            "operation_type": _operation_type_for_objective(objective),
+        },
         "status": objective.status,
         "run_goal": objective.run_goal,
         "hypothesis": objective.hypothesis,
@@ -986,9 +1149,19 @@ def operation_objective_payload(objective: CompanyOperationObjective) -> dict[st
     }
 
 
+def _operation_type_for_objective(objective: CompanyOperationObjective) -> str:
+    operation = getattr(objective, "operation", None)
+    input_json = operation.input_json if operation is not None else {}
+    if not isinstance(input_json, dict):
+        return ""
+    return str(input_json.get("operation_type") or "")
+
+
 def _objective_contract_input_payload(contract: dict[str, Any]) -> dict[str, Any]:
     return {
-        "primary_objective": SELL_THROUGH_LEARNING_OBJECTIVE,
+        "primary_objective": COMPANY_PROGRESS_OBJECTIVE,
+        "operation_family": contract.get("operation_family") or "brief",
+        "domain_context": contract.get("domain_context") or "general",
         "run_type": contract.get("run_type") or "rehearsal",
         "run_goal": contract.get("run_goal") or "",
         "hypothesis": contract.get("hypothesis") or "",
@@ -1002,7 +1175,7 @@ def _default_run_goal(*, operation_type: str, run_type: str) -> str:
     if run_type == "rehearsal" and operation_type == "daily_operating_brief":
         return FIRST_REHEARSAL_GOAL
     return (
-        f"Move the company toward sell-through learning by completing "
+        f"Move the company toward an inspectable next action by completing "
         f"{OPERATION_TEMPLATES[operation_type].lower()}"
     )
 
@@ -1011,17 +1184,17 @@ def _default_hypothesis(*, operation_type: str) -> str:
     if operation_type == "daily_operating_brief":
         return (
             "A structured operating brief from current backend-owned company state will "
-            "make the next sell-through action clearer than fixing isolated issues."
+            "make the next action clearer than fixing isolated issues."
         )
     if operation_type == "content_drop_planning":
         return (
-            "A content drop grounded in stock, scarcity, and demand context will create "
-            "a stronger sales learning loop than generic content output."
+            "A plan grounded in current evidence and constraints will create a stronger "
+            "learning loop than unsupported output."
         )
     if operation_type == "paid_order_follow_up":
         return (
-            "Paid-order follow-up can capture fulfillment learning and reduce missed "
-            "repeat demand without exposing private buyer data."
+            "Follow-up on a completed milestone can capture operational learning without "
+            "exposing private customer data."
         )
     if operation_type == "fulfillment_exception_review":
         return (
@@ -1030,11 +1203,11 @@ def _default_hypothesis(*, operation_type: str) -> str:
         )
     if operation_type == "sold_out_demand_capture":
         return (
-            "Stockout and low-stock signals can become reorder evidence when captured "
-            "as qualified business demand."
+            "Risk and constraint signals can become durable evidence when captured as "
+            "qualified company context."
         )
     return (
-        "Procurement proposals should come from observed demand, stock risk, cash, and "
+        "Resource commitments should come from observed signals, operational risk, and "
         "human approval rather than guesswork."
     )
 
@@ -1042,20 +1215,20 @@ def _default_hypothesis(*, operation_type: str) -> str:
 def _default_target_signal(*, operation_type: str, run_type: str) -> str:
     if run_type == "rehearsal":
         return (
-            "Integrity gates pass, no external buyer-facing action occurs, and the "
-            "operator gets a concrete next action from real inventory context."
+            "Integrity gates pass, no external action occurs, and the operator gets a "
+            "concrete next action from backend-owned company context."
         )
     if operation_type == "content_drop_planning":
-        return "At least one human-gated publication draft or content direction exists."
+        return "At least one human-gated planning artifact or direction exists."
     if operation_type == "sold_out_demand_capture":
-        return "Sold-out or low-stock evidence becomes a signal, opportunity, or reorder input."
+        return "Constraint evidence becomes a signal, opportunity, or planning input."
     if operation_type == "reorder_procurement_approval":
-        return "A procurement draft is created or updated and remains human-gated."
+        return "A resource commitment draft is created or updated and remains human-gated."
     if operation_type == "paid_order_follow_up":
-        return "Paid order follow-up work is visible once without duplicate decisions."
+        return "Follow-up work is visible once without duplicate decisions."
     if operation_type == "fulfillment_exception_review":
-        return "The fulfillment issue has an operator-visible reason and next action."
-    return "The operation creates inspectable progress toward sell-through learning."
+        return "The exception has an operator-visible reason and next action."
+    return "The operation creates inspectable progress toward a company next action."
 
 
 def _business_context(company: Graph) -> dict[str, Any]:
@@ -1104,6 +1277,8 @@ def _business_context(company: Graph) -> dict[str, Any]:
             {
                 "id": str(signal.id),
                 "type": signal.signal_type,
+                "kind": signal.signal_kind,
+                "domain_context": signal.domain_context,
                 "status": signal.status,
                 "title": signal.title,
                 "summary": signal.summary,

@@ -27,6 +27,7 @@ from infrastructure.orm.models import (
     User,
     WorkWhiteboard,
 )
+from tests.helpers.organizations import required_company_organization
 
 pytestmark = pytest.mark.django_db
 
@@ -40,7 +41,10 @@ def _user(org: Organization, email: str, role: str = "member") -> User:
 
 
 def _company(org: Organization, owner: User, *, name: str = "Legacy Eyewear") -> Graph:
-    company = cast(Graph, Graph.objects.create(owner=owner, organization=org, name=name, description="Test company"))
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=owner, organization=org, name=name, description="Test company"),
+    )
     CompanyAccessPolicy.objects.create(
         organization=org,
         company=company,
@@ -121,7 +125,7 @@ def _install_strategy(company: Graph) -> None:
         status="active",
     )
     CompanyOperatingModelInstallation.objects.create(
-        organization=company.organization,
+        organization=required_company_organization(company),
         company=company,
         pack_release=release,
         pack_id=release.pack_id,
@@ -174,11 +178,14 @@ def test_strategy_wrappers_delegate_to_pack_defined_phase_idempotently() -> None
     assert whiteboard.status == WorkWhiteboard.STATUS_IN_STRATEGY
     assert len(first["workstreams"]) == 2
     assert len(second["workstreams"]) == 2
-    assert TaskRoutingRecord.objects.filter(
-        company=company,
-        metadata_json__whiteboard_id=str(whiteboard.id),
-        metadata_json__phase_id="strategy",
-    ).count() == 2
+    assert (
+        TaskRoutingRecord.objects.filter(
+            company=company,
+            metadata_json__whiteboard_id=str(whiteboard.id),
+            metadata_json__phase_id="strategy",
+        ).count()
+        == 2
+    )
 
 
 def test_strategy_wrapper_gate_uses_configured_score_key() -> None:
@@ -198,11 +205,16 @@ def test_strategy_wrapper_gate_uses_configured_score_key() -> None:
         )
 
     synthesize_strategy(user=owner, whiteboard=whiteboard)
-    evaluation = evaluate_strategy_gate(user=owner, whiteboard=whiteboard, scores={"quality_score": 92})
+    evaluation = evaluate_strategy_gate(
+        user=owner, whiteboard=whiteboard, scores={"quality_score": 92}
+    )
     whiteboard.refresh_from_db()
     state = strategy_state_payload(whiteboard)
 
     assert evaluation.status == "PASS"
     assert whiteboard.status == WorkWhiteboard.STATUS_IN_CONTENT
     assert state["gate"]["gate_passed"] is True
-    assert {item["workstream"] for item in list_strategy_workstreams(whiteboard=whiteboard)} == {"research", "plan"}
+    assert {item["workstream"] for item in list_strategy_workstreams(whiteboard=whiteboard)} == {
+        "research",
+        "plan",
+    }

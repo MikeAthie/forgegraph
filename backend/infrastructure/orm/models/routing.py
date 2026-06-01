@@ -202,13 +202,18 @@ class RoutingPolicy(models.Model):
     def clean(self) -> None:
         super().clean()
         errors: dict[str, str] = {}
-        if self.company_id and self.company.organization_id != self.organization_id:
+        company = self.company if self.company_id else None
+        if company is not None and company.organization_id != self.organization_id:
             errors["company"] = "Routing policy company must belong to the policy organization."
-        if self.department_id and self.department.organization_id != self.organization_id:
-            errors["department"] = "Routing policy department must belong to the policy organization."
+        department = self.department if self.department_id else None
+        if department is not None and department.organization_id != self.organization_id:
+            errors["department"] = (
+                "Routing policy department must belong to the policy organization."
+            )
+        fallback_department = self.fallback_department if self.fallback_department_id else None
         if (
-            self.fallback_department_id
-            and self.fallback_department.organization_id != self.organization_id
+            fallback_department is not None
+            and fallback_department.organization_id != self.organization_id
         ):
             errors["fallback_department"] = (
                 "Routing policy fallback department must belong to the policy organization."
@@ -230,6 +235,7 @@ class TaskRoutingRecord(models.Model):
         ("claimed", "Claimed"),
         ("in_progress", "In Progress"),
         ("blocked", "Blocked"),
+        ("ready_for_review", "Ready For Review"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
     ]
@@ -369,9 +375,11 @@ class TaskRoutingRecord(models.Model):
     def clean(self) -> None:
         super().clean()
         errors: dict[str, str] = {}
-        if self.company_id and self.company.organization_id != self.organization_id:
+        company = self.company if self.company_id else None
+        if company is not None and company.organization_id != self.organization_id:
             errors["company"] = "Routing record company must belong to the organization."
-        if self.task_lifecycle_id and self.task_lifecycle.organization_id != self.organization_id:
+        task_lifecycle = self.task_lifecycle if self.task_lifecycle_id else None
+        if task_lifecycle is not None and task_lifecycle.organization_id != self.organization_id:
             errors["task_lifecycle"] = "Routing record task must belong to the organization."
         for field_name in ("from_department", "to_department"):
             department = getattr(self, field_name, None)
@@ -408,6 +416,8 @@ def _scope_for_object(value: object) -> tuple[uuid.UUID | None, uuid.UUID | None
     if isinstance(value, CommunicationThread):
         return value.organization_id, value.company_id
     if isinstance(value, ApprovalTask):
+        if value.run is None:
+            return organization_id, None
         return _scope_for_run(value.run)
     if isinstance(value, Run):
         return _scope_for_run(value)

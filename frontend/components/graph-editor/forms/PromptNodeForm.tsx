@@ -143,12 +143,10 @@ Please {{task}}"
             onChange={(event) =>
               handleChange(
                 "observation_context_paths",
-                event.target.value
-                  .split(/[\n,]/)
-                  .flatMap((item) => {
-                    const trimmed = item.trim();
-                    return trimmed ? [trimmed] : [];
-                  }),
+                event.target.value.split(/[\n,]/).flatMap((item) => {
+                  const trimmed = item.trim();
+                  return trimmed ? [trimmed] : [];
+                }),
               )
             }
             placeholder={"node.recall_jackie_context.output"}

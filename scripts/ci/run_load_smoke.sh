@@ -19,6 +19,10 @@ export PLAYWRIGHT_BACKEND_PORT="${PLAYWRIGHT_BACKEND_PORT:-8002}"
 export PLAYWRIGHT_DEV_PORT="${PLAYWRIGHT_DEV_PORT:-3001}"
 export PLAYWRIGHT_API_URL="${PLAYWRIGHT_API_URL:-http://127.0.0.1:${PLAYWRIGHT_BACKEND_PORT}}"
 export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-${PLAYWRIGHT_API_URL}}"
+export DB_HOST="${DB_HOST:-127.0.0.1}"
+export DB_PORT="${DB_PORT:-5433}"
+export DB_USER="${DB_USER:-forgegraph}"
+export DB_PASSWORD="${DB_PASSWORD:-forgegraph_secret}"
 export USE_IN_MEMORY_CHANNEL_LAYER="${USE_IN_MEMORY_CHANNEL_LAYER:-false}"
 export USE_IN_MEMORY_CACHE="${USE_IN_MEMORY_CACHE:-false}"
 export PLAYWRIGHT_LOAD_SMOKE_RUNS="${PLAYWRIGHT_LOAD_SMOKE_RUNS:-100}"
@@ -48,6 +52,79 @@ export RUN_QUEUE_ENABLED="${RUN_QUEUE_ENABLED:-true}"
 export RUN_QUEUE_MAX_CONCURRENCY_PER_TENANT="${RUN_QUEUE_MAX_CONCURRENCY_PER_TENANT:-10}"
 export RUN_QUEUE_RETRY_DELAY_SECONDS="${RUN_QUEUE_RETRY_DELAY_SECONDS:-1}"
 
+LOAD_SMOKE_OWNS_DB=false
+if [[ -z "${DB_NAME:-}" && "${PLAYWRIGHT_RUNTIME_TARGET}" == "local" ]]; then
+  export DB_NAME="forgegraph_load_smoke_$(date +%s)_$$"
+  LOAD_SMOKE_OWNS_DB=true
+fi
+export DB_NAME="${DB_NAME:-forgegraph}"
+
+create_load_smoke_database() {
+  (cd "${ROOT}/backend" && run_uv run python - <<'PY')
+import os
+
+import psycopg2
+from psycopg2 import sql
+
+db_name = os.environ["DB_NAME"]
+connection = psycopg2.connect(
+    dbname="postgres",
+    user=os.environ["DB_USER"],
+    password=os.environ["DB_PASSWORD"],
+    host=os.environ["DB_HOST"],
+    port=os.environ["DB_PORT"],
+)
+connection.autocommit = True
+try:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+        if cursor.fetchone() is None:
+            cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
+finally:
+    connection.close()
+PY
+}
+
+drop_load_smoke_database() {
+  (cd "${ROOT}/backend" && run_uv run python - <<'PY')
+import os
+
+import psycopg2
+from psycopg2 import sql
+
+db_name = os.environ["DB_NAME"]
+connection = psycopg2.connect(
+    dbname="postgres",
+    user=os.environ["DB_USER"],
+    password=os.environ["DB_PASSWORD"],
+    host=os.environ["DB_HOST"],
+    port=os.environ["DB_PORT"],
+)
+connection.autocommit = True
+try:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s",
+            (db_name,),
+        )
+        cursor.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(db_name)))
+finally:
+    connection.close()
+PY
+}
+
+cleanup() {
+  if [[ "${LOAD_SMOKE_OWNS_DB}" == "true" ]]; then
+    drop_load_smoke_database || true
+  fi
+}
+trap cleanup EXIT
+
+if [[ "${LOAD_SMOKE_OWNS_DB}" == "true" ]]; then
+  log_section "Create isolated load-smoke database"
+  create_load_smoke_database
+fi
+
 if [[ "${ROOT}" == /mnt/* ]] && command -v cmd.exe >/dev/null 2>&1; then
   wsl_env_names=(
     PLAYWRIGHT_RUNTIME_TARGET
@@ -56,6 +133,11 @@ if [[ "${ROOT}" == /mnt/* ]] && command -v cmd.exe >/dev/null 2>&1; then
     PLAYWRIGHT_DEV_PORT
     PLAYWRIGHT_API_URL
     NEXT_PUBLIC_API_URL
+    DB_HOST
+    DB_PORT
+    DB_NAME
+    DB_USER
+    DB_PASSWORD
     USE_IN_MEMORY_CHANNEL_LAYER
     USE_IN_MEMORY_CACHE
     PLAYWRIGHT_LOAD_SMOKE_RUNS

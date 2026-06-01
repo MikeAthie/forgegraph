@@ -27,6 +27,31 @@ from django.dispatch import receiver
 from django.utils import timezone
 from pgvector.django import IvfflatIndex, VectorField
 
+__all__ = [
+    "TYPE_CHECKING",
+    "AbstractUser",
+    "Any",
+    "BaseUserManager",
+    "ClassVar",
+    "IvfflatIndex",
+    "MaxValueValidator",
+    "MinValueValidator",
+    "ValidationError",
+    "VectorField",
+    "_make_check_constraint",
+    "copy",
+    "hashlib",
+    "inspect",
+    "json",
+    "models",
+    "post_save",
+    "receiver",
+    "settings",
+    "timedelta",
+    "timezone",
+    "uuid",
+]
+
 if TYPE_CHECKING:
     pass
 

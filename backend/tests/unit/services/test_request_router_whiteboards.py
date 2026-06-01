@@ -36,7 +36,10 @@ def _user(org: Organization, email: str, role: str = "member") -> User:
 
 
 def _company(org: Organization, owner: User, *, name: str = "Legacy Eyewear") -> Graph:
-    company = cast(Graph, Graph.objects.create(owner=owner, organization=org, name=name, description="Test company"))
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=owner, organization=org, name=name, description="Test company"),
+    )
     CompanyAccessPolicy.objects.create(
         organization=org,
         company=company,
@@ -98,7 +101,9 @@ def test_new_request_creates_classification_whiteboard_and_onboarding_tasks() ->
     assert whiteboard.budget_limit == "$5000"
     assert "whatsapp" in whiteboard.channel_context_json["requested_channels"]
     assert records
-    assert TaskRoutingRecord.objects.filter(metadata_json__whiteboard_id=str(whiteboard.id)).count() == len(records)
+    assert TaskRoutingRecord.objects.filter(
+        metadata_json__whiteboard_id=str(whiteboard.id)
+    ).count() == len(records)
     assert all(record.communication_message_id == message.id for record in records)
 
 
@@ -107,7 +112,9 @@ def test_existing_request_resumes_active_whiteboard_without_duplicate_tasks() ->
     owner = _user(org, "router-existing@example.com", "owner")
     company = _company(org, owner)
     _assign(org, company, owner)
-    first_message = _message(company, owner, body="Create a new launch campaign for eyewear.", key="first")
+    first_message = _message(
+        company, owner, body="Create a new launch campaign for eyewear.", key="first"
+    )
     _classification, whiteboard, _records = classify_and_route_request(message=first_message)
     assert whiteboard is not None
     second_message = create_message(
@@ -150,7 +157,9 @@ def test_duplicate_request_event_is_idempotent() -> None:
     owner = _user(org, "router-idempotent@example.com", "owner")
     company = _company(org, owner)
     _assign(org, company, owner)
-    message = _message(company, owner, body="Launch a new email campaign for the spring frame drop.", key="idem")
+    message = _message(
+        company, owner, body="Launch a new email campaign for the spring frame drop.", key="idem"
+    )
 
     first_classification, first_whiteboard, first_records = classify_and_route_request(
         message=message,
@@ -174,7 +183,9 @@ def test_whiteboard_completion_updates_and_snapshot_rebuilds_from_db() -> None:
     owner = _user(org, "router-snapshot@example.com", "owner")
     company = _company(org, owner)
     _assign(org, company, owner)
-    message = _message(company, owner, body="Create a new campaign for DEPP GOLD on email.", key="snapshot")
+    message = _message(
+        company, owner, body="Create a new campaign for DEPP GOLD on email.", key="snapshot"
+    )
     _classification, whiteboard, _records = classify_and_route_request(message=message)
     assert whiteboard is not None
     before = whiteboard.completion_score
@@ -186,7 +197,10 @@ def test_whiteboard_completion_updates_and_snapshot_rebuilds_from_db() -> None:
             "objective": "Sell launch inventory.",
             "target_audience": {"segment": "premium eyewear shoppers"},
             "brand_context": {"brand_voice": "confident"},
-            "constraints": {"visual_constraints": "gold product shots", "legal": "no medical claims"},
+            "constraints": {
+                "visual_constraints": "gold product shots",
+                "legal": "no medical claims",
+            },
             "known_facts": {
                 "approval_owner": "Dana",
                 "success_metrics": "qualified consult bookings",

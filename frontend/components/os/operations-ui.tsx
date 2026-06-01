@@ -19,8 +19,7 @@ const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
-export const formatCurrency = (value: number) =>
-  (value >= 100 ? USD_INTEGER_FORMATTER : USD_FORMATTER).format(value);
+export const formatCurrency = (value: number) => (value >= 100 ? USD_INTEGER_FORMATTER : USD_FORMATTER).format(value);
 
 export const formatCompactNumber = (value: number) => COMPACT_NUMBER_FORMATTER.format(value);
 

@@ -812,24 +812,23 @@ test("Legacy Phase 6 operator surface and visual asset brief", async ({ page, re
       "procurement_execution",
     ],
     stock_semantics_report: inventory.stock_state_summary,
-    products: inventory.products
-      .flatMap((product) =>
-        REQUIRED_MODELS.some(
-          (model) => normalizeText(`${product.model} ${product.name}`).split(model.toLowerCase()).length > 1,
-        )
-          ? [
-              {
-                id: product.id,
-                sku: product.sku,
-                model: product.model,
-                name: product.name,
-                stock_state: product.stock_state,
-                available_units: product.available_units,
-                held_units: product.held_units,
-              },
-            ]
-          : [],
-      ),
+    products: inventory.products.flatMap((product) =>
+      REQUIRED_MODELS.some(
+        (model) => normalizeText(`${product.model} ${product.name}`).split(model.toLowerCase()).length > 1,
+      )
+        ? [
+            {
+              id: product.id,
+              sku: product.sku,
+              model: product.model,
+              name: product.name,
+              stock_state: product.stock_state,
+              available_units: product.available_units,
+              held_units: product.held_units,
+            },
+          ]
+        : [],
+    ),
   };
 
   let mockObjectiveSeed: MockObjectiveSeed | null = null;

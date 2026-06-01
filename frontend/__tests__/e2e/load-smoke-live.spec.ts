@@ -12,6 +12,7 @@ import {
 const API_BASE_URL = apiBaseUrl();
 const RUN_COUNT = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_RUNS ?? "100");
 const START_CONCURRENCY = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_START_CONCURRENCY ?? "10");
+const STATUS_POLL_CONCURRENCY = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_STATUS_POLL_CONCURRENCY ?? "10");
 const TEST_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_TIMEOUT_MS ?? "840000");
 const TERMINAL_TIMEOUT_MS = Number(process.env.PLAYWRIGHT_LOAD_SMOKE_TERMINAL_TIMEOUT_MS ?? "720000");
 
@@ -106,8 +107,8 @@ test.describe("No-LLM load smoke live flow", () => {
     await expect
       .poll(
         async () => {
-          const statuses = await Promise.all(
-            runIds.map(async (runId) => {
+          const statuses = await mapWithConcurrency(runIds, STATUS_POLL_CONCURRENCY, async (runId) => {
+            try {
               const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
                 headers: { Authorization: `Bearer ${accessToken}` },
               });
@@ -116,8 +117,10 @@ test.describe("No-LLM load smoke live flow", () => {
               }
               const body = (await response.json()) as { data?: { status?: string } };
               return body.data?.status ?? "missing";
-            }),
-          );
+            } catch {
+              return "missing";
+            }
+          });
           return statuses.filter((status) => !["succeeded", "failed", "canceled"].includes(status)).length;
         },
         {
@@ -127,21 +130,19 @@ test.describe("No-LLM load smoke live flow", () => {
       )
       .toBe(0);
 
-    const details = await Promise.all(
-      runIds.map(async (runId) => {
-        const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        expect(response.ok()).toBeTruthy();
-        return (await response.json()) as {
-          data: {
-            id: string;
-            status: string;
-            node_runs?: Array<{ node_id: string; status: string }>;
-          };
+    const details = await mapWithConcurrency(runIds, STATUS_POLL_CONCURRENCY, async (runId) => {
+      const response = await request.get(`${API_BASE_URL}/api/runs/${runId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      expect(response.ok()).toBeTruthy();
+      return (await response.json()) as {
+        data: {
+          id: string;
+          status: string;
+          node_runs?: Array<{ node_id: string; status: string }>;
         };
-      }),
-    );
+      };
+    });
 
     const nonSucceeded = details.filter((item) => item.data.status !== "succeeded");
     expect(nonSucceeded, JSON.stringify(nonSucceeded.slice(0, 5))).toHaveLength(0);
@@ -160,16 +161,14 @@ test.describe("No-LLM load smoke live flow", () => {
     );
     expect(runsWithoutCompletedNode, JSON.stringify(runsWithoutCompletedNode.slice(0, 5))).toHaveLength(0);
 
-    const deadLetterStates = await Promise.all(
-      runIds.map(async (runId) => {
-        const response = await request.get(`${API_BASE_URL}/api/operator/runs/${runId}/state`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        expect(response.ok()).toBeTruthy();
-        const body = (await response.json()) as { data?: { dead_letter_count?: number } };
-        return body.data?.dead_letter_count ?? 0;
-      }),
-    );
+    const deadLetterStates = await mapWithConcurrency(runIds, STATUS_POLL_CONCURRENCY, async (runId) => {
+      const response = await request.get(`${API_BASE_URL}/api/operator/runs/${runId}/state`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      expect(response.ok()).toBeTruthy();
+      const body = (await response.json()) as { data?: { dead_letter_count?: number } };
+      return body.data?.dead_letter_count ?? 0;
+    });
     expect(deadLetterStates.reduce((sum, count) => sum + count, 0)).toBe(0);
 
     testInfo.attach("load-smoke-summary", {

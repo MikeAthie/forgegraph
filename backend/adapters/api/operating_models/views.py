@@ -1568,7 +1568,7 @@ def _company_for_user(request: Request, company_id: UUID, *, minimum_role: str) 
         return _not_found("Company was not found.")
     if not _can_access_company(request, company, minimum_role):
         return _forbidden("You do not have permission for this company.")
-    return cast(Graph, company)
+    return company
 
 
 def _program_for_user(

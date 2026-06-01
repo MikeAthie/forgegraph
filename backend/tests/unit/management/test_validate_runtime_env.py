@@ -111,3 +111,34 @@ def test_query_access_tokens_are_rejected_in_strict_runtime() -> None:
 
     assert result.returncode != 0
     assert "RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN must be disabled" in result.stderr
+
+
+def test_kafka_routing_flags_are_rejected_in_strict_runtime() -> None:
+    result = _run_validate_runtime_env(
+        _runtime_env(
+            {
+                "COMMUNICATION_ROUTING_FROM_KAFKA_ENABLED": "true",
+                "REQUEST_ROUTER_FROM_KAFKA_ENABLED": "true",
+            }
+        )
+    )
+
+    assert result.returncode != 0
+    assert "COMMUNICATION_ROUTING_FROM_KAFKA_ENABLED must be disabled" in result.stderr
+    assert "REQUEST_ROUTER_FROM_KAFKA_ENABLED must be disabled" in result.stderr
+
+
+def test_enabled_kafka_requires_managed_broker_security_settings() -> None:
+    result = _run_validate_runtime_env(
+        _runtime_env(
+            {
+                "COMMUNICATION_KAFKA_ENABLED": "true",
+                "COMMUNICATION_KAFKA_BOOTSTRAP_SERVERS": "managed.kafka:9092",
+                "COMMUNICATION_KAFKA_TOPIC": "forgegraph.communication.events.v1",
+                "COMMUNICATION_KAFKA_SECURITY_PROTOCOL": "PLAINTEXT",
+            }
+        )
+    )
+
+    assert result.returncode != 0
+    assert "COMMUNICATION_KAFKA_SECURITY_PROTOCOL must be SSL or SASL_SSL" in result.stderr

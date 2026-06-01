@@ -183,16 +183,34 @@ def legal_contract_review_policy() -> dict[str, object]:
         "pack_id": "legal_ops.v1",
         "phase_name": "Contract Review",
         "workstreams": [
-            {"id": "clause_extraction", "name": "Clause Extraction", "department": "legal", "required": True},
+            {
+                "id": "clause_extraction",
+                "name": "Clause Extraction",
+                "department": "legal",
+                "required": True,
+            },
             {"id": "risk_review", "name": "Risk Review", "department": "legal", "required": True},
         ],
         "gate": {
             "gate_id": "legal_ops.v1.contract_review_gate",
             "criteria": [
-                {"key": "missing_required_clause_count", "value_type": "number", "operator": "==", "threshold": 0},
-                {"key": "high_risk_clause_count", "value_type": "number", "operator": "<=", "threshold": 2},
+                {
+                    "key": "missing_required_clause_count",
+                    "value_type": "number",
+                    "operator": "==",
+                    "threshold": 0,
+                },
+                {
+                    "key": "high_risk_clause_count",
+                    "value_type": "number",
+                    "operator": "<=",
+                    "threshold": 2,
+                },
             ],
             "on_pass": {"set_whiteboard_status": WorkWhiteboard.STATUS_IN_APPROVAL},
-            "on_fail": {"set_whiteboard_status": WorkWhiteboard.STATUS_IN_CONTENT, "create_signal": True},
+            "on_fail": {
+                "set_whiteboard_status": WorkWhiteboard.STATUS_IN_CONTENT,
+                "create_signal": True,
+            },
         },
     }

@@ -107,7 +107,12 @@ describe("ToolNodeForm", () => {
       };
 
       return (
-        <ToolNodeForm config={config} onChange={recordConfigChange} errors={options.errors ?? {}} setErrors={mockSetErrors} />
+        <ToolNodeForm
+          config={config}
+          onChange={recordConfigChange}
+          errors={options.errors ?? {}}
+          setErrors={mockSetErrors}
+        />
       );
     };
 

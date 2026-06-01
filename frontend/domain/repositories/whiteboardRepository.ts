@@ -1,5 +1,9 @@
 import {
   type WorkWhiteboardDTO,
+  type WorkWhiteboardBoardCardCreateInput,
+  type WorkWhiteboardBoardCardPatchInput,
+  type WorkWhiteboardBoardEvidenceInput,
+  type WorkWhiteboardBoardSnapshotDTO,
   type WorkWhiteboardDeploymentContractDTO,
   type WorkWhiteboardDeploymentExecuteInput,
   type WorkWhiteboardDeploymentResponse,
@@ -11,6 +15,9 @@ import {
   type WorkWhiteboardPhaseEvaluationInput,
   type WorkWhiteboardPhaseResponse,
   type WorkWhiteboardPatchInput,
+  type WorkWhiteboardPlanningDTO,
+  type WorkWhiteboardPlanningResponse,
+  type WorkWhiteboardPlanningSynthesisInput,
   type WorkWhiteboardStrategyDTO,
   type WorkWhiteboardStrategyResponse,
   type WorkWhiteboardStrategySynthesisInput,
@@ -26,8 +33,29 @@ export const whiteboardRepository = {
   patch: (whiteboardId: string, input: WorkWhiteboardPatchInput): Promise<WorkWhiteboardDTO> =>
     whiteboardsApi.patch(whiteboardId, input),
 
-  readyForStrategy: (whiteboardId: string): Promise<WorkWhiteboardDTO> =>
-    whiteboardsApi.readyForStrategy(whiteboardId),
+  getBoard: (whiteboardId: string): Promise<WorkWhiteboardBoardSnapshotDTO> => whiteboardsApi.getBoard(whiteboardId),
+
+  createBoardCard: (
+    whiteboardId: string,
+    input: WorkWhiteboardBoardCardCreateInput,
+  ): Promise<WorkWhiteboardBoardSnapshotDTO> => whiteboardsApi.createBoardCard(whiteboardId, input),
+
+  patchBoardCard: (
+    whiteboardId: string,
+    cardId: string,
+    input: WorkWhiteboardBoardCardPatchInput,
+  ): Promise<WorkWhiteboardBoardSnapshotDTO> => whiteboardsApi.patchBoardCard(whiteboardId, cardId, input),
+
+  attachBoardCardEvidence: (
+    whiteboardId: string,
+    cardId: string,
+    input: WorkWhiteboardBoardEvidenceInput,
+  ): Promise<WorkWhiteboardBoardSnapshotDTO> => whiteboardsApi.attachBoardCardEvidence(whiteboardId, cardId, input),
+
+  readyForPlanning: (whiteboardId: string): Promise<WorkWhiteboardDTO> => whiteboardsApi.readyForPlanning(whiteboardId),
+
+  // Compatibility helper for legacy strategy-named API consumers.
+  readyForStrategy: (whiteboardId: string): Promise<WorkWhiteboardDTO> => whiteboardsApi.readyForStrategy(whiteboardId),
 
   getPhase: (whiteboardId: string, phaseId: string): Promise<WorkWhiteboardPhaseContractDTO> =>
     whiteboardsApi.getPhase(whiteboardId, phaseId),
@@ -54,7 +82,8 @@ export const whiteboardRepository = {
     whiteboardId: string,
     channelId: string,
     input: WorkWhiteboardDeploymentExecuteInput,
-  ): Promise<WorkWhiteboardDeploymentResponse> => whiteboardsApi.executeDeploymentChannel(whiteboardId, channelId, input),
+  ): Promise<WorkWhiteboardDeploymentResponse> =>
+    whiteboardsApi.executeDeploymentChannel(whiteboardId, channelId, input),
 
   getPerformance: (whiteboardId: string): Promise<WorkWhiteboardPerformanceContractDTO> =>
     whiteboardsApi.getPerformance(whiteboardId),
@@ -72,11 +101,21 @@ export const whiteboardRepository = {
     input?: WorkWhiteboardPerformanceEvaluationInput,
   ): Promise<WorkWhiteboardPerformanceResponse> => whiteboardsApi.evaluatePerformance(whiteboardId, input ?? {}),
 
+  startPlanning: (whiteboardId: string): Promise<WorkWhiteboardPlanningResponse> =>
+    whiteboardsApi.startPlanning(whiteboardId),
+
+  getPlanning: (whiteboardId: string): Promise<WorkWhiteboardPlanningDTO> => whiteboardsApi.getPlanning(whiteboardId),
+
+  synthesizePlanning: (
+    whiteboardId: string,
+    input: WorkWhiteboardPlanningSynthesisInput,
+  ): Promise<WorkWhiteboardPlanningResponse> => whiteboardsApi.synthesizePlanning(whiteboardId, input),
+
+  // Compatibility helpers for legacy strategy-named API consumers.
   startStrategy: (whiteboardId: string): Promise<WorkWhiteboardStrategyResponse> =>
     whiteboardsApi.startStrategy(whiteboardId),
 
-  getStrategy: (whiteboardId: string): Promise<WorkWhiteboardStrategyDTO> =>
-    whiteboardsApi.getStrategy(whiteboardId),
+  getStrategy: (whiteboardId: string): Promise<WorkWhiteboardStrategyDTO> => whiteboardsApi.getStrategy(whiteboardId),
 
   synthesizeStrategy: (
     whiteboardId: string,

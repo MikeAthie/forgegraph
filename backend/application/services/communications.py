@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from django.conf import settings
@@ -32,11 +32,13 @@ from infrastructure.orm.models import (
     InteractionEventRecord,
     Organization,
     ReportRun,
+    RequestClassificationRecord,
     Run,
     ServiceDeliverable,
     ServiceEngagement,
     ToolExecution,
     User,
+    WorkWhiteboard,
 )
 
 COMMUNICATION_EVENT_SCHEMA_VERSION = "communication_event_v1"
@@ -125,17 +127,19 @@ def list_threads_for_user(
         if has_min_role(user, "member")
         else Graph.objects.none()
     )
-    queryset = _thread_queryset().filter(company__in=companies).filter(
-        Q(visibility_mode__in=["customer", "mixed"]) | Q(company__in=operator_companies)
+    queryset = (
+        _thread_queryset()
+        .filter(company__in=companies)
+        .filter(Q(visibility_mode__in=["customer", "mixed"]) | Q(company__in=operator_companies))
     )
     if company_id:
-        queryset = queryset.filter(company_id=company_id)
+        queryset = queryset.filter(company_id=cast(UUID, company_id))
     if status:
         queryset = queryset.filter(status=status)
     if service_engagement_id:
-        queryset = queryset.filter(service_engagement_id=service_engagement_id)
+        queryset = queryset.filter(service_engagement_id=cast(UUID, service_engagement_id))
     if operation_id:
-        queryset = queryset.filter(operation_id=operation_id)
+        queryset = queryset.filter(operation_id=cast(UUID, operation_id))
     return queryset
 
 
@@ -412,7 +416,9 @@ def thread_payload(thread: CommunicationThread, *, user: User) -> dict[str, Any]
         "metadata": sanitize_metadata(thread.metadata_json or {}),
         "can_send_internal": is_operator_for_company(user=user, company=thread.company),
         "created_by_user_id": str(thread.created_by_user_id) if thread.created_by_user_id else None,
-        "created_by_agent_id": str(thread.created_by_agent_id) if thread.created_by_agent_id else None,
+        "created_by_agent_id": str(thread.created_by_agent_id)
+        if thread.created_by_agent_id
+        else None,
         "created_at": thread.created_at.isoformat(),
         "updated_at": thread.updated_at.isoformat(),
     }
@@ -425,6 +431,29 @@ def message_payload(message: CommunicationMessage, *, user: User) -> dict[str, A
         if (payload := attachment_payload(attachment, user=user)) is not None
     ]
     redacted = message.redacted_at is not None
+    routed_whiteboard_id: str | None = None
+    routed_classification: str | None = None
+    if message.company_id and is_operator_for_company(user=user, company=message.company):
+        routed_whiteboard = (
+            WorkWhiteboard.objects.filter(source_message=message, company=message.company)
+            .order_by("-updated_at")
+            .only("id")
+            .first()
+        )
+        if routed_whiteboard is not None:
+            routed_whiteboard_id = str(routed_whiteboard.id)
+            classification = (
+                RequestClassificationRecord.objects.filter(
+                    communication_message=message,
+                    company=message.company,
+                )
+                .order_by("-created_at")
+                .only("classification")
+                .first()
+            )
+            routed_classification = (
+                classification.classification if classification is not None else None
+            )
     return {
         "id": str(message.id),
         "thread_id": str(message.thread_id),
@@ -445,6 +474,8 @@ def message_payload(message: CommunicationMessage, *, user: User) -> dict[str, A
         "redacted_at": message.redacted_at.isoformat() if message.redacted_at else None,
         "metadata": sanitize_metadata(message.metadata_json or {}),
         "attachments": attachments,
+        "routed_whiteboard_id": routed_whiteboard_id,
+        "routed_classification": routed_classification,
         "created_at": message.created_at.isoformat(),
         "updated_at": message.updated_at.isoformat(),
     }
@@ -724,7 +755,7 @@ def attachment_target_id(attachment: CommunicationAttachment) -> UUID | None:
     target_type = attachment_target_type(attachment)
     if not target_type:
         return None
-    return getattr(attachment, f"{_attachment_model_field(target_type)}_id")
+    return cast(UUID | None, getattr(attachment, f"{_attachment_model_field(target_type)}_id"))
 
 
 def can_read_attachment_target(
@@ -742,7 +773,11 @@ def can_read_attachment_target(
     if target_type == "service_deliverable":
         deliverable = attachment.service_deliverable
         return deliverable is not None and deliverable.visibility != "internal"
-    return has_company_access(user, attachment.message.company, "viewer") if attachment.message.company else False
+    return (
+        has_company_access(user, attachment.message.company, "viewer")
+        if attachment.message.company
+        else False
+    )
 
 
 def _lookup_target(model: type[Any], object_id: UUID | str) -> Any | None:
@@ -781,25 +816,48 @@ def _validate_scope(obj: object, *, company: Graph, field_name: str) -> None:
 
 
 def _scope_for_object(value: object) -> tuple[UUID | None, UUID | None]:
-    organization_id = getattr(value, "organization_id", None)
-    company_id = getattr(value, "company_id", None)
+    organization_id = cast(UUID | None, getattr(value, "organization_id", None))
+    company_id = cast(UUID | None, getattr(value, "company_id", None))
     if isinstance(value, AssetVersion):
         return value.asset.organization_id, value.asset.company_id
     if isinstance(value, ApprovalTask):
-        return _scope_for_run(value.run)
+        return _scope_for_approval_task(value)
     if isinstance(value, DecisionRecord):
-        if value.execution_id:
-            return _scope_for_run(value.execution)
-        if value.source_approval_task_id:
-            return _scope_for_run(value.source_approval_task.run)
-        if value.task_id and value.task.execution_id:
-            return _scope_for_run(value.task.execution)
-        return value.organization_id, None
+        return _scope_for_decision_record(value)
     if isinstance(value, ToolExecution):
         return _scope_for_run(value.run)
     if isinstance(value, Run):
         return _scope_for_run(value)
     return organization_id, company_id
+
+
+def _scope_for_approval_task(
+    approval_task: ApprovalTask,
+) -> tuple[UUID | None, UUID | None]:
+    if approval_task.run is None:
+        return approval_task.organization_id, None
+    return _scope_for_run(approval_task.run)
+
+
+def _scope_for_decision_record(
+    decision: DecisionRecord,
+) -> tuple[UUID | None, UUID | None]:
+    if decision.execution_id and decision.execution is not None:
+        return _scope_for_run(decision.execution)
+    if (
+        decision.source_approval_task_id
+        and decision.source_approval_task is not None
+        and decision.source_approval_task.run is not None
+    ):
+        return _scope_for_run(decision.source_approval_task.run)
+    if (
+        decision.task_id
+        and decision.task is not None
+        and decision.task.execution_id
+        and decision.task.execution is not None
+    ):
+        return _scope_for_run(decision.task.execution)
+    return decision.organization_id, None
 
 
 def _scope_for_run(run: Run) -> tuple[UUID | None, UUID | None]:

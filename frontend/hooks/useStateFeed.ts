@@ -97,10 +97,7 @@ export function useStateFeed(options: StateFeedOptions) {
   const lastSeenStateVersion = options.lastSeenStateVersion;
   const onEvent = options.onEvent;
   const onFullResync = options.onFullResync;
-  const [status, dispatchStatus] = useReducer(
-    (_: StateFeedStatus, nextStatus: StateFeedStatus) => nextStatus,
-    "idle",
-  );
+  const [status, dispatchStatus] = useReducer((_: StateFeedStatus, nextStatus: StateFeedStatus) => nextStatus, "idle");
   const eventTypesKey = useMemo(() => (eventTypes ?? []).join(","), [eventTypes]);
   const onEventRef = useRef(onEvent);
   const onFullResyncRef = useRef(onFullResync);
@@ -131,12 +128,10 @@ export function useStateFeed(options: StateFeedOptions) {
     const lastStateVersionRef = {
       current: Math.max(Math.trunc(lastSeenStateVersion ?? 0), 0),
     };
-    const eventTypes = eventTypesKey
-      .split(",")
-      .flatMap((eventType) => {
-        const trimmed = eventType.trim();
-        return trimmed ? [trimmed] : [];
-      });
+    const eventTypes = eventTypesKey.split(",").flatMap((eventType) => {
+      const trimmed = eventType.trim();
+      return trimmed ? [trimmed] : [];
+    });
 
     const connect = async () => {
       dispatchStatus("connecting");

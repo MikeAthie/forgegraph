@@ -5,12 +5,24 @@ from __future__ import annotations
 # ruff: noqa: F401,F403,F405,I001
 
 from infrastructure.orm.models.commerce import *  # noqa: F403
+from infrastructure.orm.models.base import *  # noqa: F403
 from infrastructure.orm.models.base import _make_check_constraint
 
 
 class CompanySignal(models.Model):
     """Backend-owned business signal for operating-loop work."""
 
+    SIGNAL_KIND_CHOICES = [
+        ("request", "Request"),
+        ("opportunity", "Opportunity"),
+        ("risk", "Risk"),
+        ("exception", "Exception"),
+        ("feedback", "Feedback"),
+        ("metric_change", "Metric Change"),
+        ("capability_gap", "Capability Gap"),
+        ("milestone", "Milestone"),
+        ("manual", "Manual"),
+    ]
     SIGNAL_TYPE_CHOICES = [
         ("demand", "Demand"),
         ("lead", "Lead"),
@@ -74,6 +86,8 @@ class CompanySignal(models.Model):
         related_name="company_signals",
     )
     signal_type = models.CharField(max_length=32, choices=SIGNAL_TYPE_CHOICES)
+    signal_kind = models.CharField(max_length=32, choices=SIGNAL_KIND_CHOICES, default="manual")
+    domain_context = models.CharField(max_length=64, blank=True, default="general")
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="new")
     source = models.CharField(max_length=64, blank=True, default="manual")
     external_key = models.CharField(max_length=255, blank=True, default="")
@@ -99,6 +113,7 @@ class CompanySignal(models.Model):
         indexes = [
             models.Index(fields=["organization", "status"], name="company_signal_org_status_idx"),
             models.Index(fields=["company", "signal_type"], name="company_signal_type_idx"),
+            models.Index(fields=["company", "signal_kind"], name="company_signal_kind_idx"),
             models.Index(fields=["company", "status"], name="company_signal_status_idx"),
             models.Index(fields=["company", "occurred_at"], name="company_signal_time_idx"),
         ]
@@ -110,6 +125,14 @@ class CompanySignal(models.Model):
 class CompanyOperationObjective(models.Model):
     """Objective contract and evaluation for a company operation run."""
 
+    OPERATION_FAMILY_CHOICES = [
+        ("brief", "Brief"),
+        ("planning", "Planning"),
+        ("follow_up", "Follow Up"),
+        ("exception_review", "Exception Review"),
+        ("evidence_capture", "Evidence Capture"),
+        ("approval_request", "Approval Request"),
+    ]
     RUN_TYPE_CHOICES = [
         ("rehearsal", "Rehearsal"),
         ("demand", "Demand"),
@@ -152,6 +175,12 @@ class CompanyOperationObjective(models.Model):
         related_name="company_operation_objectives",
     )
     run_type = models.CharField(max_length=32, choices=RUN_TYPE_CHOICES, default="rehearsal")
+    operation_family = models.CharField(
+        max_length=32,
+        choices=OPERATION_FAMILY_CHOICES,
+        default="brief",
+    )
+    domain_context = models.CharField(max_length=64, blank=True, default="general")
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="planned")
     run_goal = models.TextField()
     hypothesis = models.TextField(blank=True, default="")
@@ -171,6 +200,7 @@ class CompanyOperationObjective(models.Model):
         indexes = [
             models.Index(fields=["company", "status"], name="company_obj_status_idx"),
             models.Index(fields=["company", "run_type"], name="company_obj_run_type_idx"),
+            models.Index(fields=["company", "operation_family"], name="company_obj_family_idx"),
             models.Index(fields=["organization", "created_at"], name="company_obj_org_time_idx"),
         ]
 

@@ -81,8 +81,10 @@ function validateLoginForm(email: string, password: string): string | null {
 }
 
 export default function LoginPage() {
-  const [{ email, password, isSubmitting, isSsoLoading, formError }, dispatchForm] =
-    useReducer(loginFormReducer, initialLoginFormState);
+  const [{ email, password, isSubmitting, isSsoLoading, formError }, dispatchForm] = useReducer(
+    loginFormReducer,
+    initialLoginFormState,
+  );
 
   const { login, isAuthenticated, loading, error, clearError } = useAuth();
   const router = useRouter();

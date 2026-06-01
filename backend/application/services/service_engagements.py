@@ -194,11 +194,17 @@ def create_service_engagement(
             "catalog_company_mismatch",
             "Service catalog item does not belong to the company organization.",
         )
+    organization = company.organization
+    if organization is None:
+        raise ServiceEngagementError(
+            "company_organization_required",
+            "Service engagements require a company organization.",
+        )
     required_pack_ids = data.get("required_pack_ids")
     if required_pack_ids is None:
         required_pack_ids = list(catalog_item.required_pack_ids_json or [])
     return ServiceEngagement.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         catalog_item=catalog_item,
         status=str(data.get("status") or "requested"),
@@ -267,7 +273,7 @@ def _apply_service_engagement_json_fields(
         "metadata": "metadata_json",
     }.items():
         if input_key in data:
-            value = data.get(input_key) or ([] if input_key.endswith("_ids") else {})
+            value: Any = data.get(input_key) or ([] if input_key.endswith("_ids") else {})
             setattr(
                 engagement,
                 attr,

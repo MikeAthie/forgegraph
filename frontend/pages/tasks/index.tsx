@@ -22,12 +22,10 @@ import type { TaskVM } from "@/domain/translation";
 import { tasksApi, type TaskJudge } from "@/lib/api";
 
 function splitCriteria(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .flatMap((item) => {
-      const trimmed = item.trim();
-      return trimmed ? [trimmed] : [];
-    });
+  return value.split(/\r?\n/).flatMap((item) => {
+    const trimmed = item.trim();
+    return trimmed ? [trimmed] : [];
+  });
 }
 
 function judgeSummaryFrom(judge: TaskJudge): TaskVM["judge"] {
@@ -177,7 +175,19 @@ function useTasksPageController() {
   const router = useRouter();
   const { replace } = router;
   const [
-    { tasks, loading, error, judge, judgeLoading, judgeSaving, judgeError, judgeTitle, judgeInstructions, judgeCriteria, judgeThreshold },
+    {
+      tasks,
+      loading,
+      error,
+      judge,
+      judgeLoading,
+      judgeSaving,
+      judgeError,
+      judgeTitle,
+      judgeInstructions,
+      judgeCriteria,
+      judgeThreshold,
+    },
     dispatchTasks,
   ] = useReducer(tasksPageReducer, initialTasksPageState);
 
@@ -408,7 +418,9 @@ function TaskQueuePanel({ controller }: { controller: TasksPageController }) {
         items={controller.tasks}
         selectedId={controller.selectedTask?.id ?? null}
         onSelect={controller.selectTask}
-        empty={<EmptyBlock title="Queue is clear" description="There are no projected tasks in the current time window." />}
+        empty={
+          <EmptyBlock title="Queue is clear" description="There are no projected tasks in the current time window." />
+        }
       >
         {(task, { selected }) => <TaskQueueItem task={task} selected={selected} />}
       </SelectionList>
@@ -483,7 +495,10 @@ function TaskDetailPanel({ selectedTask }: { selectedTask: TaskVM }) {
             value: selectedTask.requiresApproval ? "Waiting for approval" : "No active decision",
           },
           { label: "Attempts", value: selectedTask.attemptCount ?? selectedTask.attempt ?? 1 },
-          { label: "Ignored updates", value: `${selectedTask.staleEventCount ?? 0} / ${selectedTask.lateEventCount ?? 0}` },
+          {
+            label: "Ignored updates",
+            value: `${selectedTask.staleEventCount ?? 0} / ${selectedTask.lateEventCount ?? 0}`,
+          },
           { label: "Started", value: formatDateTime(selectedTask.startedAt) },
         ]}
       />
@@ -507,9 +522,11 @@ function TaskRetryNotice({ selectedTask }: { selectedTask: TaskVM }) {
     <div className="mt-4 rounded-[1.2rem] border border-amber-900/15 bg-amber-50 p-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
       <p className="text-[11px] uppercase tracking-[0.18em]">Retry schedule</p>
       <p className="mt-2 text-sm leading-7">
-        {selectedTask.latestRetry.retry_reason || "Retry is scheduled"} · attempt {selectedTask.latestRetry.attempt_number ?? "?"} of{" "}
-        {selectedTask.latestRetry.max_attempts ?? "?"}
-        {selectedTask.latestRetry.next_scheduled_at ? ` · next ${formatDateTime(selectedTask.latestRetry.next_scheduled_at)}` : ""}
+        {selectedTask.latestRetry.retry_reason || "Retry is scheduled"} · attempt{" "}
+        {selectedTask.latestRetry.attempt_number ?? "?"} of {selectedTask.latestRetry.max_attempts ?? "?"}
+        {selectedTask.latestRetry.next_scheduled_at
+          ? ` · next ${formatDateTime(selectedTask.latestRetry.next_scheduled_at)}`
+          : ""}
       </p>
     </div>
   );
@@ -543,7 +560,8 @@ function TaskStaleUpdatesNotice({ selectedTask }: { selectedTask: TaskVM }) {
     <div className="mt-4 rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
       <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Ignored stale updates</p>
       <p className="mt-2 text-sm leading-7 text-zinc-700 dark:text-zinc-200">
-        Stale: {selectedTask.staleEventCount ?? 0} · Late: {selectedTask.lateEventCount ?? 0}. The saved task state was not changed.
+        Stale: {selectedTask.staleEventCount ?? 0} · Late: {selectedTask.lateEventCount ?? 0}. The saved task state was
+        not changed.
       </p>
     </div>
   );
@@ -628,7 +646,15 @@ function TaskJudgeEditor({ controller }: { controller: TasksPageController }) {
   );
 }
 
-function JudgeTextInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function JudgeTextInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
     <label className="space-y-1 text-sm">
       <span className="font-medium text-zinc-700 dark:text-zinc-200">{label}</span>
@@ -685,7 +711,12 @@ function TaskJudgeActions({ controller }: { controller: TasksPageController }) {
         Evaluate task
       </Button>
       {controller.judge ? (
-        <Button variant="ghost" onClick={controller.handleDeleteJudge} disabled={controller.judgeSaving} className="rounded-full">
+        <Button
+          variant="ghost"
+          onClick={controller.handleDeleteJudge}
+          disabled={controller.judgeSaving}
+          className="rounded-full"
+        >
           <Trash2 className="mr-2 size-4" aria-hidden="true" />
           Remove
         </Button>
@@ -743,8 +774,10 @@ function OperationLinkPanel({ selectedTask }: { selectedTask: TaskVM }) {
           <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Operation linkage</p>
           <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
             This task is attached to operation{" "}
-            <span className="font-medium text-zinc-900 dark:text-zinc-50">{selectedTask.operationId ?? "Unavailable"}</span>.
-            Use the operation view to inspect department activity, tools, deliverables, and technical summaries.
+            <span className="font-medium text-zinc-900 dark:text-zinc-50">
+              {selectedTask.operationId ?? "Unavailable"}
+            </span>
+            . Use the operation view to inspect department activity, tools, deliverables, and technical summaries.
           </p>
         </div>
         <Button asChild className="rounded-full">

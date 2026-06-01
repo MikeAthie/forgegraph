@@ -12,7 +12,10 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, OperationalError, connection, transaction
 from django.utils import timezone
 
-from application.services.domain_event_outbox import enqueue_domain_event_outbox
+from application.services.domain_event_outbox import (
+    enqueue_domain_event_outbox,
+    sanitize_outbox_payload,
+)
 from infrastructure.orm.models import (
     ApprovalTask,
     AuditLog,
@@ -160,7 +163,7 @@ def _record_domain_event_once(
                 event_version=max(int(event_version or 1), 1),
                 sequence=sequence,
                 idempotency_key=key,
-                payload=_json_safe_payload(payload or {}),
+                payload=_domain_event_payload(payload or {}),
                 occurred_at=occurred_at or timezone.now(),
             )
             _maybe_enqueue_outbox(
@@ -534,6 +537,10 @@ def _allocate_sequence(organization_id: UUID) -> int:
 
 def _json_safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], json.loads(json.dumps(payload, cls=DjangoJSONEncoder)))
+
+
+def _domain_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return _json_safe_payload(sanitize_outbox_payload(payload))
 
 
 def _maybe_enqueue_outbox(

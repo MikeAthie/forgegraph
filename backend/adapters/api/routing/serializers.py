@@ -16,9 +16,13 @@ class RoutingPolicyQuerySerializer(serializers.Serializer[Any]):
 class RoutingPolicyCreateSerializer(serializers.Serializer[Any]):
     company_id = serializers.UUIDField(required=False, allow_null=True)
     department_id = serializers.UUIDField()
-    trigger_type = serializers.CharField(max_length=128, required=False, allow_blank=True, default="")
+    trigger_type = serializers.CharField(
+        max_length=128, required=False, allow_blank=True, default=""
+    )
     event_type = serializers.CharField(max_length=128, required=False, allow_blank=True, default="")
-    service_type = serializers.CharField(max_length=80, required=False, allow_blank=True, default="")
+    service_type = serializers.CharField(
+        max_length=80, required=False, allow_blank=True, default=""
+    )
     channel = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
     signal_type = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
     entry_conditions = serializers.JSONField(required=False, default=dict)
@@ -53,6 +57,7 @@ class RoutingRecordPatchSerializer(serializers.Serializer[Any]):
             "claimed",
             "in_progress",
             "blocked",
+            "ready_for_review",
             "completed",
             "cancelled",
         ]

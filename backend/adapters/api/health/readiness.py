@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adapters.api.runs.views import get_engine_client
+from application.services.communication_kafka import build_communication_kafka_readiness_payload
 from application.services.runtime_transport_observability import (
     get_runtime_transport_observability_snapshot,
 )
@@ -105,6 +106,15 @@ def build_readiness_payload() -> tuple[dict[str, Any], int]:
             checks["runtime_transport"] = {
                 "ready": False,
                 "latency_ms": int((time.perf_counter() - transport_start) * 1000),
+                "error": str(exc),
+            }
+
+    if getattr(settings, "READINESS_REQUIRE_COMMUNICATION_KAFKA", False):
+        try:
+            checks["communication_kafka"] = build_communication_kafka_readiness_payload()
+        except Exception as exc:  # noqa: BLE001
+            checks["communication_kafka"] = {
+                "ready": False,
                 "error": str(exc),
             }
 

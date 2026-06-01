@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Any
 from uuid import UUID
 
-from django.db.models import Count, Q
+from django.db.models import Count, Q, QuerySet
 from django.utils import timezone
 
 from application.services.company_access import accessible_company_queryset
@@ -18,6 +18,7 @@ from infrastructure.orm.models import (
     CompanyOperatingModelInstallation,
     CompanySignal,
     DecisionRecord,
+    Graph,
     MetricSnapshot,
     PeriodicReviewDefinition,
     ReportRun,
@@ -217,7 +218,7 @@ def accessible_company_ids(user: User, *, minimum_role: str = "viewer") -> list[
     return [company.id for company in _accessible_companies(user, minimum_role=minimum_role)]
 
 
-def _accessible_companies(user: User, *, minimum_role: str = "viewer"):
+def _accessible_companies(user: User, *, minimum_role: str = "viewer") -> QuerySet[Graph]:
     return accessible_company_queryset(user, minimum_role=minimum_role).order_by("name", "id")
 
 
@@ -264,9 +265,13 @@ def _decision_count_by_company(user: User, company_ids: list[UUID]) -> defaultdi
         "source_approval_task__run__graph_version__graph",
     ):
         company_id = None
-        if decision.execution_id:
+        if decision.execution_id and decision.execution is not None:
             company_id = decision.execution.graph_version.graph_id
-        elif decision.source_approval_task_id:
+        elif (
+            decision.source_approval_task_id
+            and decision.source_approval_task is not None
+            and decision.source_approval_task.run is not None
+        ):
             company_id = decision.source_approval_task.run.graph_version.graph_id
         if company_id:
             counts[company_id] += 1
@@ -508,7 +513,7 @@ def _task_queue(
     return rows
 
 
-def _approval_queryset(user: User, company_ids: list[UUID]):
+def _approval_queryset(user: User, company_ids: list[UUID]) -> QuerySet[ApprovalTask]:
     _ = user
     return ApprovalTask.objects.filter(
         run__graph_version__graph_id__in=company_ids,
@@ -516,14 +521,14 @@ def _approval_queryset(user: User, company_ids: list[UUID]):
     )
 
 
-def _decision_queryset(user: User, company_ids: list[UUID]):
+def _decision_queryset(user: User, company_ids: list[UUID]) -> QuerySet[DecisionRecord]:
     return DecisionRecord.objects.filter(status="pending").filter(
         Q(execution__graph_version__graph_id__in=company_ids)
         | Q(source_approval_task__run__graph_version__graph_id__in=company_ids)
     )
 
 
-def _task_queryset(user: User, company_ids: list[UUID]):
+def _task_queryset(user: User, company_ids: list[UUID]) -> QuerySet[TaskRecord]:
     _ = user
     return TaskRecord.objects.filter(
         execution__graph_version__graph_id__in=company_ids,

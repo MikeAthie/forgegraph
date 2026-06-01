@@ -809,9 +809,7 @@ function PolicyStepPanel({
                 <p className="text-sm font-semibold">{option.label}</p>
                 <p
                   className={`mt-2 text-sm leading-6 ${
-                    aiAccessMode === option.id
-                      ? "text-white/75 dark:text-zinc-700"
-                      : "text-zinc-600 dark:text-zinc-300"
+                    aiAccessMode === option.id ? "text-white/75 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300"
                   }`}
                 >
                   {option.description}
@@ -959,8 +957,8 @@ function LaunchStepPanel({
         <div className="mt-4 rounded-[1.5rem] border border-dashed border-zinc-900/12 p-4 text-sm leading-6 text-zinc-600 dark:border-white/12 dark:text-zinc-300">
           After you click launch: ForgeGraph creates the company, applies{" "}
           <span className="font-medium">{autonomyMode}</span> control, uses{" "}
-          <span className="font-medium">{aiAccessMode === "managed" ? "Managed" : "BYOK"}</span> AI mode, and starts
-          the first operation.
+          <span className="font-medium">{aiAccessMode === "managed" ? "Managed" : "BYOK"}</span> AI mode, and starts the
+          first operation.
         </div>
 
         <div className="mt-5 flex flex-wrap gap-3">
@@ -1047,14 +1045,14 @@ function useCompanyBuilderFormController() {
     questModeEnabled,
     guidePromptVisible,
   } = builderState;
-  const setBuilderField = useCallback(<K extends keyof CompanyBuilderState>(
-    key: K,
-    value: SetStateAction<CompanyBuilderState[K]>,
-  ) => {
-    dispatchBuilderState({
-      patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<CompanyBuilderState>,
-    });
-  }, []);
+  const setBuilderField = useCallback(
+    <K extends keyof CompanyBuilderState>(key: K, value: SetStateAction<CompanyBuilderState[K]>) => {
+      dispatchBuilderState({
+        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<CompanyBuilderState>,
+      });
+    },
+    [],
+  );
   const setCurrentStepIndex = (value: SetStateAction<number>) => setBuilderField("currentStepIndex", value);
   const setSelectedPresetId = (value: SetStateAction<string>) => setBuilderField("selectedPresetId", value);
   const setCompanyName = (value: SetStateAction<string>) => setBuilderField("companyName", value);
@@ -1381,9 +1379,7 @@ function CompanyBuilderInspector({ controller }: { controller: CompanyBuilderCon
     <div className="space-y-4 2xl:sticky 2xl:top-[6.5rem]">
       <Surface className="overflow-hidden">
         <div className="border-b border-zinc-900/8 p-6 dark:border-white/8">
-          <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
-            Operating preview
-          </p>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Operating preview</p>
           <h3 className="mt-3 text-xl font-semibold text-zinc-950 dark:text-zinc-50">Company shape</h3>
           <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
             See the company as a working system, not a form. The visual below previews the team, flow, and likely
@@ -1502,7 +1498,10 @@ function CompanyBuilderGuidePrompt({ controller }: { controller: CompanyBuilderC
 
 function BuilderStepsProgress({ controller }: { controller: CompanyBuilderController }) {
   return (
-    <Panel title={`Step ${controller.currentStepIndex + 1} of ${builderSteps.length}`} description={controller.currentStep.description}>
+    <Panel
+      title={`Step ${controller.currentStepIndex + 1} of ${builderSteps.length}`}
+      description={controller.currentStep.description}
+    >
       <div className="grid gap-3 lg:grid-cols-5">
         {builderSteps.map((step, index) => {
           const active = index === controller.currentStepIndex;
@@ -1522,7 +1521,9 @@ function BuilderStepsProgress({ controller }: { controller: CompanyBuilderContro
                 <p className="text-sm font-semibold">{step.label}</p>
                 {completed ? <StatusBadge status="active" label="Done" /> : null}
               </div>
-              <p className={`mt-2 text-sm leading-6 ${active ? "text-white/75 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300"}`}>
+              <p
+                className={`mt-2 text-sm leading-6 ${active ? "text-white/75 dark:text-zinc-700" : "text-zinc-600 dark:text-zinc-300"}`}
+              >
                 {step.title}
               </p>
             </button>
@@ -1610,7 +1611,11 @@ function CompanyBuilderStepPanel({ controller }: { controller: CompanyBuilderCon
 function CompanyBuilderNavigation({ controller }: { controller: CompanyBuilderController }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button variant="outline" onClick={() => controller.moveStep("back")} disabled={controller.currentStepIndex === 0 || controller.saving}>
+      <Button
+        variant="outline"
+        onClick={() => controller.moveStep("back")}
+        disabled={controller.currentStepIndex === 0 || controller.saving}
+      >
         <ArrowLeft className="size-4" />
         Back
       </Button>
@@ -1634,7 +1639,9 @@ function LaunchSummaryPanel({ controller }: { controller: CompanyBuilderControll
         <LaunchSummaryItem
           label="Team size"
           value={`${reviewProfile.departments.length} departments`}
-          detail={selectedSkills.length ? `${selectedSkills.length} supporting skills included` : "No extra skills selected"}
+          detail={
+            selectedSkills.length ? `${selectedSkills.length} supporting skills included` : "No extra skills selected"
+          }
         />
         <LaunchSummaryItem
           label="Autonomy"
@@ -1652,7 +1659,11 @@ function LaunchSummaryPanel({ controller }: { controller: CompanyBuilderControll
           label="AI mode"
           value={reviewProfile.aiAccessMode === "managed" ? "Managed" : "BYOK"}
           status={reviewProfile.aiAccessMode === "managed" ? "active" : "paused"}
-          detail={reviewProfile.aiAccessMode === "managed" ? "Launches immediately on ForgeGraph-managed AI access." : "Launches on your own AI access once your key is ready."}
+          detail={
+            reviewProfile.aiAccessMode === "managed"
+              ? "Launches immediately on ForgeGraph-managed AI access."
+              : "Launches on your own AI access once your key is ready."
+          }
         />
       </div>
     </Panel>
@@ -1685,17 +1696,36 @@ function LaunchSummaryItem({
 
 function OperateNextPanel() {
   const items = [
-    { title: "Operations", icon: <Layers3 className="size-4" />, body: "See departments working and handing the task forward." },
-    { title: "Approvals", icon: <ShieldCheck className="size-4" />, body: "Step in only when the company needs a real decision." },
-    { title: "Deliverable", icon: <CheckCircle2 className="size-4" />, body: "Review one concrete output you can act on or share." },
-    { title: "Next move", icon: <Sparkles className="size-4" />, body: "Launch again, refine the objective, retry, or change AI mode." },
+    {
+      title: "Operations",
+      icon: <Layers3 className="size-4" />,
+      body: "See departments working and handing the task forward.",
+    },
+    {
+      title: "Approvals",
+      icon: <ShieldCheck className="size-4" />,
+      body: "Step in only when the company needs a real decision.",
+    },
+    {
+      title: "Deliverable",
+      icon: <CheckCircle2 className="size-4" />,
+      body: "Review one concrete output you can act on or share.",
+    },
+    {
+      title: "Next move",
+      icon: <Sparkles className="size-4" />,
+      body: "Launch again, refine the objective, retry, or change AI mode.",
+    },
   ];
 
   return (
     <Panel title="What you will operate next" description="The workspace opens around work, results, and decisions.">
       <div className="grid gap-3">
         {items.map((item) => (
-          <div key={item.title} className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+          <div
+            key={item.title}
+            className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+          >
             <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
               {item.icon}
               <p className="text-sm font-semibold">{item.title}</p>

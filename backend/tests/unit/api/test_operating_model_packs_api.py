@@ -36,6 +36,7 @@ from infrastructure.orm.models import (
     User,
     ValidationDecision,
 )
+from tests.helpers.organizations import required_company_organization
 
 pytestmark = pytest.mark.django_db
 
@@ -54,7 +55,9 @@ def _company(user, name: str = "Acme Agency") -> Graph:
 
 def _run_for_company(owner: User, company: Graph, *, status: str = "running") -> Run:
     next_version = (
-        GraphVersion.objects.filter(graph=company).aggregate(max_version=Max("version"))["max_version"]
+        GraphVersion.objects.filter(graph=company).aggregate(max_version=Max("version"))[
+            "max_version"
+        ]
         or 0
     ) + 1
     version = GraphVersion.objects.create(
@@ -64,7 +67,7 @@ def _run_for_company(owner: User, company: Graph, *, status: str = "running") ->
     )
     return Run.objects.create(
         owner=owner,
-        organization=company.organization,
+        organization=required_company_organization(company),
         graph_version=version,
         status=status,
         started_at=timezone.now(),
@@ -332,7 +335,7 @@ def test_generic_company_pack_api_blocks_namespace_collision(authenticated_clien
         files_json={},
     )
     installation = CompanyOperatingModelInstallation.objects.create(
-        organization=company.organization,
+        organization=required_company_organization(company),
         company=company,
         pack_release=release,
         pack_id="conflict_pack.v1",
@@ -343,7 +346,7 @@ def test_generic_company_pack_api_blocks_namespace_collision(authenticated_clien
         installed_by=user,
     )
     PackNamespaceClaim.objects.create(
-        organization=company.organization,
+        organization=required_company_organization(company),
         company=company,
         installation=installation,
         pack_id="conflict_pack.v1",
@@ -652,7 +655,7 @@ def test_email_sandbox_tool_execution_persists_sanitized_receipt(
         data={
             "company_id": str(company.id),
             "operation_id": str(operation.id),
-            "tool_id": "email_service_connector",
+            "tool_id": "email.send_dry_run",
             "dry_run": True,
             "inputs": {
                 "subject": "Legacy DEPP GOLD checkpoint",
@@ -672,19 +675,19 @@ def test_email_sandbox_tool_execution_persists_sanitized_receipt(
 
     assert response.status_code == 201
     receipt = response.json()["data"]["tool_execution"]
-    assert receipt["tool_id"] == "email_service_connector"
+    assert receipt["tool_id"] == "email.send_dry_run"
     assert receipt["dry_run"] is True
-    assert receipt["result"]["provider"] == "local_capture"
-    assert receipt["result"]["mode"] == "sandbox"
-    assert receipt["result"]["status"] == "captured"
-    assert receipt["result"]["message_id"].startswith("fg-email-sandbox-")
-    assert receipt["result"]["subject"] == "Legacy DEPP GOLD checkpoint"
+    assert receipt["result"]["provider"] == "fake"
+    assert receipt["result"]["mode"] == "dry_run"
+    assert receipt["result"]["evidence_mode"] == "sandbox"
+    assert receipt["result"]["status"] == "dry_run"
+    assert receipt["result"]["message_id"].startswith("fg-email-dry-run-")
     assert receipt["result"]["recipient_count"] == 2
     assert receipt["result"]["recipient_domains"] == ["legacy.example"]
-    assert receipt["result"]["related"]["company_id"] == str(company.id)
+    assert len(receipt["result"]["recipient_hashes"]) == 2
     assert receipt["completed_at"]
 
-    execution = ToolExecution.objects.get(run=operation, tool_name="email_service_connector")
+    execution = ToolExecution.objects.get(run=operation, tool_name="email.send_dry_run")
     assert execution.status == "succeeded"
     assert execution.completed_at is not None
     assert execution.result_json == receipt["result"]
@@ -710,17 +713,18 @@ def test_tool_execution_failure_fields_persist_sanitized_backend_record(
 
     execution = ToolExecution.objects.create(
         run=operation,
-        node_id="pack_tool:email_service_connector",
+        node_id="pack_tool:email.send",
         attempt_id="failed-email-attempt",
-        tool_name="email_service_connector",
-        tool_version="digital_marketing_pro.v1",
+        tool_name="email.send",
+        tool_version="forgegraph.email_connector",
         idempotency_key="failed-email-attempt",
         side_effect_class="pure",
         status="failed",
-        result_json={"provider": "local_capture", "mode": "sandbox", "status": "failed"},
+        result_json={},
         error_json={
-            "code": "sandbox_capture_failed",
-            "message": "Sandbox capture failed before external delivery.",
+            "error_code": "provider_call_failed",
+            "error_message": "Provider call failed before external delivery.",
+            "sanitized": True,
         },
         completed_at=completed_at,
     )
@@ -728,8 +732,8 @@ def test_tool_execution_failure_fields_persist_sanitized_backend_record(
     execution.refresh_from_db()
     assert execution.status == "failed"
     assert execution.completed_at == completed_at
-    assert execution.result_json["status"] == "failed"
-    assert execution.error_json["code"] == "sandbox_capture_failed"
+    assert execution.result_json == {}
+    assert execution.error_json["error_code"] == "provider_call_failed"
     persisted = str({"result": execution.result_json, "error": execution.error_json})
     assert "smtp_password" not in persisted
     assert "provider_token" not in persisted
@@ -747,7 +751,7 @@ def test_email_sandbox_tool_execution_is_idempotent(
     payload = {
         "company_id": str(company.id),
         "operation_id": str(operation.id),
-        "tool_id": "dmp.email_draft_send_schedule",
+        "tool_id": "email.send_dry_run",
         "dry_run": True,
         "inputs": {
             "subject": "Legacy DEPP GOLD launch readiness",
@@ -775,10 +779,13 @@ def test_email_sandbox_tool_execution_is_idempotent(
     second_receipt = second.json()["data"]["tool_execution"]
     assert first_receipt["tool_execution_id"] == second_receipt["tool_execution_id"]
     assert first_receipt["result"]["message_id"] == second_receipt["result"]["message_id"]
-    assert ToolExecution.objects.filter(
-        run=operation,
-        tool_name="dmp.email_draft_send_schedule",
-    ).count() == 1
+    assert (
+        ToolExecution.objects.filter(
+            run=operation,
+            tool_name="email.send_dry_run",
+        ).count()
+        == 1
+    )
 
 
 def test_email_sandbox_non_dry_run_requires_approved_policy_gate(
@@ -794,7 +801,7 @@ def test_email_sandbox_non_dry_run_requires_approved_policy_gate(
         data={
             "company_id": str(company.id),
             "operation_id": str(operation.id),
-            "tool_id": "email_service_connector",
+            "tool_id": "email.send",
             "dry_run": False,
             "inputs": {
                 "subject": "Legacy DEPP GOLD send checkpoint",
@@ -808,7 +815,7 @@ def test_email_sandbox_non_dry_run_requires_approved_policy_gate(
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "APPROVAL_REQUIRED"
-    assert not ToolExecution.objects.filter(run=operation, tool_name="email_service_connector").exists()
+    assert not ToolExecution.objects.filter(run=operation, tool_name="email.send").exists()
 
 
 def test_email_sandbox_non_dry_run_records_only_after_approved_policy_gate(
@@ -821,7 +828,7 @@ def test_email_sandbox_non_dry_run_records_only_after_approved_policy_gate(
     payload = {
         "company_id": str(company.id),
         "operation_id": str(operation.id),
-        "tool_id": "email_service_connector",
+        "tool_id": "email.send",
         "dry_run": False,
         "inputs": {
             "subject": "Legacy DEPP GOLD approved send checkpoint",
@@ -845,7 +852,10 @@ def test_email_sandbox_non_dry_run_records_only_after_approved_policy_gate(
     assert policy_evaluation.status == "approval_required"
     assert policy_evaluation.approval_task is not None
     policy_evaluation.approval_task.status = "approved"
-    policy_evaluation.approval_task.result = {"approved": True, "notes": "Approved sandbox capture."}
+    policy_evaluation.approval_task.result = {
+        "approved": True,
+        "notes": "Approved sandbox capture.",
+    }
     policy_evaluation.approval_task.resolved_at = timezone.now()
     policy_evaluation.approval_task.save(update_fields=["status", "result", "resolved_at"])
 
@@ -856,21 +866,9 @@ def test_email_sandbox_non_dry_run_records_only_after_approved_policy_gate(
         HTTP_IDEMPOTENCY_KEY="email-sandbox-approved-gate-allowed",
     )
 
-    assert allowed.status_code == 201
-    receipt = allowed.json()["data"]["tool_execution"]
-    assert receipt["result"]["mode"] == "sandbox"
-    assert receipt["result"]["send_intent"] == "approved_sandbox_send"
-    assert receipt["policy_evaluation"]["status"] == "approval_required"
-    execution = ToolExecution.objects.get(run=operation, tool_name="email_service_connector")
-    assert execution.completed_at is not None
-    assert execution.error_json == {}
-    persisted = str(execution.result_json)
-    assert "owner@legacy.example" not in persisted
-    assert "Approved sandbox body" not in persisted
-    assert "approved-secret" not in persisted
-    assert "approved-provider-token" not in persisted
-    assert "smtp.private.local" not in persisted
-    assert "raw-secret" not in persisted
+    assert allowed.status_code == 400
+    assert allowed.json()["error"]["code"] == "LIVE_EXECUTION_NOT_ALLOWED"
+    assert not ToolExecution.objects.filter(run=operation, tool_name="email.send").exists()
 
 
 def test_dmp_parts_7_to_12_generate_pack_driven_generic_outputs(

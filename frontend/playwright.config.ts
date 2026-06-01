@@ -173,7 +173,8 @@ if (!useDockerRuntime) {
 
 const workerOverride = process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined;
 const useSqlite = (process.env.USE_SQLITE ?? "false").toLowerCase() === "true";
-const sqliteDbPath = process.env.SQLITE_DB_PATH ?? path.join(os.tmpdir(), `forgegraph-playwright-${playwrightRunId}.sqlite3`);
+const sqliteDbPath =
+  process.env.SQLITE_DB_PATH ?? path.join(os.tmpdir(), `forgegraph-playwright-${playwrightRunId}.sqlite3`);
 const liveLlmE2eEnabled = (process.env.LIVE_LLM_E2E ?? "").toLowerCase() === "true";
 
 // Ensure the Playwright test process and any helper subprocesses (e.g. seed_run_trace)

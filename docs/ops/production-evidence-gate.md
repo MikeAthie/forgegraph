@@ -65,6 +65,15 @@ Do not push release candidates when this sequence is red locally unless the
 failure has a documented environment-only cause and CI is expected to be more
 representative.
 
+## Coverage Note
+
+Run the required engine gates before treating coverage as release evidence. In
+this workspace, `go test -cover ./...` is not a stable blocking gate while stale
+Go build-cache artifacts can mix toolchain versions. If coverage fails with a
+toolchain cache mismatch, clear the Go build cache outside the repo and rerun
+the normal engine gates first. Promote a coverage command to required evidence
+only after it is reproducible on the local and CI toolchains.
+
 ## Beta Gate Profiles
 
 The beta launch plan separates the same evidence into decision points:

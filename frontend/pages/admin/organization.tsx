@@ -104,10 +104,7 @@ const initialOrganizationPageState: OrganizationPageState = {
   formState: { email: "", role: "member" },
 };
 
-function organizationPageReducer(
-  state: OrganizationPageState,
-  action: OrganizationPageAction,
-): OrganizationPageState {
+function organizationPageReducer(state: OrganizationPageState, action: OrganizationPageAction): OrganizationPageState {
   const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
   return { ...state, ...patch };
 }
@@ -248,17 +245,44 @@ export default function OrganizationPage() {
     },
     [],
   );
-  const setOrganization = useCallback((value: SetStateAction<Organization | null>) => setPageField("organization", value), [setPageField]);
-  const setRole = useCallback((value: SetStateAction<OrganizationMember["role"] | null>) => setPageField("role", value), [setPageField]);
-  const setGovernance = useCallback((value: SetStateAction<OrganizationGovernanceState | null>) => setPageField("governance", value), [setPageField]);
-  const setMembers = useCallback((value: SetStateAction<OrganizationMember[]>) => setPageField("members", value), [setPageField]);
+  const setOrganization = useCallback(
+    (value: SetStateAction<Organization | null>) => setPageField("organization", value),
+    [setPageField],
+  );
+  const setRole = useCallback(
+    (value: SetStateAction<OrganizationMember["role"] | null>) => setPageField("role", value),
+    [setPageField],
+  );
+  const setGovernance = useCallback(
+    (value: SetStateAction<OrganizationGovernanceState | null>) => setPageField("governance", value),
+    [setPageField],
+  );
+  const setMembers = useCallback(
+    (value: SetStateAction<OrganizationMember[]>) => setPageField("members", value),
+    [setPageField],
+  );
   const setLoading = useCallback((value: SetStateAction<boolean>) => setPageField("loading", value), [setPageField]);
-  const setMembersLoading = useCallback((value: SetStateAction<boolean>) => setPageField("membersLoading", value), [setPageField]);
+  const setMembersLoading = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("membersLoading", value),
+    [setPageField],
+  );
   const setError = useCallback((value: SetStateAction<string | null>) => setPageField("error", value), [setPageField]);
-  const setMemberError = useCallback((value: SetStateAction<string | null>) => setPageField("memberError", value), [setPageField]);
-  const setIsSubmitting = useCallback((value: SetStateAction<boolean>) => setPageField("isSubmitting", value), [setPageField]);
-  const setUpdatingMemberId = useCallback((value: SetStateAction<string | null>) => setPageField("updatingMemberId", value), [setPageField]);
-  const setFormState = useCallback((value: SetStateAction<OrganizationFormState>) => setPageField("formState", value), [setPageField]);
+  const setMemberError = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("memberError", value),
+    [setPageField],
+  );
+  const setIsSubmitting = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("isSubmitting", value),
+    [setPageField],
+  );
+  const setUpdatingMemberId = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("updatingMemberId", value),
+    [setPageField],
+  );
+  const setFormState = useCallback(
+    (value: SetStateAction<OrganizationFormState>) => setPageField("formState", value),
+    [setPageField],
+  );
 
   const canManageMembers = useMemo(
     () =>

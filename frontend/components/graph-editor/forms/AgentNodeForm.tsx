@@ -45,12 +45,10 @@ const PROVIDERS = [
 ];
 
 function parseToolList(value: string): string[] {
-  return value
-    .split(/[\n,]/)
-    .flatMap((item) => {
-      const trimmed = item.trim();
-      return trimmed ? [trimmed] : [];
-    });
+  return value.split(/[\n,]/).flatMap((item) => {
+    const trimmed = item.trim();
+    return trimmed ? [trimmed] : [];
+  });
 }
 
 function serializeToolList(value?: string[]): string {
@@ -271,7 +269,15 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
     }
 
     reportErrors(nextErrors);
-  }, [agentConfig.approval_required_tools, agentConfig.instructions, agentConfig.max_steps, agentConfig.max_tool_calls, agentConfig.model, agentConfig.tools, reportErrors]);
+  }, [
+    agentConfig.approval_required_tools,
+    agentConfig.instructions,
+    agentConfig.max_steps,
+    agentConfig.max_tool_calls,
+    agentConfig.model,
+    agentConfig.tools,
+    reportErrors,
+  ]);
 
   const provider = agentConfig.provider || "openai";
   const filteredCredentials = useMemo(

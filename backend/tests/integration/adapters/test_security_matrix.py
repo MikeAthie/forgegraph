@@ -102,6 +102,7 @@ def _concrete_path(path: str) -> str:
         "<uuid:assignment_id>": str(uuid4()),
         "<uuid:asset_id>": str(uuid4()),
         "<uuid:artifact_id>": str(uuid4()),
+        "<uuid:card_id>": str(uuid4()),
         "<uuid:company_id>": str(uuid4()),
         "<uuid:context_pack_id>": str(uuid4()),
         "<uuid:credential_id>": str(uuid4()),

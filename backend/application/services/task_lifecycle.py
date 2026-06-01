@@ -14,6 +14,8 @@ from application.services.redaction import redact_payload
 from infrastructure.orm.models import (
     ApprovalTask,
     DecisionRecord,
+    DepartmentRegistry,
+    GraphVersion,
     NodeRun,
     Organization,
     RetryOperation,
@@ -169,6 +171,191 @@ def create_backend_approval_task(
         status=status,
         payload=redact_payload(payload),
     )
+
+
+def resolve_backend_approval_task(
+    *,
+    approval_task: ApprovalTask,
+    status: str,
+    result: dict[str, Any],
+    organization: Organization | None = None,
+    resolved_at: Any = None,
+) -> ApprovalTask:
+    """Resolve an approval task inside the approved backend runtime write boundary."""
+
+    if status not in {"approved", "rejected"}:
+        raise ValueError(f"Unsupported approval status: {status}")
+
+    effective_time = resolved_at or timezone.now()
+    with transaction.atomic():
+        task = (
+            ApprovalTask.objects.select_for_update(of=("self",))
+            .select_related("run__organization", "run__graph_version__graph__organization")
+            .get(id=approval_task.id)
+        )
+        if task.status != "pending":
+            return task
+
+        safe_result = redact_payload(result)
+        task.status = status
+        task.result = safe_result
+        task.resolved_at = effective_time
+        task.save(update_fields=["status", "result", "resolved_at"])
+
+        resolved_organization = organization or task.run.organization
+        if resolved_organization is None:
+            resolved_organization = task.run.graph_version.graph.organization
+
+        DecisionRecord.objects.update_or_create(
+            organization=resolved_organization,
+            external_key=f"approval:{task.id}",
+            defaults={
+                "execution": task.run,
+                "task_lifecycle": task.task_lifecycle,
+                "decision_type": "human_approval",
+                "status": status,
+                "source_approval_task": task,
+                "context_json": redact_payload(
+                    task.payload if isinstance(task.payload, dict) else {}
+                ),
+                "resolution_json": safe_result,
+                "requested_at": task.created_at,
+                "resolved_at": effective_time,
+            },
+        )
+        return task
+
+
+def get_or_create_backend_operation_run(
+    *,
+    owner: User,
+    organization: Organization,
+    graph_version: GraphVersion,
+    idempotency_key: str,
+    input_json: dict[str, Any],
+    status: str = "pending",
+    thread_id: UUID | None = None,
+    output_json: dict[str, Any] | None = None,
+    started_at: Any = None,
+    ended_at: Any = None,
+    dispatch_graph_json: Any = None,
+) -> Run:
+    """Create an idempotent backend-owned operation run."""
+
+    if status not in {choice[0] for choice in Run.STATUS_CHOICES}:
+        raise ValueError(f"Unsupported run status: {status}")
+    key = str(idempotency_key or "").strip()
+    if not key:
+        raise ValueError("Backend operation run requires an idempotency key.")
+
+    existing = Run.objects.filter(
+        organization=organization,
+        graph_version__graph=graph_version.graph,
+        input_json__idempotency_key=key,
+    ).first()
+    if existing is not None:
+        return existing
+
+    safe_input = cast(dict[str, Any], redact_payload(input_json))
+    safe_input["idempotency_key"] = key
+    safe_output = cast(dict[str, Any], redact_payload(output_json or {})) if output_json else None
+    return Run.objects.create(
+        owner=owner,
+        organization=organization,
+        thread_id=thread_id,
+        graph_version=graph_version,
+        status=status,
+        started_at=started_at,
+        ended_at=ended_at,
+        input_json=safe_input,
+        output_json=safe_output,
+        dispatch_graph_json=dispatch_graph_json
+        if dispatch_graph_json is not None
+        else graph_version.graph_json,
+    )
+
+
+def complete_backend_operation_run(
+    *,
+    run: Run,
+    output_json: dict[str, Any],
+    status: str = "succeeded",
+    ended_at: Any = None,
+) -> Run:
+    """Mark a backend-owned operation run terminal from the approved write boundary."""
+
+    if status not in {"succeeded", "failed", "canceled"}:
+        raise ValueError(f"Unsupported terminal run status: {status}")
+    effective_time = ended_at or timezone.now()
+    with transaction.atomic():
+        locked_run = Run.objects.select_for_update().get(id=run.id)
+        update_fields: list[str] = []
+        _set_if_changed(locked_run, "status", status, update_fields)
+        _set_if_changed(locked_run, "ended_at", effective_time, update_fields)
+        _set_if_changed(
+            locked_run,
+            "output_json",
+            cast(dict[str, Any], redact_payload(output_json)),
+            update_fields,
+        )
+        if update_fields:
+            locked_run.save(update_fields=sorted(set(update_fields)))
+        return locked_run
+
+
+def get_or_create_backend_lifecycle_task(
+    *,
+    organization: Organization,
+    external_key: str,
+    run: Run,
+    source_node_id: str,
+    node_type: str,
+    title: str,
+    status: str,
+    priority: str,
+    summary: str,
+    current_department: Any = None,
+    last_transition_at: Any = None,
+) -> TaskLifecycleRecord:
+    """Create an idempotent backend-owned lifecycle task."""
+
+    if status not in TASK_STATUSES:
+        raise ValueError(f"Unsupported task lifecycle status: {status}")
+    task, _created = TaskLifecycleRecord.objects.get_or_create(
+        organization=organization,
+        external_key=external_key,
+        defaults={
+            "run": run,
+            "source_node_id": source_node_id,
+            "node_type": node_type,
+            "title": title,
+            "status": status,
+            "priority": priority,
+            "summary": summary,
+            "current_department": current_department,
+            "last_transition_at": last_transition_at or timezone.now(),
+        },
+    )
+    return task
+
+
+def complete_backend_lifecycle_task(
+    *,
+    lifecycle_task: TaskLifecycleRecord,
+    ended_at: Any = None,
+) -> TaskLifecycleRecord:
+    """Mark a backend-owned lifecycle task complete from the approved write boundary."""
+
+    effective_time = ended_at or timezone.now()
+    with transaction.atomic():
+        task = TaskLifecycleRecord.objects.select_for_update().get(id=lifecycle_task.id)
+        update_fields: list[str] = []
+        _set_if_changed(task, "status", "completed", update_fields)
+        _set_if_changed(task, "ended_at", effective_time, update_fields)
+        _set_if_changed(task, "last_transition_at", effective_time, update_fields)
+        if update_fields:
+            task.save(update_fields=sorted(set(update_fields + ["updated_at"])))
+        return task
 
 
 def lifecycle_external_key(run: Run, node_id: str) -> str:
@@ -549,7 +736,7 @@ def transition_task_lifecycle(
 def assign_lifecycle_task_department(
     *,
     lifecycle_task: TaskLifecycleRecord,
-    department: object | None,
+    department: DepartmentRegistry | None,
 ) -> TaskLifecycleRecord:
     """Assign current department inside the approved lifecycle write boundary."""
 

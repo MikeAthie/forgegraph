@@ -40,8 +40,9 @@ function Assert-HasMatch {
 $engineMain = Join-Path $repoRoot "engine\main.go"
 $engineTests = Join-Path $repoRoot "engine\main_test.go"
 $engineFiles = Get-ChildItem -Path (Join-Path $repoRoot "engine") -Recurse -File | Select-Object -ExpandProperty FullName
+$excludedGuardTests = @("architecture_enforcement_test.go", "statelessness_guard_test.go")
 $engineGoFiles = Get-ChildItem -Path (Join-Path $repoRoot "engine") -Recurse -Filter *.go -File |
-  Where-Object { $_.Name -ne "architecture_enforcement_test.go" } |
+  Where-Object { $excludedGuardTests -notcontains $_.Name } |
   Select-Object -ExpandProperty FullName
 $runtimeInvariants = Join-Path $repoRoot "docs\architecture\runtime-invariants.md"
 
@@ -68,7 +69,6 @@ Assert-HasMatch "control-plane-http" @($engineMain) "Missing explicit control-pl
 $durableMemoryPattern = "RedisMemoryStore|NewRedisMemoryStore|StoreSummary\(|StoreFacts\(|keyPatternMemory"
 
 $durableMemoryMatches = Select-String -Path $engineGoFiles -Pattern $durableMemoryPattern |
-  Where-Object { $_.Path -notlike "*architecture_enforcement_test.go" } |
   Select-Object -ExpandProperty Path -Unique
 
 if ($durableMemoryMatches) {

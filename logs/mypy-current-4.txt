@@ -1,0 +1,94 @@
+tests/unit/api/test_whiteboard_board_api.py:83: error: Incompatible type for "organization" of "WorkWhiteboard" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_operating_model_packs_api.py:336: error: Incompatible type for "organization" of "CompanyOperatingModelInstallation" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_operating_model_packs_api.py:347: error: Incompatible type for "organization" of "PackNamespaceClaim" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:114: error: Incompatible type for "organization" of "Asset" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:148: error: Incompatible type for "organization" of "CompanyAccessPolicy" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:154: error: Incompatible type for "organization" of "CompanyAssignment" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:162: error: Incompatible type for "organization" of "ServiceEngagement" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:172: error: Incompatible type for "organization" of "ServiceEngagement" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:198: error: Incompatible type for "organization" of "ServiceEngagement" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:206: error: Incompatible type for "organization" of "Asset" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:231: error: Incompatible type for "organization" of "ServiceEngagement" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_service_engagements_api.py:239: error: Incompatible type for "organization" of "ReportRun" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_portfolio_api.py:84: error: Incompatible type for "organization" of "TaskRecord" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_portfolio_api.py:94: error: Incompatible type for "organization" of "PeriodicReviewDefinition" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_portfolio_api.py:109: error: Incompatible type for "organization" of "CompanyAccessPolicy" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_portfolio_api.py:115: error: Incompatible type for "organization" of "CompanyAccessPolicy" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_portfolio_api.py:121: error: Incompatible type for "organization" of "CompanyAssignment" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_portfolio_api.py:158: error: Incompatible type for "organization" of "CompanyAccessPolicy" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_runtime_write_intents.py:352: error: Unused "type: ignore" comment  [unused-ignore]
+application/services/portfolio_read_models.py:269: error: Item "None" of "Run | None" has no attribute "graph_version"  [union-attr]
+application/services/portfolio_read_models.py:271: error: Item "None" of "ApprovalTask | None" has no attribute "run"  [union-attr]
+application/services/communications.py:758: error: Returning Any from function declared to return "UUID | None"  [no-any-return]
+tests/unit/services/test_communications.py:94: error: Incompatible type for "organization" of "AgentRegistryEntry" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_communication_kafka_consumer.py:160: error: Argument "consumer" to "consume_communication_kafka_events" has incompatible type "FakeConsumer"; expected "KafkaConsumerLike"  [arg-type]
+tests/unit/services/test_communication_kafka_consumer.py:160: note: Following member(s) of "FakeConsumer" have conflicts:
+tests/unit/services/test_communication_kafka_consumer.py:160: note:     Expected:
+tests/unit/services/test_communication_kafka_consumer.py:160: note:         def commit(self, message: KafkaMessageLike | None = ..., *, asynchronous: bool = ...) -> Any
+tests/unit/services/test_communication_kafka_consumer.py:160: note:     Got:
+tests/unit/services/test_communication_kafka_consumer.py:160: note:         def commit(self, message: FakeMessage | None = ..., *, asynchronous: bool = ...) -> None
+tests/unit/services/test_communication_kafka_consumer.py:249: error: Argument "consumer" to "consume_communication_kafka_events" has incompatible type "FakeConsumer"; expected "KafkaConsumerLike"  [arg-type]
+tests/unit/services/test_communication_kafka_consumer.py:249: note: Following member(s) of "FakeConsumer" have conflicts:
+tests/unit/services/test_communication_kafka_consumer.py:249: note:     Expected:
+tests/unit/services/test_communication_kafka_consumer.py:249: note:         def commit(self, message: KafkaMessageLike | None = ..., *, asynchronous: bool = ...) -> Any
+tests/unit/services/test_communication_kafka_consumer.py:249: note:     Got:
+tests/unit/services/test_communication_kafka_consumer.py:249: note:         def commit(self, message: FakeMessage | None = ..., *, asynchronous: bool = ...) -> None
+tests/unit/services/test_communication_kafka_consumer.py:270: error: Argument "consumer" to "consume_communication_kafka_events" has incompatible type "FakeConsumer"; expected "KafkaConsumerLike"  [arg-type]
+tests/unit/services/test_communication_kafka_consumer.py:270: note: Following member(s) of "FakeConsumer" have conflicts:
+tests/unit/services/test_communication_kafka_consumer.py:270: note:     Expected:
+tests/unit/services/test_communication_kafka_consumer.py:270: note:         def commit(self, message: KafkaMessageLike | None = ..., *, asynchronous: bool = ...) -> Any
+tests/unit/services/test_communication_kafka_consumer.py:270: note:     Got:
+tests/unit/services/test_communication_kafka_consumer.py:270: note:         def commit(self, message: FakeMessage | None = ..., *, asynchronous: bool = ...) -> None
+tests/unit/services/test_communication_kafka_consumer.py:288: error: Argument "consumer" to "consume_communication_kafka_events" has incompatible type "FakeConsumer"; expected "KafkaConsumerLike"  [arg-type]
+tests/unit/services/test_communication_kafka_consumer.py:288: note: Following member(s) of "FakeConsumer" have conflicts:
+tests/unit/services/test_communication_kafka_consumer.py:288: note:     Expected:
+tests/unit/services/test_communication_kafka_consumer.py:288: note:         def commit(self, message: KafkaMessageLike | None = ..., *, asynchronous: bool = ...) -> Any
+tests/unit/services/test_communication_kafka_consumer.py:288: note:     Got:
+tests/unit/services/test_communication_kafka_consumer.py:288: note:         def commit(self, message: FakeMessage | None = ..., *, asynchronous: bool = ...) -> None
+tests/unit/services/test_communication_kafka_consumer.py:303: error: Argument "consumer" to "consume_communication_kafka_events" has incompatible type "FakeConsumer"; expected "KafkaConsumerLike"  [arg-type]
+tests/unit/services/test_communication_kafka_consumer.py:303: note: Following member(s) of "FakeConsumer" have conflicts:
+tests/unit/services/test_communication_kafka_consumer.py:303: note:     Expected:
+tests/unit/services/test_communication_kafka_consumer.py:303: note:         def commit(self, message: KafkaMessageLike | None = ..., *, asynchronous: bool = ...) -> Any
+tests/unit/services/test_communication_kafka_consumer.py:303: note:     Got:
+tests/unit/services/test_communication_kafka_consumer.py:303: note:         def commit(self, message: FakeMessage | None = ..., *, asynchronous: bool = ...) -> None
+tests/unit/api/test_product_mode_architecture_invariants.py:224: error: Generator has incompatible item type "float"; expected "bool"  [misc]
+tests/unit/api/test_product_mode_architecture_invariants.py:224: error: Argument 1 to "float" has incompatible type "object"; expected "str | Buffer | SupportsFloat | SupportsIndex"  [arg-type]
+tests/unit/api/test_product_mode_architecture_invariants.py:485: error: Incompatible type for "organization" of "PackNamespaceClaim" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_pack_tool_executions_connectors.py:82: error: Incompatible type for "organization" of "CompanyOperatingModelInstallation" (got "Organization | None", expected "Organization | Combinable")  [misc]
+application/services/workstream_gates.py:958: error: Returning Any from function declared to return "GraphVersion"  [no-any-return]
+application/services/workstream_gates.py:983: error: Returning Any from function declared to return "GraphVersion"  [no-any-return]
+application/services/performance_orchestration.py:1255: error: Returning Any from function declared to return "GraphVersion"  [no-any-return]
+application/services/performance_orchestration.py:1280: error: Returning Any from function declared to return "GraphVersion"  [no-any-return]
+application/services/deployment_orchestration.py:1003: error: Returning Any from function declared to return "GraphVersion"  [no-any-return]
+application/services/deployment_orchestration.py:1028: error: Returning Any from function declared to return "GraphVersion"  [no-any-return]
+tests/unit/services/test_workstream_gates.py:78: error: Incompatible type for "organization" of "WorkWhiteboard" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_workstream_gates.py:93: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
+tests/unit/services/test_performance_orchestration.py:76: error: Incompatible type for "organization" of "WorkWhiteboard" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_performance_orchestration.py:156: error: Incompatible type for "organization" of "CompanyOperatingModelInstallation" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_performance_connector_evidence.py:58: error: Incompatible type for "organization" of "WorkWhiteboard" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_deployment_orchestration_connectors.py:72: error: Incompatible type for "organization" of "WorkWhiteboard" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_deployment_orchestration.py:82: error: Incompatible type for "organization" of "WorkWhiteboard" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_deployment_orchestration.py:135: error: Incompatible type for "organization" of "CompanyOperatingModelInstallation" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_whiteboard_api.py:117: error: Incompatible type for "organization" of "CompanyOperatingModelInstallation" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_whiteboard_api.py:140: error: Incompatible type for "organization" of "CompanyOperatingModelInstallation" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/api/test_whiteboard_api.py:163: error: Incompatible type for "organization" of "CompanyOperatingModelInstallation" (got "Organization | None", expected "Organization | Combinable")  [misc]
+adapters/api/runs/engine_run_lifecycle.py:401: error: Returning Any from function declared to return "Response"  [no-any-return]
+adapters/api/runs/engine_callback_ingestion.py:482: error: Returning Any from function declared to return "Response"  [no-any-return]
+adapters/api/runs/engine_callback_ingestion.py:482: error: "EngineCallbackIngestionMixin" has no attribute "_handle_engine_schema_validation_event"  [attr-defined]
+adapters/api/runs/engine_callback_ingestion.py:484: error: Returning Any from function declared to return "Response"  [no-any-return]
+adapters/api/runs/engine_callback_ingestion.py:484: error: "EngineCallbackIngestionMixin" has no attribute "_handle_engine_stream_chunk_event"  [attr-defined]
+adapters/api/runs/engine_callback_ingestion.py:493: error: Returning Any from function declared to return "Response"  [no-any-return]
+adapters/api/runs/engine_callback_ingestion.py:493: error: "EngineCallbackIngestionMixin" has no attribute "_handle_engine_memory_intent_event"  [attr-defined]
+adapters/api/runs/engine_callback_ingestion.py:502: error: Returning Any from function declared to return "Response"  [no-any-return]
+adapters/api/runs/engine_callback_ingestion.py:502: error: "EngineCallbackIngestionMixin" has no attribute "_handle_engine_run_lifecycle_event"  [attr-defined]
+adapters/api/runs/engine_callback_ingestion.py:510: error: Returning Any from function declared to return "Response"  [no-any-return]
+adapters/api/runs/engine_callback_ingestion.py:510: error: "EngineCallbackIngestionMixin" has no attribute "_handle_engine_node_lifecycle_event"  [attr-defined]
+tests/unit/services/test_whiteboard_board.py:109: error: Incompatible type for "organization" of "WorkWhiteboard" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_strategy_orchestration.py:126: error: Incompatible type for "organization" of "CompanyOperatingModelInstallation" (got "Organization | None", expected "Organization | Combinable")  [misc]
+tests/unit/services/test_whiteboard_board_kafka.py:108: error: Incompatible type for "organization" of "WorkWhiteboard" (got "Organization | None", expected "Organization | Combinable")  [misc]
+adapters/api/runs/urls.py:9: error: Module "adapters.api.runs.views" has no attribute "RunCancelView"  [attr-defined]
+adapters/api/runs/urls.py:9: error: Module "adapters.api.runs.views" has no attribute "RunInvokeView"  [attr-defined]
+adapters/api/runs/urls.py:9: error: Module "adapters.api.runs.views" has no attribute "RunReplayView"  [attr-defined]
+adapters/api/runs/urls.py:9: error: Module "adapters.api.runs.views" has no attribute "RunResumeView"  [attr-defined]
+adapters/api/runs/urls.py:9: error: Module "adapters.api.runs.views" has no attribute "RunStartView"  [attr-defined]
+Found 68 errors in 26 files (checked 684 source files)

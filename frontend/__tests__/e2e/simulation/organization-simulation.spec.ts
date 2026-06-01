@@ -613,75 +613,75 @@ function normalizeDirectorOutput(
 
   const hiddenConstraints = Array.isArray(parsed.hidden_constraints)
     ? parsed.hidden_constraints.flatMap((item, index) => {
-          const source = item as Record<string, unknown>;
-          const type =
-            source.type === "legal" || source.type === "budget" || source.type === "channel" ? source.type : "budget";
-      const constraint = {
-            id: String(source.id ?? `llm-hidden-${index}`),
-            type,
-            injectedAfterOperation: afterOperationId,
-            description: String(source.description ?? ""),
-            impact: String(source.impact ?? ""),
-            response: String(source.response ?? ""),
-          };
-      return constraint.description && constraint.impact && constraint.response ? [constraint] : [];
-        })
+        const source = item as Record<string, unknown>;
+        const type =
+          source.type === "legal" || source.type === "budget" || source.type === "channel" ? source.type : "budget";
+        const constraint = {
+          id: String(source.id ?? `llm-hidden-${index}`),
+          type,
+          injectedAfterOperation: afterOperationId,
+          description: String(source.description ?? ""),
+          impact: String(source.impact ?? ""),
+          response: String(source.response ?? ""),
+        };
+        return constraint.description && constraint.impact && constraint.response ? [constraint] : [];
+      })
     : [];
 
   const contradictorySignals = Array.isArray(parsed.contradictory_signals)
     ? parsed.contradictory_signals.flatMap((item, index) => {
-          const source = item as Record<string, unknown>;
-      const signal = {
-            id: String(source.id ?? `llm-signal-${index}`),
-            signalA: String(source.signal_a ?? ""),
-            signalB: String(source.signal_b ?? ""),
-            choice: String(source.choice ?? ""),
-            rationale: String(source.rationale ?? ""),
-          };
-      return signal.signalA && signal.signalB && signal.choice && signal.rationale ? [signal] : [];
-        })
+        const source = item as Record<string, unknown>;
+        const signal = {
+          id: String(source.id ?? `llm-signal-${index}`),
+          signalA: String(source.signal_a ?? ""),
+          signalB: String(source.signal_b ?? ""),
+          choice: String(source.choice ?? ""),
+          rationale: String(source.rationale ?? ""),
+        };
+        return signal.signalA && signal.signalB && signal.choice && signal.rationale ? [signal] : [];
+      })
     : [];
 
   const delayedConsequences = Array.isArray(parsed.delayed_consequences)
     ? parsed.delayed_consequences.flatMap((item, index) => {
-          const source = item as Record<string, unknown>;
-      const consequence = {
-            id: String(source.id ?? `llm-consequence-${index}`),
-            earlyDecision: String(source.early_decision ?? ""),
-            consequence: String(source.consequence ?? ""),
-            effect: source.effect === "negative" ? ("negative" as const) : ("positive" as const),
-          };
-      return consequence.earlyDecision && consequence.consequence ? [consequence] : [];
-        })
+        const source = item as Record<string, unknown>;
+        const consequence = {
+          id: String(source.id ?? `llm-consequence-${index}`),
+          earlyDecision: String(source.early_decision ?? ""),
+          consequence: String(source.consequence ?? ""),
+          effect: source.effect === "negative" ? ("negative" as const) : ("positive" as const),
+        };
+        return consequence.earlyDecision && consequence.consequence ? [consequence] : [];
+      })
     : [];
 
   const memoryMisuseRecoveries = Array.isArray(parsed.memory_misuse)
     ? parsed.memory_misuse.flatMap((item) => {
-          const source = item as Record<string, unknown>;
-      const recovery = {
-            misleadingMemoryId: String(source.misleading_memory_id ?? "memory-misleading-discount-scale"),
-            detectedBy: String(source.detected_by ?? "Memory / Learning"),
-            issue: String(source.issue ?? ""),
-            recovery: String(source.recovery ?? ""),
-          };
-      return recovery.issue && recovery.recovery ? [recovery] : [];
-        })
+        const source = item as Record<string, unknown>;
+        const recovery = {
+          misleadingMemoryId: String(source.misleading_memory_id ?? "memory-misleading-discount-scale"),
+          detectedBy: String(source.detected_by ?? "Memory / Learning"),
+          issue: String(source.issue ?? ""),
+          recovery: String(source.recovery ?? ""),
+        };
+        return recovery.issue && recovery.recovery ? [recovery] : [];
+      })
     : [];
 
   const departmentChallenges = Array.isArray(parsed.department_challenges)
     ? parsed.department_challenges.flatMap((item) => {
-          const source = item as Record<string, unknown>;
-          const response =
-            source.response === "override" || source.response === "careful integration" ? source.response : "constrain";
-      const challenge = {
-            department: String(source.department ?? "Performance Marketing"),
-            proposal: String(source.proposal ?? ""),
-            risk: String(source.risk ?? ""),
-            response,
-            rationale: String(source.rationale ?? ""),
-          };
-      return challenge.proposal && challenge.risk && challenge.rationale ? [challenge] : [];
-        })
+        const source = item as Record<string, unknown>;
+        const response =
+          source.response === "override" || source.response === "careful integration" ? source.response : "constrain";
+        const challenge = {
+          department: String(source.department ?? "Performance Marketing"),
+          proposal: String(source.proposal ?? ""),
+          risk: String(source.risk ?? ""),
+          response,
+          rationale: String(source.rationale ?? ""),
+        };
+        return challenge.proposal && challenge.risk && challenge.rationale ? [challenge] : [];
+      })
     : [];
 
   const active = (parsed.active_constraints ?? {}) as Record<string, unknown>;
@@ -2733,9 +2733,7 @@ async function judgeScenario(request: APIRequestContext, state: SimulationState)
     Number.isFinite(result.marketing_quality_score) ? "" : "marketing_quality_score",
     result.reasoning ? "" : "reasoning",
     result.ambiguous_feedback ? "" : "ambiguous_feedback",
-    ...Object.entries(result.criteria).flatMap(([key, value]) =>
-      !Number.isFinite(value) ? [`criteria.${key}`] : [],
-    ),
+    ...Object.entries(result.criteria).flatMap(([key, value]) => (!Number.isFinite(value) ? [`criteria.${key}`] : [])),
   ].flatMap((field) => (field ? [field] : []));
   if (invalidFields.length > 0) {
     throw new Error(`Local LLM judge output is incomplete: ${invalidFields.join(", ")}`);

@@ -1,4 +1,10 @@
 import requests
+import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="Historical TestSprite smoke artifact; use engine Go/gRPC production gates."
+)
+
 
 def test_metrics_endpoint_returns_prometheus_metrics():
     url = "http://localhost:9090/metrics"
@@ -19,5 +25,3 @@ def test_metrics_endpoint_returns_prometheus_metrics():
     # Check for at least one Prometheus metric pattern (e.g., help or type lines)
     assert any(line.startswith("# HELP") or line.startswith("# TYPE") for line in content.splitlines()), \
         "Response does not contain Prometheus metric HELP or TYPE lines"
-
-test_metrics_endpoint_returns_prometheus_metrics()

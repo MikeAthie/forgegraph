@@ -31,10 +31,7 @@ type QuestGuideState = {
   targetRect: RectState | null;
 };
 
-type QuestGuideAction =
-  | { type: "reset" }
-  | { type: "next" }
-  | { type: "target"; rect: RectState | null };
+type QuestGuideAction = { type: "reset" } | { type: "next" } | { type: "target"; rect: RectState | null };
 
 const initialQuestGuideState: QuestGuideState = {
   stepIndex: 0,
@@ -112,7 +109,10 @@ export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGu
 
     const update = () => {
       const rect = target.getBoundingClientRect();
-      dispatchGuide({ type: "target", rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height } });
+      dispatchGuide({
+        type: "target",
+        rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      });
     };
 
     target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });

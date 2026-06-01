@@ -37,3 +37,9 @@ class ApprovalTaskListSerializer(serializers.Serializer[Any]):
     status = serializers.CharField(read_only=True)
     prompt_message = serializers.CharField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
+
+
+class ApprovalResolveSerializer(serializers.Serializer[Any]):
+    approved = serializers.BooleanField(required=False, default=True)
+    result = serializers.JSONField(required=False, default=dict)
+    notes = serializers.CharField(required=False, allow_blank=True)

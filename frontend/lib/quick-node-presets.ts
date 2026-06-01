@@ -746,10 +746,12 @@ function getPopularPresets(limit = 6): QuickNodePreset[] {
     "approval-gate",
     "final-output",
   ];
-  return popularIds.flatMap((id) => {
-    const preset = getPresetById(id);
-    return preset ? [preset] : [];
-  }).slice(0, limit);
+  return popularIds
+    .flatMap((id) => {
+      const preset = getPresetById(id);
+      return preset ? [preset] : [];
+    })
+    .slice(0, limit);
 }
 
 /**

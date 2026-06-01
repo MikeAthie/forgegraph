@@ -12,6 +12,7 @@ from infrastructure.orm.models import (
     CompanyAccessPolicy,
     CompanyAssignment,
     Graph,
+    Organization,
     OrganizationMembership,
     ReportRun,
     ServiceCatalogItem,
@@ -35,6 +36,12 @@ def _company(user: User, name: str) -> Graph:
             description=f"{name} operating company.",
         ),
     )
+
+
+def _organization(company: Graph) -> Organization:
+    organization = company.organization
+    assert organization is not None
+    return organization
 
 
 def _member_in_org(owner: User, *, role: str = "viewer") -> User:
@@ -112,7 +119,7 @@ def test_service_catalog_engagement_and_deliverable_facade(authenticated_client,
     assert engagement["internal_notes"] == "Operator-only setup note."
 
     artifact = Asset.objects.create(
-        organization=company.organization,
+        organization=_organization(company),
         company=company,
         title="Growth audit report",
         asset_type="deliverable",
@@ -146,13 +153,13 @@ def test_service_engagements_are_company_assignment_filtered(api_client, user):
     service = _catalog_item(user)
     for company in [visible, hidden]:
         CompanyAccessPolicy.objects.create(
-            organization=company.organization,
+            organization=_organization(company),
             company=company,
             assignment_required=True,
             org_admin_access_enabled=False,
         )
     CompanyAssignment.objects.create(
-        organization=visible.organization,
+        organization=_organization(visible),
         company=visible,
         user=member,
         role="viewer",
@@ -160,7 +167,7 @@ def test_service_engagements_are_company_assignment_filtered(api_client, user):
         created_by=user,
     )
     visible_engagement = ServiceEngagement.objects.create(
-        organization=visible.organization,
+        organization=_organization(visible),
         company=visible,
         catalog_item=service,
         status="in_progress",
@@ -170,7 +177,7 @@ def test_service_engagements_are_company_assignment_filtered(api_client, user):
         requested_by=user,
     )
     hidden_engagement = ServiceEngagement.objects.create(
-        organization=hidden.organization,
+        organization=_organization(hidden),
         company=hidden,
         catalog_item=service,
         status="in_progress",
@@ -196,7 +203,7 @@ def test_service_deliverable_rejects_wrong_company_artifact(authenticated_client
     other_company = _company(user, "Other Client")
     service = _catalog_item(user)
     engagement = ServiceEngagement.objects.create(
-        organization=company.organization,
+        organization=_organization(company),
         company=company,
         catalog_item=service,
         status="in_progress",
@@ -204,7 +211,7 @@ def test_service_deliverable_rejects_wrong_company_artifact(authenticated_client
         requested_by=user,
     )
     other_artifact = Asset.objects.create(
-        organization=other_company.organization,
+        organization=_organization(other_company),
         company=other_company,
         title="Other company report",
         asset_type="deliverable",
@@ -229,7 +236,7 @@ def test_service_deliverable_can_reference_company_report(authenticated_client, 
     company = _company(user, "Report Client")
     service = _catalog_item(user)
     engagement = ServiceEngagement.objects.create(
-        organization=company.organization,
+        organization=_organization(company),
         company=company,
         catalog_item=service,
         status="in_progress",
@@ -237,7 +244,7 @@ def test_service_deliverable_can_reference_company_report(authenticated_client, 
         requested_by=user,
     )
     report = ReportRun.objects.create(
-        organization=company.organization,
+        organization=_organization(company),
         company=company,
         report_template_id="service_report_v1",
         period_start=date(2026, 5, 1),

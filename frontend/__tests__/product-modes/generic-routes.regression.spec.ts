@@ -92,6 +92,15 @@ test.describe("Product modes", () => {
     await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
     await expect(page.getByTestId("whiteboard-panel")).toBeVisible();
     await expect(page.getByTestId("whiteboard-summary")).toContainText(/WhatsApp is recommended/i);
+    await expect(page.getByTestId("whiteboard-board")).toBeVisible();
+    await expect(page.getByTestId("whiteboard-board-lane-strategy")).toContainText(/Strategy intake/i);
+    await expect(page.getByTestId("whiteboard-board-lane-deployment-ops")).toContainText(/Deployment readiness/i);
+    await expect(page.getByTestId("whiteboard-card-priority-legacy-whiteboard-strategy-card")).toContainText(/High/i);
+    await expect(page.getByTestId("whiteboard-card-reassign-legacy-whiteboard-strategy-card")).toBeVisible();
+    await page.getByTestId("whiteboard-card-start-legacy-whiteboard-strategy-card").click();
+    await expect(page.getByTestId("whiteboard-card-status-legacy-whiteboard-strategy-card")).toContainText(
+      /in_progress/i,
+    );
     await expect(page.getByTestId("whiteboard-phase-section")).toBeVisible();
     await expect(page.getByTestId("whiteboard-phase-workstreams")).toContainText(/Copywriting/i);
     await expect(page.getByTestId("whiteboard-phase-gate")).toContainText(/Pass/i);
@@ -112,11 +121,13 @@ test.describe("Product modes", () => {
 
     await expect(page.locator('[data-testid*="marketing" i]')).toHaveCount(0);
 
-    expect(sawProductModeApiPath(apiRequests, "/api/graphs/")).toBe(true);
+    expect(sawProductModeApiPath(apiRequests, "/api/companies/")).toBe(true);
     expect(sawProductModeApiPath(apiRequests, "/api/portfolio-health")).toBe(true);
     expect(sawProductModeApiPath(apiRequests, "/api/cross-company-queues")).toBe(true);
-    expect(sawProductModeApiPath(apiRequests, `/api/graphs/${seed.companyId}`)).toBe(true);
-    expect(sawProductModeApiPath(apiRequests, `/api/graphs/${seed.companyId}/versions/latest`)).toBe(true);
+    expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}`)).toBe(true);
+    expect(
+      sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/operating-model-versions/latest`),
+    ).toBe(true);
     expect(sawProductModeApiPath(apiRequests, "/api/operating-model-packs")).toBe(true);
     expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/packs`)).toBe(true);
     expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/operating-model`)).toBe(true);
@@ -128,11 +139,21 @@ test.describe("Product modes", () => {
     expect(sawCompanyScopedProductModeQuery(apiRequests, "/api/report-runs", seed.companyId)).toBe(true);
     expect(sawCompanyScopedProductModeQuery(apiRequests, "/api/communication/threads", seed.companyId)).toBe(true);
     expect(sawCompanyScopedProductModeQuery(apiRequests, "/api/whiteboards", seed.companyId)).toBe(true);
+    expect(sawProductModeApiPath(apiRequests, `/api/whiteboards/${legacyMultiPackIds.whiteboard}/board`)).toBe(true);
+    expect(
+      sawProductModeApiPath(
+        apiRequests,
+        `/api/whiteboards/${legacyMultiPackIds.whiteboard}/board/cards/legacy-whiteboard-strategy-card`,
+      ),
+    ).toBe(true);
     expect(sawStateProjectionType(apiRequests, seed.companyId, "client_service_history")).toBe(true);
     expect(verticalProductModeApiRequests(apiRequests, forbiddenVerticalMarketingRoutePattern)).toEqual([]);
   });
 
-  test("mocked ATLAS Legacy consult communication keeps internal notes scoped", async ({ browser, request }, testInfo) => {
+  test("mocked ATLAS Legacy consult communication keeps internal notes scoped", async ({
+    browser,
+    request,
+  }, testInfo) => {
     test.setTimeout(90_000);
 
     const legacyOwner = createTestUser(testInfo, "legacy-communication");
@@ -220,7 +241,10 @@ test.describe("Product modes", () => {
     try {
       await installProductModeMocks(legacyPage, state);
       await openBackendAuthenticatedPage(legacyPage, request, legacyOwner, "/companies");
-      await legacyPage.getByRole("link", { name: /Legacy Eyewear/i }).first().click();
+      await legacyPage
+        .getByRole("link", { name: /Legacy Eyewear/i })
+        .first()
+        .click();
       await legacyPage.waitForURL(new RegExp(`/companies/${seed.companyId}$`));
       await legacyPage.getByTestId("communication-panel").scrollIntoViewIfNeeded();
 
@@ -241,7 +265,10 @@ test.describe("Product modes", () => {
     try {
       await installProductModeMocks(atlasPage, operatorState);
       await openBackendAuthenticatedPage(atlasPage, request, atlasOperator, "/companies");
-      await atlasPage.getByRole("link", { name: /Legacy Eyewear/i }).first().click();
+      await atlasPage
+        .getByRole("link", { name: /Legacy Eyewear/i })
+        .first()
+        .click();
       await atlasPage.waitForURL(new RegExp(`/companies/${seed.companyId}$`));
       await atlasPage.getByTestId("communication-panel").scrollIntoViewIfNeeded();
 

@@ -41,7 +41,11 @@ class DepartmentListCreateView(APIView):
         user = cast(User, request.user)
         departments = department_queryset_for_user(user).order_by("name", "slug")
         return success_response(
-            {"departments": [department_payload(department, user=user) for department in departments]}
+            {
+                "departments": [
+                    department_payload(department, user=user) for department in departments
+                ]
+            }
         )
 
     def post(self, request: Request) -> Response:
@@ -54,7 +58,9 @@ class DepartmentListCreateView(APIView):
         serializer = DepartmentCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return _validation_error(serializer.errors)
-        lead_user_or_response = _lead_user_from_data(organization=organization, data=serializer.validated_data)
+        lead_user_or_response = _lead_user_from_data(
+            organization=organization, data=serializer.validated_data
+        )
         if isinstance(lead_user_or_response, Response):
             return lead_user_or_response
         try:

@@ -13,6 +13,9 @@ def atlas_launch_performance_policy() -> dict[str, object]:
         "source_policy_id": ATLAS_PERFORMANCE_POLICY_ID,
         "pack_id": "atlas_agency_ops.v1",
         "required_whiteboard_status": WorkWhiteboard.STATUS_IN_DEPLOYMENT,
+        "allow_sandbox_deployment_evidence": True,
+        "allow_web_automation_deployment_evidence": False,
+        "allow_manual_publish_deployment_evidence": False,
         "cadence": "weekly",
         "metric_sources": [
             {
@@ -20,8 +23,8 @@ def atlas_launch_performance_policy() -> dict[str, object]:
                 "display_name": "Email",
                 "department": "crm",
                 "department_name": "CRM",
-                "required_connector": "email_service_connector",
-                "tool_id": "dmp.email_draft_send_schedule",
+                "required_connector": "email_connector",
+                "tool_id": "email.send_dry_run",
                 "metrics": [
                     "open_rate",
                     "click_rate",
@@ -44,9 +47,14 @@ def atlas_launch_performance_policy() -> dict[str, object]:
                 "display_name": "WhatsApp",
                 "department": "deployment-ops",
                 "department_name": "Deployment Ops",
-                "required_connector": "whatsapp_business_connector",
-                "tool_id": "messaging.whatsapp_metrics",
+                "required_connector": "whatsapp_connector",
+                "tool_id": "whatsapp.send_dry_run",
                 "metrics": ["delivered", "replies", "conversion_intent"],
+                "sample_metrics": {
+                    "delivered": 0,
+                    "replies": 0,
+                    "conversion_intent": 0,
+                },
             },
             {
                 "id": "social",
@@ -68,9 +76,24 @@ def atlas_launch_performance_policy() -> dict[str, object]:
             },
         ],
         "evaluation_criteria": [
-            {"key": "channel_signal_quality", "value_type": "number", "operator": ">=", "threshold": 70},
-            {"key": "execution_completeness", "value_type": "number", "operator": ">=", "threshold": 80},
-            {"key": "optimization_confidence", "value_type": "number", "operator": ">=", "threshold": 75},
+            {
+                "key": "channel_signal_quality",
+                "value_type": "number",
+                "operator": ">=",
+                "threshold": 70,
+            },
+            {
+                "key": "execution_completeness",
+                "value_type": "number",
+                "operator": ">=",
+                "threshold": 80,
+            },
+            {
+                "key": "optimization_confidence",
+                "value_type": "number",
+                "operator": ">=",
+                "threshold": 75,
+            },
         ],
         "routing_rules": [
             {
@@ -102,6 +125,9 @@ def non_marketing_performance_policy() -> dict[str, object]:
         "source_policy_id": "legal_ops.v1.contract_outcome_review",
         "pack_id": "legal_ops.v1",
         "required_whiteboard_status": WorkWhiteboard.STATUS_IN_DEPLOYMENT,
+        "allow_sandbox_deployment_evidence": True,
+        "allow_web_automation_deployment_evidence": False,
+        "allow_manual_publish_deployment_evidence": False,
         "cadence": "monthly",
         "metric_sources": [
             {
@@ -119,8 +145,18 @@ def non_marketing_performance_policy() -> dict[str, object]:
             }
         ],
         "evaluation_criteria": [
-            {"key": "review_completion_score", "value_type": "number", "operator": ">=", "threshold": 90},
-            {"key": "client_revision_count", "value_type": "number", "operator": "<=", "threshold": 2},
+            {
+                "key": "review_completion_score",
+                "value_type": "number",
+                "operator": ">=",
+                "threshold": 90,
+            },
+            {
+                "key": "client_revision_count",
+                "value_type": "number",
+                "operator": "<=",
+                "threshold": 2,
+            },
         ],
         "routing_rules": [
             {

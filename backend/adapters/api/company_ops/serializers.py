@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 from application.services.company_ops import OPERATION_TEMPLATES
 from infrastructure.orm.models import (
+    CompanyOperationObjective,
     CompanyOpportunity,
     CompanySignal,
 )
@@ -23,6 +24,11 @@ class CompanySignalCreateSerializer(serializers.Serializer[Any]):
     signal_type = serializers.ChoiceField(
         choices=[item[0] for item in CompanySignal.SIGNAL_TYPE_CHOICES]
     )
+    signal_kind = serializers.ChoiceField(
+        required=False,
+        choices=[item[0] for item in CompanySignal.SIGNAL_KIND_CHOICES],
+    )
+    domain_context = serializers.CharField(required=False, allow_blank=True, max_length=64)
     title = serializers.CharField(max_length=255)
     summary = serializers.CharField(required=False, allow_blank=True, max_length=2000)
     source = serializers.CharField(required=False, allow_blank=True, max_length=64)  # type: ignore[assignment]
@@ -95,6 +101,11 @@ class ProcurementDraftCreateSerializer(serializers.Serializer[Any]):
 class CompanyOperationLaunchSerializer(serializers.Serializer[Any]):
     company_id = serializers.UUIDField()
     operation_type = serializers.ChoiceField(choices=sorted(OPERATION_TEMPLATES.keys()))
+    operation_family = serializers.ChoiceField(
+        required=False,
+        choices=[item[0] for item in CompanyOperationObjective.OPERATION_FAMILY_CHOICES],
+    )
+    domain_context = serializers.CharField(required=False, allow_blank=True, max_length=64)
     source_signal_id = serializers.UUIDField(required=False, allow_null=True)
     context_note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
     run_type = serializers.ChoiceField(

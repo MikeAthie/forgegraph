@@ -45,12 +45,7 @@ const DEFAULT_VISIBLE_SECTIONS: Record<AgentFieldSection, boolean> = {
  * Reusable component for agent-related configuration fields.
  * Includes Role, Job Description, Examples, and Notes.
  */
-export function AgentFields({
-  config,
-  onChange,
-  visibleSections,
-  className,
-}: AgentFieldsProps) {
+export function AgentFields({ config, onChange, visibleSections, className }: AgentFieldsProps) {
   const sections = { ...DEFAULT_VISIBLE_SECTIONS, ...visibleSections };
   const handleChange = useCallback(
     <K extends keyof AgentConfig>(field: K, value: AgentConfig[K]) => {
@@ -150,7 +145,10 @@ export function AgentFields({
           {/* Example List */}
           <div className="space-y-3">
             {(config.examples || []).map((example, index) => (
-              <div key={`${example.input}\u0000${example.output}`} className="relative p-3 border rounded-lg bg-muted/30 space-y-2">
+              <div
+                key={`${example.input}\u0000${example.output}`}
+                className="relative p-3 border rounded-lg bg-muted/30 space-y-2"
+              >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">Example {index + 1}</span>
                   <Button

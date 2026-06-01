@@ -1,4 +1,10 @@
+import pytest
+
 from _helpers import get_ready
+
+pytestmark = pytest.mark.skip(
+    reason="Historical TestSprite smoke artifact; use engine Go/gRPC production gates."
+)
 
 
 def test_ping_endpoint_returns_pong():
@@ -7,6 +13,3 @@ def test_ping_endpoint_returns_pong():
     payload = response.json()
     assert payload["status"] == "ready"
     assert payload["grpc_ready"] is True
-
-
-test_ping_endpoint_returns_pong()

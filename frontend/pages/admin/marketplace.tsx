@@ -113,10 +113,7 @@ const initialMarketplaceAdminState: MarketplaceAdminState = {
   releaseForm: DEFAULT_RELEASE_FORM,
 };
 
-function marketplaceAdminReducer(
-  state: MarketplaceAdminState,
-  action: MarketplaceAdminAction,
-): MarketplaceAdminState {
+function marketplaceAdminReducer(state: MarketplaceAdminState, action: MarketplaceAdminAction): MarketplaceAdminState {
   const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
   return { ...state, ...patch };
 }
@@ -159,7 +156,18 @@ function useMarketplaceAdminController() {
   const canManage = user?.organization_role === "owner" || user?.organization_role === "admin";
   const canReview = user?.organization_role === "owner";
   const [pageState, dispatchPageState] = useReducer(marketplaceAdminReducer, initialMarketplaceAdminState);
-  const { catalog, installed, releases, runtimePreview, loading, error, installingSlug, reviewingReleaseId, publishing, releaseForm } = pageState;
+  const {
+    catalog,
+    installed,
+    releases,
+    runtimePreview,
+    loading,
+    error,
+    installingSlug,
+    reviewingReleaseId,
+    publishing,
+    releaseForm,
+  } = pageState;
   const setPageField = useCallback(
     <K extends keyof MarketplaceAdminState>(key: K, value: SetStateAction<MarketplaceAdminState[K]>) => {
       dispatchPageState({
@@ -168,16 +176,40 @@ function useMarketplaceAdminController() {
     },
     [],
   );
-  const setCatalog = useCallback((value: SetStateAction<MarketplacePackage[]>) => setPageField("catalog", value), [setPageField]);
-  const setInstalled = useCallback((value: SetStateAction<MarketplacePackage[]>) => setPageField("installed", value), [setPageField]);
-  const setReleases = useCallback((value: SetStateAction<MarketplaceReleaseSummary[]>) => setPageField("releases", value), [setPageField]);
-  const setRuntimePreview = useCallback((value: SetStateAction<MarketplaceRuntimeManifestPreview | null>) => setPageField("runtimePreview", value), [setPageField]);
+  const setCatalog = useCallback(
+    (value: SetStateAction<MarketplacePackage[]>) => setPageField("catalog", value),
+    [setPageField],
+  );
+  const setInstalled = useCallback(
+    (value: SetStateAction<MarketplacePackage[]>) => setPageField("installed", value),
+    [setPageField],
+  );
+  const setReleases = useCallback(
+    (value: SetStateAction<MarketplaceReleaseSummary[]>) => setPageField("releases", value),
+    [setPageField],
+  );
+  const setRuntimePreview = useCallback(
+    (value: SetStateAction<MarketplaceRuntimeManifestPreview | null>) => setPageField("runtimePreview", value),
+    [setPageField],
+  );
   const setLoading = useCallback((value: SetStateAction<boolean>) => setPageField("loading", value), [setPageField]);
   const setError = useCallback((value: SetStateAction<string | null>) => setPageField("error", value), [setPageField]);
-  const setInstallingSlug = useCallback((value: SetStateAction<string | null>) => setPageField("installingSlug", value), [setPageField]);
-  const setReviewingReleaseId = useCallback((value: SetStateAction<string | null>) => setPageField("reviewingReleaseId", value), [setPageField]);
-  const setPublishing = useCallback((value: SetStateAction<boolean>) => setPageField("publishing", value), [setPageField]);
-  const setReleaseForm = useCallback((value: SetStateAction<ReleaseFormState>) => setPageField("releaseForm", value), [setPageField]);
+  const setInstallingSlug = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("installingSlug", value),
+    [setPageField],
+  );
+  const setReviewingReleaseId = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("reviewingReleaseId", value),
+    [setPageField],
+  );
+  const setPublishing = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("publishing", value),
+    [setPageField],
+  );
+  const setReleaseForm = useCallback(
+    (value: SetStateAction<ReleaseFormState>) => setPageField("releaseForm", value),
+    [setPageField],
+  );
 
   const refreshData = useCallback(async () => {
     setLoading(true);
@@ -340,7 +372,9 @@ function MarketplaceNoAccess({ onBack }: { onBack: () => void }) {
             <CardDescription>Workspace admins can manage marketplace packages.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" onClick={onBack}>Back to Workspace Access</Button>
+            <Button variant="outline" onClick={onBack}>
+              Back to Workspace Access
+            </Button>
           </CardContent>
         </Card>
       </DashboardLayout>
@@ -353,7 +387,9 @@ function MarketplaceHeader({ controller }: { controller: MarketplaceAdminControl
     <div className="flex items-center justify-between gap-4">
       <div>
         <h1 className="text-2xl font-semibold">Marketplace</h1>
-        <p className="text-sm text-muted-foreground">Install template presets and runtime packages with explicit delivery status.</p>
+        <p className="text-sm text-muted-foreground">
+          Install template presets and runtime packages with explicit delivery status.
+        </p>
       </div>
       <Button variant="outline" onClick={() => void controller.refreshData()} disabled={controller.loading}>
         {controller.loading ? <Spinner size="xs" /> : "Refresh"}
@@ -366,9 +402,21 @@ function RuntimeStatsGrid({ stats }: { stats: MarketplaceAdminController["instal
   return (
     <div className="grid gap-4 md:grid-cols-4">
       <RuntimeStatCard title="Runtime-ready" description="Included in tenant manifest delivery." value={stats.ready} />
-      <RuntimeStatCard title="Template-only" description="Editor presets only. No runtime code is shipped." value={stats.template} />
-      <RuntimeStatCard title="Blocked" description="Installed, but not executable in the current product mode." value={stats.blocked} />
-      <RuntimeStatCard title="Invalid" description="Package metadata needs operator review before delivery." value={stats.invalid} />
+      <RuntimeStatCard
+        title="Template-only"
+        description="Editor presets only. No runtime code is shipped."
+        value={stats.template}
+      />
+      <RuntimeStatCard
+        title="Blocked"
+        description="Installed, but not executable in the current product mode."
+        value={stats.blocked}
+      />
+      <RuntimeStatCard
+        title="Invalid"
+        description="Package metadata needs operator review before delivery."
+        value={stats.invalid}
+      />
     </div>
   );
 }
@@ -393,12 +441,16 @@ function ApprovedPackagesCard({ controller }: { controller: MarketplaceAdminCont
       <CardHeader>
         <CardTitle>Approved packages</CardTitle>
         <CardDescription>
-          Template packages stay addable as editor presets. Only ready runtime packages are delivered to the runtime service.
+          Template packages stay addable as editor presets. Only ready runtime packages are delivered to the runtime
+          service.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {controller.loading ? (
-          <div className="flex items-center gap-3 text-sm text-muted-foreground"><Spinner size="sm" />Loading packages&hellip;</div>
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <Spinner size="sm" />
+            Loading packages&hellip;
+          </div>
         ) : controller.catalog.length === 0 ? (
           <p className="text-sm text-muted-foreground">No approved packages found.</p>
         ) : (
@@ -425,14 +477,33 @@ function ApprovedPackageRow({ pkg, controller }: { pkg: MarketplacePackage; cont
         <p className="text-xs text-muted-foreground">{pkg.summary}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">{pkg.category}</Badge>
-          {badges.map((badge) => <Badge key={`${pkg.slug}-${badge}`} variant="secondary">{badge}</Badge>)}
+          {badges.map((badge) => (
+            <Badge key={`${pkg.slug}-${badge}`} variant="secondary">
+              {badge}
+            </Badge>
+          ))}
           <Badge variant="outline">latest {latestVersion}</Badge>
-          {installedVersion ? <Badge variant={upToDate ? "default" : "outline"}>installed {installedVersion}</Badge> : null}
+          {installedVersion ? (
+            <Badge variant={upToDate ? "default" : "outline"}>installed {installedVersion}</Badge>
+          ) : null}
         </div>
-        <p className="text-xs text-muted-foreground">{statusLabel}{reason ? ` · ${reason}` : ""}</p>
+        <p className="text-xs text-muted-foreground">
+          {statusLabel}
+          {reason ? ` · ${reason}` : ""}
+        </p>
       </div>
-      <Button size="sm" onClick={() => void controller.handleInstall(pkg)} disabled={controller.installingSlug === pkg.slug}>
-        {controller.installingSlug === pkg.slug ? "Installing" : installedVersion ? (upToDate ? "Reinstall" : "Update") : "Install"}
+      <Button
+        size="sm"
+        onClick={() => void controller.handleInstall(pkg)}
+        disabled={controller.installingSlug === pkg.slug}
+      >
+        {controller.installingSlug === pkg.slug
+          ? "Installing"
+          : installedVersion
+            ? upToDate
+              ? "Reinstall"
+              : "Update"
+            : "Install"}
       </Button>
     </div>
   );
@@ -448,7 +519,11 @@ function RuntimeManifestPreviewCard({ preview }: { preview: MarketplaceRuntimeMa
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!preview ? <p className="text-sm text-muted-foreground">Runtime preview not available.</p> : <RuntimeManifestPreview preview={preview} />}
+        {!preview ? (
+          <p className="text-sm text-muted-foreground">Runtime preview not available.</p>
+        ) : (
+          <RuntimeManifestPreview preview={preview} />
+        )}
       </CardContent>
     </Card>
   );
@@ -467,7 +542,11 @@ function RuntimeManifestPreview({ preview }: { preview: MarketplaceRuntimeManife
         <div className="space-y-2">
           <h3 className="text-sm font-medium">Delivered tools</h3>
           <div className="flex flex-wrap gap-2">
-            {preview.tools.map((tool) => <Badge key={`${tool.name}-${tool.version || "latest"}`} variant="outline">{tool.name}</Badge>)}
+            {preview.tools.map((tool) => (
+              <Badge key={`${tool.name}-${tool.version || "latest"}`} variant="outline">
+                {tool.name}
+              </Badge>
+            ))}
           </div>
         </div>
       ) : null}
@@ -479,7 +558,9 @@ function RuntimePreviewMetric({ label, value, mono }: { label: string; value: st
   return (
     <div className="rounded-lg border border-border p-3">
       <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={mono ? "mt-1 break-all font-mono text-xs text-foreground" : "mt-1 text-lg font-semibold"}>{value}</p>
+      <p className={mono ? "mt-1 break-all font-mono text-xs text-foreground" : "mt-1 text-lg font-semibold"}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -489,7 +570,9 @@ function RuntimePackagesList({ preview }: { preview: MarketplaceRuntimeManifestP
     <div className="space-y-2">
       <h3 className="text-sm font-medium">Delivery status by installed package</h3>
       {preview.packages.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No installed packages are currently part of the preview payload.</p>
+        <p className="text-sm text-muted-foreground">
+          No installed packages are currently part of the preview payload.
+        </p>
       ) : (
         preview.packages.map((entry) => (
           <div key={`${entry.package_slug}-${entry.release_id}`} className="rounded-lg border border-border p-3">
@@ -518,20 +601,52 @@ function PublishReleaseCard({ controller }: { controller: MarketplaceAdminContro
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
-          <ReleaseTextField id="packageSlug" label="Package slug" value={releaseForm.package_slug} placeholder="slack-alerts" field="package_slug" controller={controller} />
-          <ReleaseTextField id="packageName" label="Package name" value={releaseForm.package_name} placeholder="Slack Alerts" field="package_name" controller={controller} />
-          <ReleaseTextField id="releaseVersion" label="Version" value={releaseForm.version} placeholder="1.0.0" field="version" controller={controller} />
+          <ReleaseTextField
+            id="packageSlug"
+            label="Package slug"
+            value={releaseForm.package_slug}
+            placeholder="slack-alerts"
+            field="package_slug"
+            controller={controller}
+          />
+          <ReleaseTextField
+            id="packageName"
+            label="Package name"
+            value={releaseForm.package_name}
+            placeholder="Slack Alerts"
+            field="package_name"
+            controller={controller}
+          />
+          <ReleaseTextField
+            id="releaseVersion"
+            label="Version"
+            value={releaseForm.version}
+            placeholder="1.0.0"
+            field="version"
+            controller={controller}
+          />
           <ReleaseKindSelect controller={controller} />
         </div>
         <div className="rounded-lg border border-border p-3 text-sm">
           <p className="font-medium text-foreground">Derived execution node type: {controller.executionNodeType}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Package class governs the release shape. The execution node type is derived from it.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Package class governs the release shape. The execution node type is derived from it.
+          </p>
         </div>
         {releaseForm.package_kind === "runtime_tool" ? <RuntimeToolFields controller={controller} /> : null}
         {releaseForm.package_kind === "runtime_transform" ? (
-          <ReleaseTextField id="runtimeTransformName" label="Runtime transform name" value={releaseForm.runtime_transform_name} placeholder="normalize_customer_record" field="runtime_transform_name" controller={controller} />
+          <ReleaseTextField
+            id="runtimeTransformName"
+            label="Runtime transform name"
+            value={releaseForm.runtime_transform_name}
+            placeholder="normalize_customer_record"
+            field="runtime_transform_name"
+            controller={controller}
+          />
         ) : null}
-        {releaseForm.package_kind === "runtime_tool" || releaseForm.package_kind === "runtime_transform" ? <CloudAllowedSwitch controller={controller} /> : null}
+        {releaseForm.package_kind === "runtime_tool" || releaseForm.package_kind === "runtime_transform" ? (
+          <CloudAllowedSwitch controller={controller} />
+        ) : null}
         <Button onClick={() => void controller.handlePublishRelease()} disabled={controller.publishing}>
           {controller.publishing ? "Submitting" : "Submit release"}
         </Button>
@@ -558,7 +673,12 @@ function ReleaseTextField({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} value={value} onChange={(event) => controller.setReleaseForm((prev) => ({ ...prev, [field]: event.target.value }))} placeholder={placeholder} />
+      <Input
+        id={id}
+        value={value}
+        onChange={(event) => controller.setReleaseForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
@@ -569,12 +689,24 @@ function ReleaseKindSelect({ controller }: { controller: MarketplaceAdminControl
       <Label htmlFor="packageKind">Package class</Label>
       <Select
         value={controller.releaseForm.package_kind}
-        onValueChange={(value) => controller.setReleaseForm((prev) => ({ ...prev, package_kind: value as ReleaseFormState["package_kind"] }))}
+        onValueChange={(value) =>
+          controller.setReleaseForm((prev) => ({ ...prev, package_kind: value as ReleaseFormState["package_kind"] }))
+        }
       >
-        <SelectTrigger id="packageKind"><SelectValue /></SelectTrigger>
-        <SelectContent>{PACKAGE_KIND_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+        <SelectTrigger id="packageKind">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PACKAGE_KIND_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
       </Select>
-      <p className="text-xs text-muted-foreground">{PACKAGE_KIND_OPTIONS.find((option) => option.value === controller.releaseForm.package_kind)?.help}</p>
+      <p className="text-xs text-muted-foreground">
+        {PACKAGE_KIND_OPTIONS.find((option) => option.value === controller.releaseForm.package_kind)?.help}
+      </p>
     </div>
   );
 }
@@ -582,8 +714,22 @@ function ReleaseKindSelect({ controller }: { controller: MarketplaceAdminControl
 function RuntimeToolFields({ controller }: { controller: MarketplaceAdminController }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <ReleaseTextField id="runtimeToolName" label="Runtime tool name" value={controller.releaseForm.runtime_tool_name} placeholder="crm_lookup" field="runtime_tool_name" controller={controller} />
-      <ReleaseTextField id="runtimeHttpUrl" label="Runtime HTTP URL" value={controller.releaseForm.runtime_http_url} placeholder="https://example.com/runtime/tool" field="runtime_http_url" controller={controller} />
+      <ReleaseTextField
+        id="runtimeToolName"
+        label="Runtime tool name"
+        value={controller.releaseForm.runtime_tool_name}
+        placeholder="crm_lookup"
+        field="runtime_tool_name"
+        controller={controller}
+      />
+      <ReleaseTextField
+        id="runtimeHttpUrl"
+        label="Runtime HTTP URL"
+        value={controller.releaseForm.runtime_http_url}
+        placeholder="https://example.com/runtime/tool"
+        field="runtime_http_url"
+        controller={controller}
+      />
     </div>
   );
 }
@@ -593,7 +739,9 @@ function CloudAllowedSwitch({ controller }: { controller: MarketplaceAdminContro
     <div className="flex items-center justify-between rounded-lg border border-border p-3">
       <div>
         <p className="text-sm font-medium text-foreground">Cloud allowed</p>
-        <p className="text-xs text-muted-foreground">Disable this for self-host-only releases. Runtime tools backed by exec must stay off in Cloud.</p>
+        <p className="text-xs text-muted-foreground">
+          Disable this for self-host-only releases. Runtime tools backed by exec must stay off in Cloud.
+        </p>
       </div>
       <Switch
         checked={controller.releaseForm.cloud_allowed}
@@ -615,18 +763,28 @@ function ReleaseReviewQueue({ controller }: { controller: MarketplaceAdminContro
         {controller.pendingReleases.length === 0 ? (
           <p className="text-sm text-muted-foreground">No pending releases.</p>
         ) : (
-          controller.pendingReleases.map((release) => <ReleaseReviewRow key={release.id} release={release} controller={controller} />)
+          controller.pendingReleases.map((release) => (
+            <ReleaseReviewRow key={release.id} release={release} controller={controller} />
+          ))
         )}
       </CardContent>
     </Card>
   );
 }
 
-function ReleaseReviewRow({ release, controller }: { release: MarketplaceReleaseSummary; controller: MarketplaceAdminController }) {
+function ReleaseReviewRow({
+  release,
+  controller,
+}: {
+  release: MarketplaceReleaseSummary;
+  controller: MarketplaceAdminController;
+}) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-border p-3">
       <div>
-        <p className="text-sm font-medium">{release.package_name} v{release.version}</p>
+        <p className="text-sm font-medium">
+          {release.package_name} v{release.version}
+        </p>
         <p className="text-xs text-muted-foreground">
           {release.package_slug} · {getMarketplaceReleaseLabel(release.package_kind)} · {release.execution_node_type}
           {release.cloud_allowed ? " · cloud-allowed" : " · self-host only"}
@@ -636,8 +794,21 @@ function ReleaseReviewRow({ release, controller }: { release: MarketplaceRelease
         <Badge variant="outline">{release.status}</Badge>
         {controller.canReview ? (
           <>
-            <Button size="sm" variant="outline" onClick={() => void controller.handleReview(release.id, "rejected")} disabled={controller.reviewingReleaseId === release.id}>Reject</Button>
-            <Button size="sm" onClick={() => void controller.handleReview(release.id, "approved")} disabled={controller.reviewingReleaseId === release.id}>Approve</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void controller.handleReview(release.id, "rejected")}
+              disabled={controller.reviewingReleaseId === release.id}
+            >
+              Reject
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void controller.handleReview(release.id, "approved")}
+              disabled={controller.reviewingReleaseId === release.id}
+            >
+              Approve
+            </Button>
           </>
         ) : null}
       </div>
@@ -657,7 +828,11 @@ export default function MarketplaceAdminPage() {
       <DashboardLayout>
         <div className="space-y-6">
           <MarketplaceHeader controller={controller} />
-          {controller.error ? <Alert variant="destructive"><AlertDescription>{controller.error}</AlertDescription></Alert> : null}
+          {controller.error ? (
+            <Alert variant="destructive">
+              <AlertDescription>{controller.error}</AlertDescription>
+            </Alert>
+          ) : null}
           <RuntimeStatsGrid stats={controller.installedStats} />
           <ApprovedPackagesCard controller={controller} />
           <RuntimeManifestPreviewCard preview={controller.runtimePreview} />

@@ -411,6 +411,8 @@ def _create_stage_signals(
                 company=program.company,
                 actor=user,
                 signal_type="manual",
+                signal_kind="feedback",
+                domain_context="program",
                 title=_label_from_id(signal_key),
                 summary=summary,
                 source="program_stage_output",

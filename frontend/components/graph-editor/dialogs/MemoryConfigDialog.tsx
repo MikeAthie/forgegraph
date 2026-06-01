@@ -55,9 +55,7 @@ type MemoryConfigDialogState = {
 };
 
 type MemoryConfigDialogAction = {
-  patch:
-    | Partial<MemoryConfigDialogState>
-    | ((state: MemoryConfigDialogState) => Partial<MemoryConfigDialogState>);
+  patch: Partial<MemoryConfigDialogState> | ((state: MemoryConfigDialogState) => Partial<MemoryConfigDialogState>);
 };
 
 export interface MemoryConfigDialogProps {
@@ -125,225 +123,221 @@ function MemoryAdvancedSettings({
   }
 
   return (
-              <div className="space-y-4">
-                <FormField label="Auto-prepend memory" htmlFor="auto-prepend">
-                  <Switch
-                    id="auto-prepend"
-                    checked={formState.autoPrepend}
-                    onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, autoPrepend: checked }))}
-                  />
-                </FormField>
+    <div className="space-y-4">
+      <FormField label="Auto-prepend memory" htmlFor="auto-prepend">
+        <Switch
+          id="auto-prepend"
+          checked={formState.autoPrepend}
+          onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, autoPrepend: checked }))}
+        />
+      </FormField>
 
-                <Separator />
+      <Separator />
 
-                <FormField
-                  label="Enable vector memory"
-                  htmlFor="vector-enabled"
-                  description="Retrieve long-term memories via semantic search."
-                >
-                  <Switch
-                    id="vector-enabled"
-                    checked={formState.vectorEnabled}
-                    onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, vectorEnabled: checked }))}
-                  />
-                </FormField>
+      <FormField
+        label="Enable vector memory"
+        htmlFor="vector-enabled"
+        description="Retrieve long-term memories via semantic search."
+      >
+        <Switch
+          id="vector-enabled"
+          checked={formState.vectorEnabled}
+          onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, vectorEnabled: checked }))}
+        />
+      </FormField>
 
-                {formState.vectorEnabled && (
-                  <>
-                    <FormField
-                      label="Vector top-k"
-                      htmlFor="vector-top-k"
-                      description="How many memory chunks to retrieve per prompt."
-                    >
-                      <Input
-                        id="vector-top-k"
-                        type="number"
-                        min={1}
-                        max={50}
-                        value={formState.vectorTopK}
-                        onChange={(event) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            vectorTopK: Number(event.target.value),
-                          }))
-                        }
-                      />
-                    </FormField>
+      {formState.vectorEnabled && (
+        <>
+          <FormField
+            label="Vector top-k"
+            htmlFor="vector-top-k"
+            description="How many memory chunks to retrieve per prompt."
+          >
+            <Input
+              id="vector-top-k"
+              type="number"
+              min={1}
+              max={50}
+              value={formState.vectorTopK}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  vectorTopK: Number(event.target.value),
+                }))
+              }
+            />
+          </FormField>
 
-                    <FormField
-                      label="Vector threshold"
-                      htmlFor="vector-threshold"
-                      description="Minimum similarity score for a memory to be included."
-                    >
-                      <Input
-                        id="vector-threshold"
-                        type="number"
-                        step="0.01"
-                        min={0.5}
-                        max={0.99}
-                        value={formState.vectorThreshold}
-                        onChange={(event) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            vectorThreshold: Number(event.target.value),
-                          }))
-                        }
-                      />
-                    </FormField>
+          <FormField
+            label="Vector threshold"
+            htmlFor="vector-threshold"
+            description="Minimum similarity score for a memory to be included."
+          >
+            <Input
+              id="vector-threshold"
+              type="number"
+              step="0.01"
+              min={0.5}
+              max={0.99}
+              value={formState.vectorThreshold}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  vectorThreshold: Number(event.target.value),
+                }))
+              }
+            />
+          </FormField>
 
-                    <FormField
-                      label="Recency weight"
-                      htmlFor="vector-recency-weight"
-                      description="Weight recent memories vs semantic similarity (0-1)."
-                    >
-                      <Input
-                        id="vector-recency-weight"
-                        type="number"
-                        step="0.05"
-                        min={0}
-                        max={1}
-                        value={formState.vectorRecencyWeight}
-                        onChange={(event) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            vectorRecencyWeight: Number(event.target.value),
-                          }))
-                        }
-                      />
-                    </FormField>
+          <FormField
+            label="Recency weight"
+            htmlFor="vector-recency-weight"
+            description="Weight recent memories vs semantic similarity (0-1)."
+          >
+            <Input
+              id="vector-recency-weight"
+              type="number"
+              step="0.05"
+              min={0}
+              max={1}
+              value={formState.vectorRecencyWeight}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  vectorRecencyWeight: Number(event.target.value),
+                }))
+              }
+            />
+          </FormField>
 
-                    <FormField
-                      label="Embedding model"
-                      htmlFor="embedding-model"
-                      description="Model used for generating embeddings."
-                    >
-                      <Input
-                        id="embedding-model"
-                        type="text"
-                        value={formState.embeddingModel}
-                        onChange={(event) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            embeddingModel: event.target.value,
-                          }))
-                        }
-                      />
-                    </FormField>
-                  </>
-                )}
+          <FormField
+            label="Embedding model"
+            htmlFor="embedding-model"
+            description="Model used for generating embeddings."
+          >
+            <Input
+              id="embedding-model"
+              type="text"
+              value={formState.embeddingModel}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  embeddingModel: event.target.value,
+                }))
+              }
+            />
+          </FormField>
+        </>
+      )}
 
-                <FormField
-                  label="Summary TTL (hours)"
-                  htmlFor="summary-ttl"
-                  description="How long summarized memory persists in Redis."
-                >
-                  <Input
-                    id="summary-ttl"
-                    type="number"
-                    min={1}
-                    max={720}
-                    value={formState.summaryTtlHours}
-                    onChange={(event) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        summaryTtlHours: Number(event.target.value),
-                      }))
-                    }
-                  />
-                </FormField>
+      <FormField
+        label="Summary TTL (hours)"
+        htmlFor="summary-ttl"
+        description="How long summarized memory persists in Redis."
+      >
+        <Input
+          id="summary-ttl"
+          type="number"
+          min={1}
+          max={720}
+          value={formState.summaryTtlHours}
+          onChange={(event) =>
+            setFormState((prev) => ({
+              ...prev,
+              summaryTtlHours: Number(event.target.value),
+            }))
+          }
+        />
+      </FormField>
 
-                <FormField
-                  label="Facts TTL (days)"
-                  htmlFor="facts-ttl"
-                  description="How long extracted facts persist in Redis."
-                >
-                  <Input
-                    id="facts-ttl"
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={formState.factsTtlDays}
-                    onChange={(event) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        factsTtlDays: Number(event.target.value),
-                      }))
-                    }
-                  />
-                </FormField>
+      <FormField label="Facts TTL (days)" htmlFor="facts-ttl" description="How long extracted facts persist in Redis.">
+        <Input
+          id="facts-ttl"
+          type="number"
+          min={1}
+          max={365}
+          value={formState.factsTtlDays}
+          onChange={(event) =>
+            setFormState((prev) => ({
+              ...prev,
+              factsTtlDays: Number(event.target.value),
+            }))
+          }
+        />
+      </FormField>
 
-                <Separator />
+      <Separator />
 
-                <FormField
-                  label="Enable summarization"
-                  htmlFor="summarization-enabled"
-                  description="Summarize long conversations and extract facts."
-                >
-                  <Switch
-                    id="summarization-enabled"
-                    checked={formState.summarizationEnabled}
-                    onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, summarizationEnabled: checked }))}
-                  />
-                </FormField>
+      <FormField
+        label="Enable summarization"
+        htmlFor="summarization-enabled"
+        description="Summarize long conversations and extract facts."
+      >
+        <Switch
+          id="summarization-enabled"
+          checked={formState.summarizationEnabled}
+          onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, summarizationEnabled: checked }))}
+        />
+      </FormField>
 
-                <FormField
-                  label="Summarization threshold (messages)"
-                  htmlFor="summarization-threshold"
-                  description="Trigger summarization after this many new messages."
-                >
-                  <Input
-                    id="summarization-threshold"
-                    type="number"
-                    min={10}
-                    max={200}
-                    value={formState.summarizationThreshold}
-                    onChange={(event) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        summarizationThreshold: Number(event.target.value),
-                      }))
-                    }
-                  />
-                </FormField>
+      <FormField
+        label="Summarization threshold (messages)"
+        htmlFor="summarization-threshold"
+        description="Trigger summarization after this many new messages."
+      >
+        <Input
+          id="summarization-threshold"
+          type="number"
+          min={10}
+          max={200}
+          value={formState.summarizationThreshold}
+          onChange={(event) =>
+            setFormState((prev) => ({
+              ...prev,
+              summarizationThreshold: Number(event.target.value),
+            }))
+          }
+        />
+      </FormField>
 
-                <FormField
-                  label="Keep recent messages"
-                  htmlFor="summarization-keep-recent"
-                  description="How many recent messages remain after summarization."
-                >
-                  <Input
-                    id="summarization-keep-recent"
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={formState.summarizationKeepRecent}
-                    onChange={(event) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        summarizationKeepRecent: Number(event.target.value),
-                      }))
-                    }
-                  />
-                </FormField>
+      <FormField
+        label="Keep recent messages"
+        htmlFor="summarization-keep-recent"
+        description="How many recent messages remain after summarization."
+      >
+        <Input
+          id="summarization-keep-recent"
+          type="number"
+          min={1}
+          max={100}
+          value={formState.summarizationKeepRecent}
+          onChange={(event) =>
+            setFormState((prev) => ({
+              ...prev,
+              summarizationKeepRecent: Number(event.target.value),
+            }))
+          }
+        />
+      </FormField>
 
-                <FormField
-                  label="Summarization model"
-                  htmlFor="summarization-model"
-                  description="Model used for summarization requests."
-                >
-                  <Input
-                    id="summarization-model"
-                    type="text"
-                    value={formState.summarizationModel}
-                    onChange={(event) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        summarizationModel: event.target.value,
-                      }))
-                    }
-                  />
-                </FormField>
-              </div>
+      <FormField
+        label="Summarization model"
+        htmlFor="summarization-model"
+        description="Model used for summarization requests."
+      >
+        <Input
+          id="summarization-model"
+          type="text"
+          value={formState.summarizationModel}
+          onChange={(event) =>
+            setFormState((prev) => ({
+              ...prev,
+              summarizationModel: event.target.value,
+            }))
+          }
+        />
+      </FormField>
+    </div>
   );
 }
 export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfigDialogProps) {
@@ -352,16 +346,24 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
   const setDialogField = useCallback(
     <K extends keyof MemoryConfigDialogState>(key: K, value: SetStateAction<MemoryConfigDialogState[K]>) => {
       dispatchDialogState({
-        patch: (current) =>
-          ({ [key]: resolveStateAction(value, current[key]) }) as Partial<MemoryConfigDialogState>,
+        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<MemoryConfigDialogState>,
       });
     },
     [],
   );
-  const setLoading = useCallback((value: SetStateAction<boolean>) => setDialogField("loading", value), [setDialogField]);
+  const setLoading = useCallback(
+    (value: SetStateAction<boolean>) => setDialogField("loading", value),
+    [setDialogField],
+  );
   const setSaving = useCallback((value: SetStateAction<boolean>) => setDialogField("saving", value), [setDialogField]);
-  const setError = useCallback((value: SetStateAction<string | null>) => setDialogField("error", value), [setDialogField]);
-  const setConfig = useCallback((value: SetStateAction<MemoryConfig | null>) => setDialogField("config", value), [setDialogField]);
+  const setError = useCallback(
+    (value: SetStateAction<string | null>) => setDialogField("error", value),
+    [setDialogField],
+  );
+  const setConfig = useCallback(
+    (value: SetStateAction<MemoryConfig | null>) => setDialogField("config", value),
+    [setDialogField],
+  );
   const setFormState = useCallback(
     (value: SetStateAction<MemoryConfigFormState>) => setDialogField("formState", value),
     [setDialogField],
@@ -473,7 +475,28 @@ export function MemoryConfigDialog({ graphId, open, onOpenChange }: MemoryConfig
     } finally {
       setSaving(false);
     }
-  }, [bufferSize, config?.buffer_enabled, formState.autoPrepend, formState.embeddingModel, formState.enablePersistence, formState.factsTtlDays, formState.summarizationEnabled, formState.summarizationKeepRecent, formState.summarizationModel, formState.summarizationThreshold, formState.summaryTtlHours, formState.vectorEnabled, formState.vectorRecencyWeight, formState.vectorThreshold, formState.vectorTopK, graphId, onOpenChange, setConfig, setError, setSaving]);
+  }, [
+    bufferSize,
+    config?.buffer_enabled,
+    formState.autoPrepend,
+    formState.embeddingModel,
+    formState.enablePersistence,
+    formState.factsTtlDays,
+    formState.summarizationEnabled,
+    formState.summarizationKeepRecent,
+    formState.summarizationModel,
+    formState.summarizationThreshold,
+    formState.summaryTtlHours,
+    formState.vectorEnabled,
+    formState.vectorRecencyWeight,
+    formState.vectorThreshold,
+    formState.vectorTopK,
+    graphId,
+    onOpenChange,
+    setConfig,
+    setError,
+    setSaving,
+  ]);
 
   const handleToggleAdvanced = useCallback(() => {
     setFormState((prev) => ({ ...prev, showAdvanced: !prev.showAdvanced }));

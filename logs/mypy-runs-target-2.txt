@@ -1,0 +1,10 @@
+infrastructure/orm/models/communications.py:171: error: Item "None" of "Graph | None" has no attribute "organization_id"  [union-attr]
+infrastructure/orm/models/communications.py:567: error: Argument 1 to "_scope_for_run" has incompatible type "Run | None"; expected "Run"  [arg-type]
+infrastructure/orm/models/communications.py:569: error: Item "None" of "ApprovalTask | None" has no attribute "run"  [union-attr]
+infrastructure/orm/models/communications.py:570: error: Item "None" of "TaskRecord | None" has no attribute "execution_id"  [union-attr]
+infrastructure/orm/models/communications.py:571: error: Item "None" of "TaskRecord | None" has no attribute "execution"  [union-attr]
+infrastructure/orm/models/routing.py:205: error: Item "None" of "Graph | None" has no attribute "organization_id"  [union-attr]
+infrastructure/orm/models/routing.py:213: error: Item "None" of "DepartmentRegistry | None" has no attribute "organization_id"  [union-attr]
+infrastructure/orm/models/routing.py:377: error: Item "None" of "TaskLifecycleRecord | None" has no attribute "organization_id"  [union-attr]
+application/services/task_lifecycle.py:742: error: Incompatible types in assignment (expression has type "object | None", variable has type "DepartmentRegistry | Combinable | None")  [assignment]
+Found 9 errors in 3 files (checked 2 source files)

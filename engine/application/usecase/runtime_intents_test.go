@@ -316,6 +316,94 @@ func TestSchedulerStartRunFailsClosedWhenRunStartWriteFails(t *testing.T) {
 	}
 }
 
+func TestSchedulerStartRunFailsClosedWhenResumeSnapshotLookupFails(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	engine.Repo.loadRunSnapshotErr = errors.New("backend snapshot unavailable")
+
+	transformExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"prepared": true}), nil
+	})
+
+	runID := "run-snapshot-lookup-fails-closed"
+	graphJSON := makeGraphJSONWithMetadata(
+		[]entity.Node{
+			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
+		},
+		nil,
+		map[string]any{"backend_attempt_id": "attempt-snapshot-lookup-fails"},
+	)
+
+	err := engine.Scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", "tenant-1", "")
+	if err == nil {
+		t.Fatal("expected start to fail when backend resume snapshot lookup fails")
+	}
+	if !strings.Contains(err.Error(), "failed to load backend-owned resume snapshot") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if transformExec.getExecuteCount() != 0 {
+		t.Fatalf("expected no node execution after snapshot lookup failure, got %d", transformExec.getExecuteCount())
+	}
+	if engine.Scheduler.IsRunActive(runID) {
+		t.Fatalf("run should not remain active after snapshot lookup failure")
+	}
+}
+
+func TestSchedulerStartRunFailsClosedWhenResumeSnapshotIsInvalid(t *testing.T) {
+	engine := NewTestEngine(t, 1)
+	runID := "run-invalid-snapshot-fails-closed"
+
+	engine.Repo.runsMu.Lock()
+	engine.Repo.runs[runID] = &entity.Run{
+		ID:        runID,
+		Status:    string(value.RunStatusRunning),
+		InputJSON: map[string]any{"query": "backend-owned input"},
+	}
+	engine.Repo.runsMu.Unlock()
+
+	engine.Repo.snapshotsMu.Lock()
+	engine.Repo.snapshots[runID] = &port.RunResumeSnapshot{
+		RunID:             runID,
+		LastCompletedNode: "start",
+		NextNode:          "output",
+		AttemptID:         "attempt-invalid-snapshot",
+		UpdatedAt:         time.Now(),
+	}
+	engine.Repo.snapshotsMu.Unlock()
+
+	transformExec := engine.RegisterExecutor(string(value.NodeTypeTransform), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"prepared": true}), nil
+	})
+	outputExec := engine.RegisterExecutor(string(value.NodeTypeOutput), func(ctx context.Context, node *entity.Node, state *entity.State) (*port.NodeExecutionResult, error) {
+		return port.NewSuccessResult(map[string]any{"done": true}), nil
+	})
+
+	graphJSON := makeGraphJSONWithMetadata(
+		[]entity.Node{
+			{ID: "start", Type: string(value.NodeTypeTransform), Name: "Start", Config: map[string]any{}},
+			{ID: "output", Type: string(value.NodeTypeOutput), Name: "Output", Config: map[string]any{}},
+		},
+		[]entity.Edge{{From: "start", To: "output"}},
+		map[string]any{"backend_attempt_id": "attempt-invalid-snapshot"},
+	)
+
+	err := engine.Scheduler.StartRun(context.Background(), runID, graphJSON, "{}", "", "", "tenant-1", "")
+	if err == nil {
+		t.Fatal("expected start to fail when backend resume snapshot is inconsistent")
+	}
+	if !strings.Contains(err.Error(), "has no durable completed node run") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if transformExec.getExecuteCount() != 0 {
+		t.Fatalf("expected no transform execution after invalid snapshot, got %d", transformExec.getExecuteCount())
+	}
+	if outputExec.getExecuteCount() != 0 {
+		t.Fatalf("expected no output execution after invalid snapshot, got %d", outputExec.getExecuteCount())
+	}
+	if engine.Scheduler.IsRunActive(runID) {
+		t.Fatalf("run should not remain active after invalid snapshot")
+	}
+}
+
 func TestSchedulerNodeStartWriteFailureStopsBeforeExecutor(t *testing.T) {
 	engine := NewTestEngine(t, 1)
 	recordingRepo := newRecordingAttemptRepository(engine.Repo)

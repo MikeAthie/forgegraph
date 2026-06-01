@@ -403,12 +403,7 @@ export const departmentRepository = {
           proposals: buildProposals(departmentApprovals, operationRefs),
           tasks: departmentTasks,
           operations: operationRefs,
-          blockers: buildBlockers(
-            departmentApprovals,
-            departmentTasks,
-            operationRefs,
-            departmentRoutingRecords,
-          ),
+          blockers: buildBlockers(departmentApprovals, departmentTasks, operationRefs, departmentRoutingRecords),
           approvals: departmentApprovals,
         };
       }),

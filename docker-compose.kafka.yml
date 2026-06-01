@@ -1,4 +1,5 @@
 services:
+  # Local development broker only. Production uses managed Kafka with TLS/SASL.
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v24.3.8
     container_name: forgegraph-redpanda

@@ -71,7 +71,11 @@ class RoutingPolicyListCreateView(APIView):
         if "active" in serializer.validated_data:
             queryset = queryset.filter(active=serializer.validated_data["active"])
         return success_response(
-            {"policies": [routing_policy_payload(policy) for policy in queryset.order_by("-updated_at")]}
+            {
+                "policies": [
+                    routing_policy_payload(policy) for policy in queryset.order_by("-updated_at")
+                ]
+            }
         )
 
     def post(self, request: Request) -> Response:
@@ -220,7 +224,12 @@ class RoutingInboxView(APIView):
             status=str(serializer.validated_data.get("status") or ""),
         )
         return success_response(
-            {"items": [routing_record_payload(record) for record in records.order_by("due_at", "-created_at")]}
+            {
+                "items": [
+                    routing_record_payload(record)
+                    for record in records.order_by("due_at", "-created_at")
+                ]
+            }
         )
 
 
@@ -317,8 +326,11 @@ def _resolve_policy_refs(
         )
         if company is None:
             return _not_found("Company was not found or you do not have access.")
+    department_id = data.get("department_id")
+    if not isinstance(department_id, str | UUID):
+        return _not_found("Department was not found.")
     department = DepartmentRegistry.objects.filter(
-        id=data.get("department_id"),
+        id=department_id,
         organization=organization,
     ).first()
     if department is None:
@@ -359,7 +371,9 @@ def _lead_departments_for_user(user: User) -> list[DepartmentRegistry]:
             memberships__role="lead",
             memberships__status="active",
         )
-        .filter(Q(memberships__expires_at__isnull=True) | Q(memberships__expires_at__gt=timezone.now()))
+        .filter(
+            Q(memberships__expires_at__isnull=True) | Q(memberships__expires_at__gt=timezone.now())
+        )
         .distinct()
     )
 

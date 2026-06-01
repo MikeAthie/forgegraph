@@ -2,6 +2,8 @@ import type { Page, Route } from "@playwright/test";
 
 import type {
   ApprovalTask,
+  CompanyDTO,
+  CompanyOperatingModelVersionDTO,
   GraphDetail,
   GraphListItem,
   NodeRunItem,
@@ -348,6 +350,34 @@ function buildGraphDetail(state: CompanyWorkspaceMockState): GraphDetail {
   };
 }
 
+function buildCompanyListItem(state: CompanyWorkspaceMockState): CompanyDTO {
+  return {
+    id: state.companyId,
+    company_id: state.companyId,
+    workflow_definition_id: state.companyId,
+    storage_model: "Graph",
+    organization_id: "playwright-company-org",
+    name: state.companyName,
+    description: String(state.graphVersion.graph_json.metadata?.description ?? ""),
+    created_at: "2026-04-26T08:00:00.000Z",
+    updated_at: "2026-04-26T12:00:00.000Z",
+    setup_version_count: state.graphVersion.version,
+    latest_setup_version: state.graphVersion.version,
+  };
+}
+
+function buildCompanyOperatingModelVersion(state: CompanyWorkspaceMockState): CompanyOperatingModelVersionDTO {
+  return {
+    id: state.graphVersion.id,
+    company_id: state.companyId,
+    workflow_definition_id: state.companyId,
+    version: state.graphVersion.version,
+    model_json: state.graphVersion.graph_json,
+    checksum: `checksum-${state.graphVersion.id}`,
+    created_at: "2026-04-26T08:05:00.000Z",
+  };
+}
+
 function buildDefaultOperatingBrief(state: CompanyWorkspaceMockState, operationId?: string | null): OperatingBrief {
   const profile = state.graphVersion.graph_json.metadata?.company_profile;
   const objective =
@@ -539,6 +569,40 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(apiSuccess(buildGraphDetail(state))),
+    });
+  });
+
+  route(/\/api\/companies\/?(?:\?.*)?$/, async (route: Route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess([buildCompanyListItem(state)])),
+    });
+  });
+
+  route(new RegExp(`/api/companies/${state.companyId}/operating-model-versions/latest(?:\\?.*)?$`), async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess(buildCompanyOperatingModelVersion(state))),
+    });
+  });
+
+  route(new RegExp(`/api/companies/${state.companyId}(?:\\?.*)?$`), async (route: Route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess(buildCompanyListItem(state))),
     });
   });
 

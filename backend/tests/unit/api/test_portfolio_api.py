@@ -15,6 +15,7 @@ from infrastructure.orm.models import (
     CompanyAssignment,
     Graph,
     GraphVersion,
+    Organization,
     OrganizationMembership,
     PeriodicReviewDefinition,
     Run,
@@ -37,6 +38,12 @@ def _company(user: User, name: str) -> Graph:
             description=f"{name} operating company.",
         ),
     )
+
+
+def _organization(company: Graph) -> Organization:
+    organization = company.organization
+    assert organization is not None
+    return organization
 
 
 def _member_in_org(owner: User, *, role: str = "viewer") -> User:
@@ -65,7 +72,7 @@ def _run_for_company(owner: User, company: Graph, *, status: str = "running") ->
     )
     return Run.objects.create(
         owner=owner,
-        organization=company.organization,
+        organization=_organization(company),
         graph_version=version,
         status=status,
         started_at=timezone.now(),
@@ -82,7 +89,7 @@ def _add_company_operating_records(owner: User, company: Graph) -> None:
         payload={"prompt_message": "Approve next step"},
     )
     TaskRecord.objects.create(
-        organization=company.organization,
+        organization=_organization(company),
         execution=run,
         source_node_id="planning",
         external_key=f"{run.id}:planning",
@@ -92,7 +99,7 @@ def _add_company_operating_records(owner: User, company: Graph) -> None:
         summary="Waiting for a company decision.",
     )
     PeriodicReviewDefinition.objects.create(
-        organization=company.organization,
+        organization=_organization(company),
         company=company,
         pack_id="generic_ops.v1",
         template_id=f"review-{company.id}",
@@ -107,19 +114,19 @@ def test_portfolio_health_and_queues_are_company_assignment_filtered(api_client,
     hidden = _company(user, "Hidden Client")
     member = _member_in_org(user)
     CompanyAccessPolicy.objects.create(
-        organization=allowed.organization,
+        organization=_organization(allowed),
         company=allowed,
         assignment_required=True,
         org_admin_access_enabled=False,
     )
     CompanyAccessPolicy.objects.create(
-        organization=hidden.organization,
+        organization=_organization(hidden),
         company=hidden,
         assignment_required=True,
         org_admin_access_enabled=False,
     )
     CompanyAssignment.objects.create(
-        organization=allowed.organization,
+        organization=_organization(allowed),
         company=allowed,
         user=member,
         role="viewer",
@@ -156,7 +163,7 @@ def test_company_assignment_create_and_revoke_changes_company_access_immediately
     company = _company(user, "Restricted Client")
     member = _member_in_org(user)
     CompanyAccessPolicy.objects.create(
-        organization=company.organization,
+        organization=_organization(company),
         company=company,
         assignment_required=True,
         org_admin_access_enabled=True,

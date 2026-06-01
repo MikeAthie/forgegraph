@@ -211,12 +211,11 @@ class CompanyAssignmentDetailView(APIView):
 
 
 def _company_for_admin(user: User, company_id: UUID) -> Graph | None:
-    return cast(
-        Graph | None,
+    return (
         accessible_company_queryset(user, minimum_role="admin")
         .filter(id=company_id)
         .select_related("organization")
-        .first(),
+        .first()
     )
 
 

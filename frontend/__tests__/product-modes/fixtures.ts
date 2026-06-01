@@ -15,6 +15,7 @@ import type {
   PortfolioHealth,
   ReportRunDTO,
   StateProjectionDTO,
+  WorkWhiteboardBoardSnapshotDTO,
   WorkArtifactDTO,
   WorkWhiteboardDTO,
 } from "../../lib/api";
@@ -50,6 +51,7 @@ export type ProductModeMockState = CompanyWorkspaceMockState & {
   communicationThreads?: CommunicationThreadDTO[];
   communicationMessages?: Record<string, CommunicationMessageDTO[]>;
   whiteboards?: WorkWhiteboardDTO[];
+  whiteboardBoards?: WorkWhiteboardBoardSnapshotDTO[];
 };
 
 export function collectProductModeApiRequests(page: Page): string[] {
@@ -67,11 +69,7 @@ export function sawProductModeApiPath(apiRequests: string[], pathname: string): 
   return apiRequests.some((requestUrl) => new URL(requestUrl).pathname === pathname);
 }
 
-export function sawCompanyScopedProductModeQuery(
-  apiRequests: string[],
-  pathname: string,
-  companyId: string,
-): boolean {
+export function sawCompanyScopedProductModeQuery(apiRequests: string[], pathname: string, companyId: string): boolean {
   return apiRequests.some((requestUrl) => {
     const url = new URL(requestUrl);
     return url.pathname === pathname && url.searchParams.get("company_id") === companyId;
@@ -376,6 +374,157 @@ export async function installProductModeMocks(page: Page, state: ProductModeMock
       return;
     }
     await fulfillJson(route, { whiteboards: scopedByCompany(state.whiteboards ?? [], route) });
+  });
+
+  route(/\/api\/whiteboards\/[^/]+\/board(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/board$/);
+    const whiteboardId = match?.[1] ?? "";
+    const board = (state.whiteboardBoards ?? []).find((item) => item.whiteboard_id === whiteboardId);
+    if (route.request().method() !== "GET" || !board) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Board was not found." } }),
+      });
+      return;
+    }
+    await fulfillJson(route, { board });
+  });
+
+  route(/\/api\/whiteboards\/[^/]+\/board\/cards(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/board\/cards$/);
+    const whiteboardId = match?.[1] ?? "";
+    const board = (state.whiteboardBoards ?? []).find((item) => item.whiteboard_id === whiteboardId);
+    if (route.request().method() !== "POST" || !board) {
+      await route.continue();
+      return;
+    }
+    const posted = JSON.parse(route.request().postData() || "{}") as Record<string, unknown>;
+    const department =
+      board.departments.find((item) => item.department_id === posted.department_id) ??
+      board.departments.find((item) => item.active);
+    if (!department) {
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "VALIDATION_ERROR", message: "Department is required." } }),
+      });
+      return;
+    }
+    const cardId = `mock-board-card-${Date.now()}-${board.cards.length + 1}`;
+    const card = {
+      id: cardId,
+      routing_record_id: cardId,
+      title: String(posted.title || "New board task"),
+      reason: String(posted.reason || ""),
+      department_id: department.department_id,
+      department_slug: department.department_slug,
+      department_name: department.department_name,
+      assigned_user_id: null,
+      status: String(posted.status || "queued"),
+      priority: String(posted.priority || "normal"),
+      due_at: null,
+      sla_state: "ok",
+      blocker_reason: "",
+      links: {},
+      customer_visible: Boolean(posted.customer_visible),
+      evidence: [],
+      allowed_actions: ["start", "block", "evidence", "reassign", "priority"],
+      created_at: "2026-05-12T12:40:00.000Z",
+      updated_at: "2026-05-12T12:40:00.000Z",
+    };
+    board.cards.push(card);
+    let lane = board.lanes.find((item) => item.department_id === card.department_id);
+    if (!lane) {
+      lane = {
+        department_id: card.department_id,
+        department_slug: card.department_slug,
+        department_name: card.department_name,
+        cards: [],
+      };
+      board.lanes.push(lane);
+    }
+    if (lane) {
+      lane.cards.push(card);
+    }
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify(apiSuccess({ board })),
+    });
+  });
+
+  route(/\/api\/whiteboards\/[^/]+\/board\/cards\/[^/]+(?:\/evidence)?(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/board\/cards\/([^/]+)(?:\/evidence)?$/);
+    const whiteboardId = match?.[1] ?? "";
+    const cardId = match?.[2] ?? "";
+    const board = (state.whiteboardBoards ?? []).find((item) => item.whiteboard_id === whiteboardId);
+    const card = board?.cards.find((item) => item.id === cardId);
+    if (!board || !card) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Card was not found." } }),
+      });
+      return;
+    }
+    if (route.request().method() === "PATCH") {
+      const posted = JSON.parse(route.request().postData() || "{}") as Record<string, unknown>;
+      if (posted.status) {
+        card.status = String(posted.status);
+      }
+      if (posted.priority) {
+        card.priority = String(posted.priority);
+      }
+      if (posted.department_id) {
+        const department = board.departments.find((item) => item.department_id === posted.department_id);
+        if (department) {
+          card.department_id = department.department_id;
+          card.department_slug = department.department_slug;
+          card.department_name = department.department_name;
+        }
+      }
+      card.blocker_reason = String(posted.blocker_reason || card.blocker_reason || "");
+      card.updated_at = "2026-05-12T12:45:00.000Z";
+      board.lanes.forEach((lane) => {
+        lane.cards = lane.cards.filter((item) => item.id !== card.id);
+      });
+      let lane = board.lanes.find((item) => item.department_id === card.department_id);
+      if (!lane) {
+        lane = {
+          department_id: card.department_id,
+          department_slug: card.department_slug,
+          department_name: card.department_name,
+          cards: [],
+        };
+        board.lanes.push(lane);
+      }
+      if (lane && !lane.cards.some((item) => item.id === card.id)) {
+        lane.cards.push(card);
+      }
+      await fulfillJson(route, { board });
+      return;
+    }
+    if (route.request().method() === "POST" && url.pathname.endsWith("/evidence")) {
+      const posted = JSON.parse(route.request().postData() || "{}") as Record<string, unknown>;
+      card.evidence = [
+        ...(card.evidence ?? []),
+        {
+          evidence_type: String(posted.evidence_type || "note"),
+          summary: String(posted.summary || "Updated from board control."),
+          target_id: "",
+          metadata: {},
+          attached_by_id: "playwright-user",
+          attached_at: "2026-05-12T12:45:00.000Z",
+        },
+      ];
+      await fulfillJson(route, { board });
+      return;
+    }
+    await route.continue();
   });
 
   route(/\/api\/whiteboards\/[^/]+\/deployment(?:\/prepare)?(?:\?.*)?$/, async (route: Route) => {
@@ -915,8 +1064,7 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
       sender_company_id: null,
       sender_organization_id: null,
       message_kind: "response",
-      body:
-        "WhatsApp is recommended as a manual first step. Automation requires connecting a WhatsApp/Twilio/Brevo capability.",
+      body: "WhatsApp is recommended as a manual first step. Automation requires connecting a WhatsApp/Twilio/Brevo capability.",
       body_format: "markdown",
       visibility: "customer",
       redacted: false,
@@ -934,8 +1082,10 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
     service_engagement_id: null,
     communication_thread_id: communicationThread.id,
     source_message_id: "legacy-whatsapp-question",
+    work_status: "review",
     status: "in_approval",
     request_type: "campaign",
+    project_name: base.companyName,
     client_name: base.companyName,
     request_summary:
       "Legacy asked why WhatsApp is recommended while the connector is missing; onboarding is collecting launch context before strategy.",
@@ -943,12 +1093,20 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
     budget_limit: "$5000",
     timeline: "next week",
     constraints: { legal: "No unsupported performance claims." },
+    stakeholder_context: { segment: "premium eyewear shoppers" },
+    resource_context: { offer: "DEPP GOLD launch consult", brand_context: { brand_voice: "precise" } },
+    delivery_context: { requested_channels: ["whatsapp"], connectors: ["email"] },
     target_audience: { segment: "premium eyewear shoppers" },
     brand_context: { brand_voice: "precise" },
     product_context: { offer: "DEPP GOLD launch consult" },
     channel_context: { requested_channels: ["whatsapp"], connectors: ["email"] },
     known_facts: { approval_owner: "Legacy owner", success_metrics: "consult replies", inventory: "launch batch" },
+    work_missing_fields: [],
     missing_fields: [],
+    semantic_aliases: {
+      work_status: { legacy_field: "status", legacy_value: "in_approval", value: "review" },
+      project_name: { legacy_field: "client_name", legacy_value: base.companyName, value: base.companyName },
+    },
     completion_score: 100,
     redis_snapshot_key: "forgegraph:whiteboard:legacy-eyewear-work-whiteboard",
     assumptions: ["Internal readiness depends on connector configuration."],
@@ -1079,23 +1237,27 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
           allowed_actions: [],
           department: "crm",
           department_name: "CRM",
-          required_connector: "email_service_connector",
-          tool_id: "dmp.email_draft_send_schedule",
+          required_connector: "email_connector",
+          tool_id: "email.send_dry_run",
           asset_types: ["asset", "publication_draft"],
           risk_level: "medium",
           receipt: {
             tool_execution_id: "legacy-email-sandbox-tool-execution",
-            tool_id: "dmp.email_draft_send_schedule",
+            tool_id: "email.send_dry_run",
             dry_run: true,
             status: "succeeded",
             completed_at: "2026-05-12T12:30:00.000Z",
             result: {
-              provider: "local_capture",
-              mode: "sandbox",
-              status: "captured",
-              message_id: "fg-email-sandbox-legacy",
+              provider: "fake",
+              mode: "dry_run",
+              evidence_mode: "sandbox",
+              status: "dry_run",
+              sanitized: true,
+              message_id: "fg-email-dry-run-legacy",
               recipient_count: 0,
               recipient_domains: [],
+              recipient_hashes: [],
+              allowlist_matched: false,
             },
           },
         },
@@ -1152,19 +1314,21 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
           },
           department: "crm",
           department_name: "CRM",
-          required_connector: "email_service_connector",
-          tool_id: "dmp.email_draft_send_schedule",
+          required_connector: "email_connector",
+          tool_id: "email.send_dry_run",
           metric_keys: ["open_rate", "click_rate", "execution_completeness"],
           receipt: {
             tool_execution_id: "legacy-email-performance-tool-execution",
-            tool_id: "dmp.email_draft_send_schedule",
+            tool_id: "email.send_dry_run",
             dry_run: true,
             status: "succeeded",
             completed_at: "2026-05-19T09:00:00.000Z",
             result: {
-              provider: "local_capture",
-              mode: "sandbox",
-              status: "captured",
+              provider: "fake",
+              mode: "dry_run",
+              evidence_mode: "sandbox",
+              status: "dry_run",
+              sanitized: true,
             },
           },
         },
@@ -1201,6 +1365,196 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
     created_at: "2026-05-12T12:05:00.000Z",
     updated_at: "2026-05-12T12:06:00.000Z",
   };
+  const boardDepartments = [
+    {
+      department_id: "traffic",
+      department_slug: "traffic",
+      department_name: "Traffic",
+      department_type: "traffic",
+      active: true,
+      is_routing_department: true,
+    },
+    {
+      department_id: "strategy",
+      department_slug: "strategy",
+      department_name: "Strategy",
+      department_type: "strategy",
+      active: true,
+      is_routing_department: false,
+    },
+    {
+      department_id: "content-creative",
+      department_slug: "content-creative",
+      department_name: "Content/Creative",
+      department_type: "content",
+      active: true,
+      is_routing_department: false,
+    },
+    {
+      department_id: "deployment-ops",
+      department_slug: "deployment-ops",
+      department_name: "Deployment Ops",
+      department_type: "deployment",
+      active: true,
+      is_routing_department: false,
+    },
+    {
+      department_id: "performance",
+      department_slug: "performance",
+      department_name: "Performance",
+      department_type: "performance",
+      active: true,
+      is_routing_department: false,
+    },
+  ];
+  const boardCards = [
+    {
+      id: "legacy-whiteboard-strategy-card",
+      routing_record_id: "legacy-whiteboard-strategy-card",
+      title: "Strategy intake",
+      reason: "Clarify launch path and project goal.",
+      department_id: "strategy",
+      department_slug: "strategy",
+      department_name: "Strategy",
+      assigned_user_id: null,
+      status: "assigned",
+      priority: "high",
+      due_at: "2026-05-13T12:00:00.000Z",
+      sla_state: "ok",
+      blocker_reason: "",
+      links: {
+        communication_message_id: "legacy-whatsapp-question",
+      },
+      customer_visible: false,
+      evidence: [],
+      allowed_actions: ["start", "block", "evidence", "reassign", "priority"],
+      created_at: "2026-05-12T12:06:00.000Z",
+      updated_at: "2026-05-12T12:06:00.000Z",
+    },
+    {
+      id: "legacy-whiteboard-content-task",
+      routing_record_id: "legacy-whiteboard-content-task",
+      title: "Content production",
+      reason: "Strategy gate passed. Content/Creative can begin content planning.",
+      department_id: "content-creative",
+      department_slug: "content-creative",
+      department_name: "Content/Creative",
+      assigned_user_id: null,
+      status: "in_progress",
+      priority: "normal",
+      due_at: "2026-05-14T12:00:00.000Z",
+      sla_state: "ok",
+      blocker_reason: "",
+      links: {
+        asset_id: "legacy-content-synthesis",
+        approval_task_id: "legacy-content-approval",
+      },
+      customer_visible: true,
+      evidence: [{ evidence_type: "asset", target_id: "legacy-content-synthesis", summary: "Synthesis asset" }],
+      allowed_actions: ["block", "ready_for_review", "complete", "evidence"],
+      created_at: "2026-05-12T12:22:00.000Z",
+      updated_at: "2026-05-12T12:22:00.000Z",
+    },
+    {
+      id: "legacy-whiteboard-deployment-task",
+      routing_record_id: "legacy-whiteboard-deployment-task",
+      title: "Deployment readiness",
+      reason: "Fill missing connector readiness context.",
+      department_id: "deployment-ops",
+      department_slug: "deployment-ops",
+      department_name: "Deployment Ops",
+      assigned_user_id: null,
+      status: "blocked",
+      priority: "urgent",
+      due_at: "2026-05-12T13:00:00.000Z",
+      sla_state: "breached",
+      blocker_reason: "Required connector is not available for this company.",
+      links: {
+        tool_execution_id: "legacy-email-sandbox-tool-execution",
+        company_signal_id: "legacy-eyewear-missing-whatsapp-signal",
+      },
+      customer_visible: false,
+      evidence: [],
+      allowed_actions: ["start", "evidence", "reassign", "priority"],
+      created_at: "2026-05-12T12:30:00.000Z",
+      updated_at: "2026-05-12T12:30:00.000Z",
+    },
+    {
+      id: "legacy-whiteboard-performance-task",
+      routing_record_id: "legacy-whiteboard-performance-task",
+      title: "Performance review",
+      reason: "Review early launch metrics after deployment.",
+      department_id: "performance",
+      department_slug: "performance",
+      department_name: "Performance",
+      assigned_user_id: null,
+      status: "ready_for_review",
+      priority: "normal",
+      due_at: null,
+      sla_state: "ok",
+      blocker_reason: "",
+      links: {
+        report_run_id: "legacy-performance-report-run",
+        evaluation_run_id: "legacy-performance-evaluation",
+        metric_snapshot_id: "legacy-performance-metric-snapshot",
+      },
+      review_kind: "automated_gate",
+      review: {
+        kind: "automated_gate",
+        label: "Automated evaluation required",
+        satisfied: false,
+        evaluation_run_id: "legacy-performance-evaluation",
+        evaluation_status: "RUNNING",
+        scorecard_id: "legacy-performance-scorecard",
+      },
+      customer_visible: false,
+      evidence: [],
+      allowed_actions: ["start", "block", "evidence"],
+      created_at: "2026-05-12T12:35:00.000Z",
+      updated_at: "2026-05-12T12:35:00.000Z",
+    },
+  ];
+  const whiteboardBoard: WorkWhiteboardBoardSnapshotDTO = {
+    whiteboard_id: whiteboard.id,
+    company_id: base.companyId,
+    company_name: base.companyName,
+    organization_id: whiteboard.organization_id,
+    organization_name: "Playwright Product Modes",
+    project: {
+      title: whiteboard.project_name || whiteboard.client_name,
+      project_name: whiteboard.project_name || whiteboard.client_name,
+      request_classification: { classification: "NEW_REQUEST", confidence: 0.94 },
+      ultimate_goal: whiteboard.objective,
+      context_summary: whiteboard.request_summary,
+      constraints_summary: "legal: No unsupported performance claims.",
+      work_status: whiteboard.work_status,
+      status: whiteboard.work_status,
+      legacy_status: whiteboard.status,
+      semantic_aliases: whiteboard.semantic_aliases,
+      completion_score: whiteboard.completion_score,
+      risk_blocker_summary: "1 blocked card needs attention.",
+      communication_thread_id: whiteboard.communication_thread_id,
+      source_message_id: whiteboard.source_message_id,
+      service_engagement_id: null,
+      updated_at: whiteboard.updated_at,
+    },
+    departments: boardDepartments,
+    lanes: boardDepartments
+      .filter((department) => boardCards.some((card) => card.department_id === department.department_id))
+      .map((department) => ({
+        department_id: department.department_id,
+        department_slug: department.department_slug,
+        department_name: department.department_name,
+        cards: boardCards.filter((card) => card.department_id === department.department_id),
+      })),
+    cards: boardCards,
+    allowed_actions: {
+      can_modify_structure: true,
+      can_update_assigned_cards: true,
+      can_view_internal: true,
+    },
+    event_version: "whiteboard_board_v1",
+  };
   const state: ProductModeMockState = {
     ...base,
     pendingApprovalCount: base.pendingApprovalCount ?? 0,
@@ -1218,6 +1572,7 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
       [communicationThread.id]: communicationMessages,
     },
     whiteboards: [whiteboard],
+    whiteboardBoards: [whiteboardBoard],
   };
   return {
     ...state,

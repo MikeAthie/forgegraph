@@ -17,6 +17,7 @@ from redis import Redis
 from application.services.redis_connections import build_redis_client
 
 SNAPSHOT_KEY_PREFIX = "forgegraph:snapshot"
+RUN_SNAPSHOT_DEFAULT_TTL_SECONDS = 24 * 60 * 60
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +45,31 @@ def _use_cache_snapshot_store() -> bool:
 
 def snapshot_key(run_id: UUID | str) -> str:
     return f"{SNAPSHOT_KEY_PREFIX}:{run_id}"
+
+
+def run_snapshot_ttl_seconds() -> int:
+    configured_value: object = os.environ.get("FORGEGRAPH_RUN_SNAPSHOT_TTL_SECONDS")
+    if configured_value is None or configured_value == "":
+        configured_value = getattr(
+            settings,
+            "FORGEGRAPH_RUN_SNAPSHOT_TTL_SECONDS",
+            RUN_SNAPSHOT_DEFAULT_TTL_SECONDS,
+        )
+    try:
+        ttl_seconds = int(str(configured_value))
+    except (TypeError, ValueError):
+        logger.warning(
+            "invalid_run_snapshot_ttl",
+            extra={"configured_value": str(configured_value)},
+        )
+        return RUN_SNAPSHOT_DEFAULT_TTL_SECONDS
+    if ttl_seconds <= 0:
+        logger.warning(
+            "invalid_run_snapshot_ttl",
+            extra={"configured_value": str(configured_value)},
+        )
+        return RUN_SNAPSHOT_DEFAULT_TTL_SECONDS
+    return ttl_seconds
 
 
 def get_snapshot(
@@ -83,18 +109,15 @@ def set_snapshot(
     payload["updated_at"] = (snapshot.updated_at or timezone.now()).isoformat()
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
-    ttl_seconds = int(os.environ.get("FORGEGRAPH_RUN_SNAPSHOT_TTL_SECONDS", "0") or "0")
+    ttl_seconds = run_snapshot_ttl_seconds()
     key = snapshot_key(snapshot.run_id)
 
     if redis_client is None and _use_cache_snapshot_store():
-        cache.set(key, serialized, timeout=ttl_seconds or None)
+        cache.set(key, serialized, timeout=ttl_seconds)
         return
 
     client = redis_client or build_run_snapshot_redis_client()
-    if ttl_seconds > 0:
-        client.setex(key, ttl_seconds, serialized)
-        return
-    client.set(key, serialized)
+    client.setex(key, ttl_seconds, serialized)
 
 
 def safe_set_snapshot(
