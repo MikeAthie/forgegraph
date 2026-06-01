@@ -16,7 +16,9 @@
     "test:watch": "node --max-old-space-size=4096 node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --max-old-space-size=4096 node_modules/jest/bin/jest.js --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:atlas:docker:local-llm": "node scripts/run-atlas-docker-local-llm.mjs",
     "test:e2e:ui": "playwright test --ui",
+    "doctor:frontend-volume": "node scripts/doctor-frontend-volume.mjs",
     "playwright:openai-mock": "node scripts/playwright-openai-mock.mjs",
     "demo:capture": "playwright test --config=playwright.demo.config.ts",
     "all": "npm test && npm run test:e2e"

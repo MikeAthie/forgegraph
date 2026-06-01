@@ -78,12 +78,15 @@ The evidence is structural. It does not assert exact LLM prose.
 - Kafka: optional. Kafka remains event transport only and is not required for the default live run.
 - Live LLM: required by the current live guard unless the repo's explicit live fallback/debug settings are used.
 - Backend fallback: keep `LIVE_LLM_ALLOW_BACKEND_FALLBACK` unset or false for acceptance runs.
+- Operating model packs: backend startup requires `digital_marketing_pro` by default and exposes `/api/system/operating-model-packs/health` for pack directory, hashes, and required Atlas policy contents.
 
 Common environment variables:
 
 ```powershell
 $env:LIVE_LLM_E2E='true'
 $env:LIVE_LLM_PROVIDER='google'
+$env:OPERATING_MODEL_PACKS_DIR='/operating_model_packs'
+$env:REQUIRED_OPERATING_MODEL_PACKS='digital_marketing_pro'
 Remove-Item Env:\LIVE_LLM_ALLOW_BACKEND_FALLBACK -ErrorAction SilentlyContinue
 ```
 
@@ -111,6 +114,25 @@ $env:LIVE_LLM_E2E='true'
 $env:LIVE_LLM_PROVIDER='google'
 Remove-Item Env:\LIVE_LLM_ALLOW_BACKEND_FALLBACK -ErrorAction SilentlyContinue
 npx playwright test __tests__/product-modes-live/atlas-agency-full-flow.e2e.spec.ts --project=chromium
+```
+
+Run the full live spec against the Docker frontend/backend and a local OpenAI-compatible LLM on `127.0.0.1:12434`:
+
+```powershell
+npm run test:e2e:atlas:docker:local-llm
+```
+
+Before a Docker live run, check that the named Docker frontend `node_modules` volume matches `frontend/package.json`:
+
+```powershell
+npm run doctor:frontend-volume
+```
+
+From the repo root, the same checks are available as:
+
+```powershell
+make doctor-frontend-volume
+make test-atlas-live-docker-local-llm
 ```
 
 The live spec uses video output. Open the Playwright report after a run with:

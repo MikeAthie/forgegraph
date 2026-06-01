@@ -7,6 +7,7 @@ Clean Architecture: Interface Adapters layer.
 from django.urls import include, path
 
 from adapters.api.auth.views import ws_ticket_view
+from adapters.api.health.operating_model_packs import OperatingModelPackHealthView
 from adapters.api.graphs.views import GraphVersionCreateView
 from adapters.api.organizations.views import (
     OrganizationCurrentView,
@@ -50,6 +51,11 @@ urlpatterns = [
     path("orgs/", include("adapters.api.organizations.urls")),
     path("graphs/", include("adapters.api.graphs.urls")),
     path("graph-versions", GraphVersionCreateView.as_view(), name="graph-version-create-top-level"),
+    path(
+        "system/operating-model-packs/health",
+        OperatingModelPackHealthView.as_view(),
+        name="operating-model-pack-health",
+    ),
     path("health/", include("adapters.api.health.urls")),
     path("analytics/", include("adapters.api.analytics.urls")),
     path("billing/", include("adapters.api.billing.urls")),

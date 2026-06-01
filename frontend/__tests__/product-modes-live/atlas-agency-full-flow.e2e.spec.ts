@@ -22,6 +22,11 @@ import {
   type LiveAtlasLegacyConsultFixture,
   type LiveProductModeApiRequest,
 } from "./fixtures.live";
+import {
+  waitForBackendPostResponse,
+  waitForPerformanceMetricSnapshot,
+  waitForPhaseWorkstreamMaterialization,
+} from "./runtime-waits";
 
 const API_BASE_URL = apiBaseUrl();
 const liveSkipReason = liveLlmSkipReason();
@@ -41,6 +46,19 @@ const helperAssistedSteps = [
 
 type ApiSuccess<T> = { data: T };
 type ApiCall = { method: string; pathname: string };
+type OperatingModelPackHealth = {
+  status: string;
+  packs_dir: string;
+  packs: Array<{
+    pack_id: string;
+    release_id?: string;
+    source: string;
+    config_hash: string;
+    contains: string[];
+  }>;
+  missing_required_packs: string[];
+  missing_required_contents?: Array<{ pack_id: string; missing: string[] }>;
+};
 type PackInstallation = {
   id: string;
   pack_id: string;
@@ -168,6 +186,7 @@ test.describe("Live ATLAS agency full product loop", () => {
     const apiCalls: ApiCall[] = [];
     const pageRequests = collectLiveProductModeApiRequests(page);
     const fixture = await seedLiveAtlasLegacyConsultProductMode(request, testInfo);
+    const packHealth = await assertOperatingModelPackHealth(request, fixture, apiCalls);
     await configureAtlasAgencyConnectorAvailability(request, fixture, testInfo, apiCalls);
 
     const { thread, message } = await createLegacyRequestMessageThroughUi(page, request, fixture, apiCalls);
@@ -333,6 +352,7 @@ test.describe("Live ATLAS agency full product loop", () => {
       body: JSON.stringify(
         {
           namespace: liveProductModeRunNamespace(testInfo),
+          packHealth,
           classification: routed.classification,
           whiteboard: {
             id: whiteboard.id,
@@ -394,6 +414,32 @@ test.describe("Live ATLAS agency full product loop", () => {
     });
   });
 });
+
+async function assertOperatingModelPackHealth(
+  request: APIRequestContext,
+  fixture: LiveAtlasLegacyConsultFixture,
+  apiCalls: ApiCall[],
+): Promise<OperatingModelPackHealth> {
+  const response = await rawGet(
+    request,
+    "/api/system/operating-model-packs/health",
+    fixture.accessToken,
+    apiCalls,
+  );
+  if (!response.ok()) {
+    throw new Error(`GET /api/system/operating-model-packs/health failed with ${response.status()}: ${await response.text()}`);
+  }
+  const health = (await response.json()) as OperatingModelPackHealth;
+  expect(health.status).toBe("ok");
+  expect(health.missing_required_packs).toEqual([]);
+  expect(health.missing_required_contents ?? []).toEqual([]);
+  const atlasPack = health.packs.find((pack) => pack.pack_id === "digital_marketing_pro");
+  expect(atlasPack?.config_hash).toMatch(/^sha256:[a-f0-9]+$/);
+  expect(atlasPack?.contains).toEqual(
+    expect.arrayContaining(["atlas_agency_work_graph", "atlas_launch_deployment", "atlas_performance_review"]),
+  );
+  return health;
+}
 
 async function configureAtlasAgencyConnectorAvailability(
   request: APIRequestContext,
@@ -624,27 +670,20 @@ async function startPhaseThroughUi(
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
   const startButton = page.getByTestId(`whiteboard-phase-start-${phaseId}`);
   await expect(startButton).toBeVisible({ timeout: 30_000 });
-  const startResponsePromise = page.waitForResponse(
-    (response) =>
-      response.url().includes(`/api/whiteboards/${whiteboardId}/phases/${phaseId}/start`) &&
-      response.request().method() === "POST",
-    { timeout: 30_000 },
+  const startResponsePromise = waitForBackendPostResponse(
+    page,
+    `/api/whiteboards/${whiteboardId}/phases/${phaseId}/start`,
+    30_000,
   );
   await startButton.click();
-  const startResponse = await startResponsePromise;
-  expect(startResponse.ok()).toBeTruthy();
+  await startResponsePromise;
   await expect(page.getByTestId(`whiteboard-phase-${phaseId}`)).toContainText(/In |Started|Strategy|Content/i, {
     timeout: 30_000,
   });
-  await expect
-    .poll(
-      async () => {
-        const contract = await fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls);
-        return contract.workstreams.some((workstream) => workstream.status !== "not_started");
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(true);
+  await waitForPhaseWorkstreamMaterialization(
+    () => fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls),
+    30_000,
+  );
 }
 
 async function fetchPhaseContract(
@@ -825,13 +864,13 @@ async function resolveApprovalThroughUi(
   await expect(page.getByRole("heading", { name: /Decide with context/i })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(liveLegacyCompanyName).first()).toBeVisible({ timeout: 30_000 });
   await page.getByPlaceholder(/Add guidance/i).fill("Approved content package for sandbox deployment preparation.");
-  const resolveResponsePromise = page.waitForResponse(
-    (response) =>
-      response.url().includes(`/api/approvals/${approvalTaskId}/resolve`) && response.request().method() === "POST",
+  const resolveResponsePromise = waitForBackendPostResponse(
+    page,
+    `/api/approvals/${approvalTaskId}/resolve`,
+    30_000,
   );
   await page.getByRole("button", { name: "Approve with notes" }).click();
-  const resolveResponse = await resolveResponsePromise;
-  expect(resolveResponse.ok()).toBeTruthy();
+  await resolveResponsePromise;
   await expect
     .poll(
       async () =>
@@ -863,15 +902,13 @@ async function prepareDeploymentThroughUi(
 ): Promise<{ deployment_contract: DeploymentContract; whiteboard: WorkWhiteboard }> {
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
-  const deploymentResponsePromise = page.waitForResponse(
-    (response) =>
-      response.url().includes(`/api/whiteboards/${whiteboardId}/deployment/prepare`) &&
-      response.request().method() === "POST",
-    { timeout: 60_000 },
+  const deploymentResponsePromise = waitForBackendPostResponse(
+    page,
+    `/api/whiteboards/${whiteboardId}/deployment/prepare`,
+    60_000,
   );
   await page.getByTestId("whiteboard-prepare-deployment-button").click();
-  const deploymentResponse = await deploymentResponsePromise;
-  expect(deploymentResponse.ok()).toBeTruthy();
+  await deploymentResponsePromise;
   await expect(page.getByTestId("whiteboard-deployment-section")).toContainText(/Receipt|Blocked/i, {
     timeout: 30_000,
   });
@@ -899,32 +936,28 @@ async function startPerformanceThroughUi(
 ): Promise<{ performance_contract: PerformanceContract; whiteboard: WorkWhiteboard }> {
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
-  const performanceResponsePromise = page.waitForResponse(
-    (response) =>
-      response.url().includes(`/api/whiteboards/${whiteboardId}/performance/start`) &&
-      response.request().method() === "POST",
-    { timeout: 60_000 },
+  const performanceResponsePromise = waitForBackendPostResponse(
+    page,
+    `/api/whiteboards/${whiteboardId}/performance/start`,
+    60_000,
   );
   await page.getByTestId("whiteboard-start-performance-button").click();
-  const performanceResponse = await performanceResponsePromise;
-  expect(performanceResponse.ok()).toBeTruthy();
+  await performanceResponsePromise;
   await expect(page.getByTestId("whiteboard-performance-section")).toContainText(/Receipt|Blocked|Metrics/i, {
     timeout: 30_000,
   });
-  await expect
-    .poll(
-      async () => {
-        const contract = await getData<{ performance_contract: PerformanceContract }>(
+  await waitForPerformanceMetricSnapshot(
+    async () =>
+      (
+        await getData<{ performance_contract: PerformanceContract }>(
           request,
           `/api/whiteboards/${whiteboardId}/performance`,
           fixture.accessToken,
           apiCalls,
-        );
-        return contract.performance_contract.current_state.metric_snapshot_id ?? "";
-      },
-      { timeout: 30_000 },
-    )
-    .not.toBe("");
+        )
+      ).performance_contract,
+    30_000,
+  );
   const performanceContract = await getData<{ performance_contract: PerformanceContract }>(
     request,
     `/api/whiteboards/${whiteboardId}/performance`,

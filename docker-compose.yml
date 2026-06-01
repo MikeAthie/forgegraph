@@ -96,6 +96,8 @@ services:
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/oauth/callback}
       ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://backend:8000
+      OPERATING_MODEL_PACKS_DIR: ${OPERATING_MODEL_PACKS_DIR:-/operating_model_packs}
+      REQUIRED_OPERATING_MODEL_PACKS: ${REQUIRED_OPERATING_MODEL_PACKS:-digital_marketing_pro}
       RUN_QUEUE_ENABLED: ${RUN_QUEUE_ENABLED:-true}
       COMMUNICATION_ENABLED: ${COMMUNICATION_ENABLED:-true}
     extra_hosts:
@@ -178,6 +180,8 @@ services:
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/oauth/callback}
       ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://backend:8000
+      OPERATING_MODEL_PACKS_DIR: ${OPERATING_MODEL_PACKS_DIR:-/operating_model_packs}
+      REQUIRED_OPERATING_MODEL_PACKS: ${REQUIRED_OPERATING_MODEL_PACKS:-digital_marketing_pro}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -258,6 +262,8 @@ services:
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/oauth/callback}
       ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://backend:8000
+      OPERATING_MODEL_PACKS_DIR: ${OPERATING_MODEL_PACKS_DIR:-/operating_model_packs}
+      REQUIRED_OPERATING_MODEL_PACKS: ${REQUIRED_OPERATING_MODEL_PACKS:-digital_marketing_pro}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -338,6 +344,8 @@ services:
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/oauth/callback}
       ENGINE_CALLBACK_URL: http://backend:8000/api/runs/engine-events
       CONTROL_PLANE_URL: http://backend:8000
+      OPERATING_MODEL_PACKS_DIR: ${OPERATING_MODEL_PACKS_DIR:-/operating_model_packs}
+      REQUIRED_OPERATING_MODEL_PACKS: ${REQUIRED_OPERATING_MODEL_PACKS:-digital_marketing_pro}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

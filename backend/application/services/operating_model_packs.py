@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -35,9 +36,18 @@ from infrastructure.orm.models import (
 )
 
 PACK_SCHEMA = "operating_model_pack.v1"
-PACKS_ROOT = Path(__file__).resolve().parents[3] / "operating_model_packs"
+DEFAULT_PACKS_ROOT = Path(__file__).resolve().parents[3] / "operating_model_packs"
+PACKS_ROOT = DEFAULT_PACKS_ROOT
 DEFAULT_PROVIDER = "openai"
 DEFAULT_MODEL = "gpt-4.1-mini"
+DEFAULT_REQUIRED_PACKS = "digital_marketing_pro"
+REQUIRED_PACK_CONTENTS: dict[str, set[str]] = {
+    "digital_marketing_pro": {
+        "atlas_agency_work_graph",
+        "atlas_launch_deployment",
+        "atlas_performance_review",
+    }
+}
 
 
 class OperatingModelPackError(ValueError):
@@ -120,6 +130,94 @@ class PackCompileResult:
 
 def list_available_packs() -> list[dict[str, Any]]:
     return [pack.as_payload() for pack in sorted(_load_all_packs(), key=lambda item: item.pack_id)]
+
+
+def get_operating_model_packs_root() -> Path:
+    configured = os.environ.get("OPERATING_MODEL_PACKS_DIR", "").strip()
+    return Path(configured) if configured else DEFAULT_PACKS_ROOT
+
+
+def required_operating_model_pack_ids() -> list[str]:
+    raw = os.environ.get("REQUIRED_OPERATING_MODEL_PACKS", DEFAULT_REQUIRED_PACKS)
+    return _safe_string_list(str(raw).split(","))
+
+
+def build_operating_model_pack_health_payload() -> dict[str, Any]:
+    packs_dir = get_operating_model_packs_root()
+    pack_entries: list[dict[str, Any]] = []
+    load_errors: list[dict[str, Any]] = []
+    packs_by_base_id: dict[str, dict[str, Any]] = {}
+
+    if packs_dir.exists():
+        pack_dirs = sorted(
+            [item for item in packs_dir.iterdir() if (item / "manifest.yml").exists()],
+            key=lambda item: item.name,
+        )
+        for pack_dir in pack_dirs:
+            try:
+                manifest = _read_yaml(pack_dir / "manifest.yml")
+                definition = _definition_from_manifest(pack_dir=pack_dir, manifest=manifest)
+            except Exception as exc:  # noqa: BLE001
+                load_errors.append({"source": str(pack_dir), "error": str(exc)})
+                continue
+            contains = _pack_contains(definition)
+            entry = {
+                "pack_id": definition.base_pack_id,
+                "release_id": definition.pack_id,
+                "source": str(pack_dir),
+                "config_hash": f"sha256:{definition.checksum}",
+                "contains": contains,
+            }
+            pack_entries.append(entry)
+            packs_by_base_id[definition.base_pack_id] = entry
+    else:
+        load_errors.append({"source": str(packs_dir), "error": "packs_dir_missing"})
+
+    required_packs = required_operating_model_pack_ids()
+    missing_required_packs = [
+        pack_id for pack_id in required_packs if pack_id not in packs_by_base_id
+    ]
+    missing_required_contents: list[dict[str, Any]] = []
+    for pack_id in required_packs:
+        required_contents = REQUIRED_PACK_CONTENTS.get(pack_id, set())
+        if not required_contents or pack_id not in packs_by_base_id:
+            continue
+        contains = set(packs_by_base_id[pack_id].get("contains") or [])
+        missing = sorted(required_contents - contains)
+        if missing:
+            missing_required_contents.append({"pack_id": pack_id, "missing": missing})
+
+    status_value = (
+        "ok"
+        if not load_errors and not missing_required_packs and not missing_required_contents
+        else "error"
+    )
+    return {
+        "status": status_value,
+        "packs_dir": str(packs_dir),
+        "packs": pack_entries,
+        "missing_required_packs": missing_required_packs,
+        "missing_required_contents": missing_required_contents,
+        "errors": load_errors,
+    }
+
+
+def validate_required_operating_model_packs() -> None:
+    payload = build_operating_model_pack_health_payload()
+    if payload.get("status") == "ok":
+        return
+    raise OperatingModelPackError(
+        "required_operating_model_packs_unhealthy",
+        "Required operating model packs are not healthy.",
+        details=[
+            {
+                "packs_dir": payload.get("packs_dir"),
+                "missing_required_packs": payload.get("missing_required_packs"),
+                "missing_required_contents": payload.get("missing_required_contents"),
+                "errors": payload.get("errors"),
+            }
+        ],
+    )
 
 
 def load_pack_definition(pack_id: str) -> PackDefinition:
@@ -797,9 +895,10 @@ def _namespaced_object_id(pack_id: str, object_id: str) -> str:
 
 
 def _pack_dirs() -> list[Path]:
-    if not PACKS_ROOT.exists():
+    packs_root = get_operating_model_packs_root()
+    if not packs_root.exists():
         return []
-    return [item for item in PACKS_ROOT.iterdir() if (item / "manifest.yml").exists()]
+    return [item for item in packs_root.iterdir() if (item / "manifest.yml").exists()]
 
 
 def _load_all_packs() -> list[PackDefinition]:
@@ -850,6 +949,29 @@ def _pack_checksum(*, manifest: dict[str, Any], files: dict[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+
+
+def _pack_contains(definition: PackDefinition) -> list[str]:
+    contains: set[str] = set()
+    _collect_atlas_pack_identifiers(definition.manifest, contains)
+    _collect_atlas_pack_identifiers(definition.files, contains)
+    return sorted(contains)
+
+
+def _collect_atlas_pack_identifiers(value: Any, contains: set[str]) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {"id", "phase_id", "policy_id", "source_policy_id"} and isinstance(
+                item, str
+            ):
+                tail = item.rsplit(".", maxsplit=1)[-1].strip()
+                if tail.startswith("atlas_"):
+                    contains.add(tail)
+            _collect_atlas_pack_identifiers(item, contains)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _collect_atlas_pack_identifiers(item, contains)
 
 
 def _list_from_file(

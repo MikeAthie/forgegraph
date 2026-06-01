@@ -69,6 +69,16 @@ FORGEGRAPH_RUNTIME_MODE = os.environ.get("FORGEGRAPH_RUNTIME_MODE", "cloud").str
 if FORGEGRAPH_RUNTIME_MODE not in {"cloud", "self_hosted"}:
     FORGEGRAPH_RUNTIME_MODE = "cloud"
 
+OPERATING_MODEL_PACKS_DIR = os.environ.get("OPERATING_MODEL_PACKS_DIR", "").strip()
+REQUIRED_OPERATING_MODEL_PACKS = _get_csv_env(
+    "REQUIRED_OPERATING_MODEL_PACKS",
+    "digital_marketing_pro",
+)
+VALIDATE_REQUIRED_OPERATING_MODEL_PACKS_ON_STARTUP = _get_bool_env(
+    "VALIDATE_REQUIRED_OPERATING_MODEL_PACKS_ON_STARTUP",
+    True,
+)
+
 # Application definition
 INSTALLED_APPS = [
     "django.contrib.admin",
