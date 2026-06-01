@@ -2,7 +2,7 @@
 
 `PM-LIVE-ATLAS-AGENCY-001` is the canonical live acceptance test for the full ATLAS agency operating loop on top of generic ForgeGraph primitives.
 
-The test proves that `Legacy Eyewear` can submit a customer request, an ATLAS operator can route it into a durable `WorkWhiteboard`, and the backend-owned workflow can continue through onboarding, strategy, content, approval, deployment preparation, performance review, and optimization routing without introducing vertical ATLAS, Legacy, or marketing APIs.
+The test proves that `Legacy Eyewear` can submit a customer request, an ATLAS operator can route it into a durable `WorkWhiteboard`, and the backend-owned workflow can continue through onboarding, the pack-owned agency work graph, approval, deployment preparation, performance review, and optimization routing without introducing vertical ATLAS, Legacy, or marketing APIs.
 
 ## Flow Covered
 
@@ -12,17 +12,19 @@ The test proves that `Legacy Eyewear` can submit a customer request, an ATLAS op
 4. ATLAS operator clicks the generic `Route request` action on the communication message.
 5. The backend classifies the request as `NEW_REQUEST` and creates exactly one `WorkWhiteboard`.
 6. Onboarding context is completed and the operator marks the whiteboard ready.
-7. Strategy starts from the generic whiteboard phase controls and passes its configured gate.
-8. Content production starts from the generic whiteboard phase controls and passes its configured gate.
-9. A generic `ApprovalTask` is created and resolved through the approvals UI.
-10. Deployment preparation runs from `WhiteboardPanel`.
-11. Available sandbox deployment channels create durable `ToolExecution` evidence.
-12. Missing deployment connectors create `CompanySignal` and `TaskRoutingRecord` blockers instead of fake success.
-13. Performance review starts only after deployment evidence exists.
-14. Performance collection creates `MetricSnapshot`, `ReportRun`, and `EvaluationRun` evidence.
-15. Optimization routing is created from policy-defined routing rules.
-16. Legacy customer visibility, ATLAS operator visibility, and other-client isolation are verified.
-17. Captured frontend routes are checked for no `/api/marketing/*`, `/api/atlas/*`, or `/api/legacy/*` requests.
+7. The integrated agency phase starts from the generic whiteboard phase controls.
+8. Strategy, Legal/Compliance, Tech/Martech, Media, Copy, Analytics, and Traffic workstreams fan out together.
+9. Content/Creative, Timing, and Deployment-readiness workstreams remain blocked until their backend-owned hard dependencies are complete.
+10. Dependency transitions unblock from `TaskRoutingRecord` and phase projection state, then the configured agency gate passes.
+11. A generic `ApprovalTask` is created and resolved through the approvals UI.
+12. Deployment preparation runs from `WhiteboardPanel`.
+13. Available sandbox deployment channels create durable `ToolExecution` evidence.
+14. Missing deployment connectors create `CompanySignal` and `TaskRoutingRecord` blockers instead of fake success.
+15. Performance review starts only after deployment evidence exists.
+16. Performance collection creates `MetricSnapshot`, `ReportRun`, and `EvaluationRun` evidence.
+17. Optimization routing is created from policy-defined routing rules.
+18. Legacy customer visibility, ATLAS operator visibility, and other-client isolation are verified.
+19. Captured frontend routes are checked for no `/api/marketing/*`, `/api/atlas/*`, or `/api/legacy/*` requests.
 
 ## UI-First Steps
 
@@ -32,7 +34,7 @@ Phase 9B moved the main operator-facing transitions onto real UI surfaces:
 - ATLAS routes the request through the communication message `Route request` action.
 - The test asserts no whiteboard exists before routing and exactly one exists after routing.
 - ATLAS marks onboarding ready through `WhiteboardPanel`.
-- ATLAS starts strategy and content phases through generic phase buttons in `WhiteboardPanel`.
+- ATLAS starts the integrated agency phase through generic phase buttons in `WhiteboardPanel`.
 - ATLAS resolves the whiteboard/gate approval through the approvals UI.
 - ATLAS prepares deployment through `WhiteboardPanel`.
 - ATLAS starts the performance review through `WhiteboardPanel`.
@@ -43,7 +45,7 @@ The UI renders phase, deployment, and performance labels from policy/config cont
 
 The live spec attaches a `helperAssistedSteps` array to the Playwright result so every remaining non-UI step is explicit. These steps remain helper-assisted because the honest product UI does not exist yet:
 
-- Policy fixture setup uses backend API because there is no policy-authoring UI for live tests yet.
+- Connector availability setup uses backend API because connector-management UI is not available yet.
 - Onboarding field enrichment uses backend API because structured whiteboard field editing is not exposed in the company workspace yet.
 - Workstream completion, synthesis, and gate scoring use backend API because production workstream authoring/evaluation UI is not available yet.
 - Performance report and evaluation use backend API because report/evaluation controls are not exposed in the whiteboard panel yet.
@@ -58,8 +60,7 @@ The spec attaches `atlas-agency-full-flow-evidence` as JSON in the Playwright ou
 - run namespace
 - request classification
 - whiteboard id, final status, and completion score
-- strategy phase id, gate result, and workstream ids
-- content phase id, gate result, and approval task id
+- agency phase id, gate result, approval task id, initial concurrent fan-out, and dependency transition snapshots
 - approval result
 - deployment status, executed channels, and blocked channels
 - performance status, metric snapshot id, report run id, evaluation id, and routing record ids
@@ -127,7 +128,8 @@ A passing run should show:
 - No whiteboard before the operator clicks `Route request`.
 - Exactly one whiteboard after routing.
 - `WorkWhiteboard` company and organization match Legacy/ATLAS scope.
-- Strategy and content phase gates pass according to policy-defined criteria.
+- The agency phase starts from pack files, fans out initial workstreams, blocks hard-dependent work honestly, and unblocks from backend-owned completion state.
+- The agency phase gate passes according to policy-defined criteria.
 - Approval exists and is resolved.
 - Deployment preparation produces at least one durable `ToolExecution` evidence item.
 - Missing connectors produce `CompanySignal` and `TaskRoutingRecord` blockers.
@@ -144,7 +146,7 @@ A passing run should show:
 ## Architecture Guarantees
 
 - ForgeGraph core remains generic orchestration machinery.
-- ATLAS behavior comes from policy/config fixtures.
+- ATLAS behavior comes from the `digital_marketing_pro.v1` pack files.
 - Legacy Eyewear remains one customer `Company`.
 - ATLAS remains the operator `Organization`.
 - The backend is the only durable source of truth.
@@ -156,7 +158,7 @@ A passing run should show:
 
 ## Current Known Limitations
 
-- Policy fixture setup is backend-assisted because there is no policy authoring UI.
+- Connector availability setup is backend-assisted because there is no connector-management UI.
 - Structured onboarding field enrichment is backend-assisted.
 - Workstream production, synthesis, and gate scoring are backend-assisted.
 - Performance report generation and evaluation are backend-assisted.
@@ -181,7 +183,7 @@ Future changes to this test should not:
 - auto-create a whiteboard when Legacy merely posts a message
 - route every customer message as a new request
 - hide helper-assisted steps from evidence
-- replace policy/config-driven ATLAS behavior with hardcoded core logic
+- replace pack-driven ATLAS behavior with hardcoded core logic
 - treat Redis or Kafka as source of truth
 - record fake deployment success for missing connectors
 - expose internal ATLAS notes, prompts, private configs, or routing state to Legacy

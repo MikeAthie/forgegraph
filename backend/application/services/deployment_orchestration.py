@@ -781,24 +781,38 @@ def _policies_from_installation(
 def _extract_policies(source: Any, *, pack_id: str) -> list[dict[str, Any]]:
     if not isinstance(source, dict):
         return []
-    raw = source.get(DEPLOYMENT_CONFIG_KEY) or source.get("deployments")
-    if isinstance(raw, dict):
-        raw = list(raw.values())
-    if not isinstance(raw, list):
-        return []
     policies: list[dict[str, Any]] = []
-    for item in raw:
-        if not isinstance(item, dict):
+    for config in _nested_config_sources(source):
+        raw = config.get(DEPLOYMENT_CONFIG_KEY) or config.get("deployments")
+        if isinstance(raw, dict):
+            if DEPLOYMENT_CONFIG_KEY in raw:
+                raw = raw.get(DEPLOYMENT_CONFIG_KEY)
+            else:
+                raw = list(raw.values())
+        if not isinstance(raw, list):
             continue
-        policy_id = str(item.get("policy_id") or item.get("id") or "")
-        policies.append(
-            {
-                **item,
-                "pack_id": str(item.get("pack_id") or pack_id),
-                "source_policy_id": str(item.get("source_policy_id") or f"{pack_id}:{policy_id}"),
-            }
-        )
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            policy_id = str(item.get("policy_id") or item.get("id") or "")
+            policies.append(
+                {
+                    **item,
+                    "pack_id": str(item.get("pack_id") or pack_id),
+                    "source_policy_id": str(
+                        item.get("source_policy_id") or f"{pack_id}:{policy_id}"
+                    ),
+                }
+            )
     return policies
+
+
+def _nested_config_sources(source: dict[str, Any]) -> list[dict[str, Any]]:
+    sources = [source]
+    for value in source.values():
+        if isinstance(value, dict):
+            sources.append(value)
+    return sources
 
 
 def _readiness_for_channel(

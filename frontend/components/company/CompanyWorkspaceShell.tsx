@@ -1543,9 +1543,9 @@ function OperatingBriefAssumptions({ brief }: { brief: OperatingBrief | null }) 
     <div className="mt-4">
       <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Assumptions</p>
       <div className="mt-2 space-y-2">
-        {brief.assumptions.slice(-3).map((item) => (
+        {brief.assumptions.slice(-3).map((item, index) => (
           <div
-            key={`${item.field}-${item.created_at}`}
+            key={`${item.field}-${item.created_at}-${index}`}
             className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 text-sm dark:border-white/8 dark:bg-white/5"
           >
             <span className="font-medium text-zinc-900 dark:text-zinc-100">{item.field}: </span>

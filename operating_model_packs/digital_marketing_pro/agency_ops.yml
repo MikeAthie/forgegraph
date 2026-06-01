@@ -1,0 +1,364 @@
+workstream_phases:
+  - phase_id: digital_marketing_pro.v1.atlas_agency_work_graph
+    source_policy_id: digital_marketing_pro.v1.atlas_agency_work_graph
+    pack_id: digital_marketing_pro.v1
+    phase_name: Atlas agency work graph
+    whiteboard_required_status: ready_for_strategy
+    set_status_on_start: in_content
+    metadata:
+      operating_model: digital_marketing_pro
+      agency_loop: integrated
+    workstreams:
+      - id: account_brief_compilation
+        name: Account brief compilation
+        department: client_approval_ops
+        department_name: Client/Approval Operations
+        department_type: client_approval_ops
+        output_type: brief
+        required: true
+      - id: strategy_brief
+        name: Strategy brief
+        department: strategy_research
+        department_name: Strategy & Research
+        department_type: strategy_research
+        output_type: strategy_brief
+        required: true
+      - id: legal_claims_precheck
+        name: Legal and claims precheck
+        department: qa_compliance
+        department_name: QA & Compliance
+        department_type: qa_compliance
+        output_type: compliance_review
+        required: true
+      - id: tech_execution_readiness
+        name: Tech and martech readiness
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        output_type: execution_readiness
+        required: true
+      - id: media_channel_plan
+        name: Media channel plan
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        output_type: channel_plan
+        required: true
+      - id: copy_message_house
+        name: Copy message house
+        department: brand_content
+        department_name: Brand & Content
+        department_type: brand_content
+        output_type: asset
+        required: true
+        dependencies:
+          - workstream_id: strategy_brief
+            type: soft
+            required_status: completed
+            label: Strategy brief
+      - id: analytics_measurement_plan
+        name: Analytics measurement plan
+        department: analytics_performance
+        department_name: Analytics & Performance
+        department_type: analytics_performance
+        output_type: measurement_plan
+        required: true
+      - id: traffic_dependency_map
+        name: Traffic dependency map
+        department: client_approval_ops
+        department_name: Client/Approval Operations
+        department_type: client_approval_ops
+        output_type: traffic_plan
+        required: true
+      - id: content_asset_map
+        name: Content and creative asset map
+        department: brand_content
+        department_name: Brand & Content
+        department_type: brand_content
+        output_type: publication_draft
+        required: true
+        dependencies:
+          - workstream_id: copy_message_house
+            type: hard
+            required_status: completed
+            label: Copy message house
+          - workstream_id: legal_claims_precheck
+            type: hard
+            required_status: completed
+            label: Legal and claims precheck
+      - id: timing_flighting_plan
+        name: Timing and flighting plan
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        output_type: deployment_schedule
+        required: true
+        dependencies:
+          - workstream_id: media_channel_plan
+            type: hard
+            required_status: completed
+            label: Media channel plan
+      - id: deployment_readiness_plan
+        name: Deployment readiness plan
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        output_type: asset
+        required: true
+        dependencies:
+          - workstream_id: tech_execution_readiness
+            type: hard
+            required_status: completed
+            label: Tech and martech readiness
+          - workstream_id: content_asset_map
+            type: hard
+            required_status: completed
+            label: Content and creative asset map
+          - workstream_id: timing_flighting_plan
+            type: hard
+            required_status: completed
+            label: Timing and flighting plan
+    gate:
+      gate_id: digital_marketing_pro.v1.atlas_agency_launch_gate
+      pass_condition: all_required
+      approval_required: true
+      signal_on_fail: true
+      criteria:
+        - key: strategy_readiness
+          value_type: number
+          operator: ">="
+          threshold: 90
+          required: true
+        - key: legal_precheck
+          value_type: enum
+          operator: in
+          expected:
+            - pass
+            - 100
+          required: true
+          hard_fail: true
+        - key: measurement_readiness
+          value_type: number
+          operator: ">="
+          threshold: 85
+          required: true
+        - key: execution_readiness
+          value_type: number
+          operator: ">="
+          threshold: 85
+          required: true
+        - key: asset_plan_readiness
+          value_type: number
+          operator: ">="
+          threshold: 85
+          required: true
+        - key: timing_readiness
+          value_type: number
+          operator: ">="
+          threshold: 85
+          required: true
+      on_pass:
+        set_whiteboard_status: in_approval
+        route_to_department: client_approval_ops
+        approval_required: true
+      on_fail:
+        set_whiteboard_status: in_content
+        route_to_department: qa_compliance
+        create_signal: true
+
+deployment_policies:
+  - policy_id: digital_marketing_pro.v1.atlas_launch_deployment
+    source_policy_id: digital_marketing_pro.v1.atlas_launch_deployment
+    pack_id: digital_marketing_pro.v1
+    required_whiteboard_status: in_approval
+    required_approval_status: approved
+    channels:
+      - id: email
+        display_name: Email
+        department: crm_lifecycle
+        department_name: CRM & Lifecycle
+        department_type: crm_lifecycle
+        required_connector: email_connector
+        tool_id: email.send_dry_run
+        asset_types:
+          - asset
+          - publication_draft
+        approval_required: true
+        allow_dry_run: true
+        allow_sandbox_evidence: true
+        requires_unsubscribe_footer: true
+        risk_level: medium
+      - id: whatsapp
+        display_name: WhatsApp
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        required_connector: whatsapp_connector
+        tool_id: whatsapp.send_dry_run
+        asset_types:
+          - publication_draft
+        approval_required: true
+        allow_dry_run: true
+        allow_sandbox_evidence: true
+        allow_web_automation_evidence: false
+        operator_confirmation_required: true
+        risk_level: high
+      - id: instagram
+        display_name: Instagram
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        required_connector: social_connector
+        tool_id: social.publish_dry_run
+        platform: instagram
+        asset_types:
+          - publication_draft
+        approval_required: true
+        allow_dry_run: true
+        allow_sandbox_evidence: true
+        allow_manual_publish_evidence: false
+        allow_provider_publish: false
+        requires_compliance_gate: true
+        requires_originality_check: true
+        risk_level: high
+      - id: facebook
+        display_name: Facebook
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        required_connector: social_connector
+        tool_id: social.publish_dry_run
+        platform: facebook
+        asset_types:
+          - publication_draft
+        approval_required: true
+        allow_dry_run: true
+        allow_sandbox_evidence: true
+        allow_manual_publish_evidence: false
+        allow_provider_publish: false
+        requires_compliance_gate: true
+        requires_originality_check: true
+        risk_level: high
+      - id: tiktok
+        display_name: TikTok
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        required_connector: tiktok_publishing_connector
+        tool_id: social.tiktok_publish
+        asset_types:
+          - publication_draft
+        approval_required: true
+        allow_dry_run: false
+        risk_level: high
+      - id: landing_page
+        display_name: Landing Page
+        department: channel_execution
+        department_name: Channel Execution
+        department_type: channel_execution
+        required_connector: cms_landing_page_connector
+        tool_id: cms.landing_page_publish
+        asset_types:
+          - asset
+          - publication_draft
+        approval_required: true
+        allow_dry_run: false
+        risk_level: high
+    on_blocked:
+      route_to_department: channel_execution
+
+performance_policies:
+  - policy_id: digital_marketing_pro.v1.atlas_performance_review
+    source_policy_id: digital_marketing_pro.v1.atlas_performance_review
+    pack_id: digital_marketing_pro.v1
+    required_whiteboard_status: in_deployment
+    allow_sandbox_deployment_evidence: true
+    allow_web_automation_deployment_evidence: false
+    allow_manual_publish_deployment_evidence: false
+    cadence: weekly
+    metric_sources:
+      - id: email
+        display_name: Email
+        department: analytics_performance
+        department_name: Analytics & Performance
+        department_type: analytics_performance
+        required_connector: email_connector
+        tool_id: email.send_dry_run
+        metrics:
+          - open_rate
+          - click_rate
+          - unsubscribe_rate
+          - execution_completeness
+          - channel_signal_quality
+          - optimization_confidence
+        sample_metrics:
+          open_rate: 0.42
+          click_rate: 0.11
+          unsubscribe_rate: 0.01
+          execution_completeness: 86
+          channel_signal_quality: 74
+          optimization_confidence: 78
+      - id: whatsapp
+        display_name: WhatsApp
+        department: analytics_performance
+        department_name: Analytics & Performance
+        department_type: analytics_performance
+        required_connector: whatsapp_connector
+        tool_id: whatsapp.send_dry_run
+        metrics:
+          - delivered
+          - replies
+          - conversion_intent
+        sample_metrics:
+          delivered: 0
+          replies: 0
+          conversion_intent: 0
+      - id: social
+        display_name: Social
+        department: analytics_performance
+        department_name: Analytics & Performance
+        department_type: analytics_performance
+        required_connector: social_analytics_connector
+        tool_id: social.analytics_snapshot
+        metrics:
+          - reach
+          - engagement
+          - clicks
+      - id: landing_page
+        display_name: Landing Page
+        department: analytics_performance
+        department_name: Analytics & Performance
+        department_type: analytics_performance
+        required_connector: analytics_connector
+        tool_id: analytics.landing_page_snapshot
+        metrics:
+          - visits
+          - conversion_rate
+    evaluation_criteria:
+      - key: channel_signal_quality
+        value_type: number
+        operator: ">="
+        threshold: 70
+      - key: execution_completeness
+        value_type: number
+        operator: ">="
+        threshold: 80
+      - key: optimization_confidence
+        value_type: number
+        operator: ">="
+        threshold: 75
+    routing_rules:
+      - condition: creative_fatigue
+        route_to_department: brand_content
+        priority: normal
+        create_signal: true
+      - condition: poor_audience_fit
+        route_to_department: strategy_research
+        priority: normal
+        create_signal: true
+      - condition: missing_metric_connector
+        route_to_department: channel_execution
+        priority: high
+        create_signal: false
+    on_blocked:
+      route_to_department: channel_execution

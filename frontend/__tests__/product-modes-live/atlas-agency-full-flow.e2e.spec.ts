@@ -26,14 +26,13 @@ import {
 const API_BASE_URL = apiBaseUrl();
 const liveSkipReason = liveLlmSkipReason();
 const legacyCompanyCardName = /^Legacy Eyewear\b/i;
-const strategyPhaseId = "atlas_agency_ops.v1.strategy";
-const contentPhaseId = "atlas_agency_ops.v1.content_production";
-const deploymentPolicyId = "atlas_agency_ops.v1.launch_deployment";
-const performancePolicyId = "atlas_agency_ops.v1.launch_performance_review";
+const agencyPhaseId = "digital_marketing_pro.v1.atlas_agency_work_graph";
+const deploymentPolicyId = "digital_marketing_pro.v1.atlas_launch_deployment";
+const performancePolicyId = "digital_marketing_pro.v1.atlas_performance_review";
 const legacyCampaignRequest =
   "Can you create a campaign for Legacy DEPP GOLD with 10,000 MXN budget across email, WhatsApp, Instagram, Facebook, TikTok, and a landing page? Price is 599 MXN. Inventory is limited. Please create a strategy and execution plan?";
 const helperAssistedSteps = [
-  "Policy fixture setup uses backend API because there is no policy-authoring UI for live tests yet.",
+  "Connector availability setup uses backend API because connector-management UI is not available yet.",
   "Onboarding field enrichment uses backend API because structured whiteboard field editing is not exposed in the company workspace yet.",
   "Workstream completion, synthesis, and gate scoring use backend API because production workstream authoring/evaluation UI is not available yet.",
   "Performance report and evaluation use backend API because report/evaluation controls are not exposed in the whiteboard panel yet.",
@@ -96,7 +95,19 @@ type RequestClassification = {
 type PhaseContract = {
   phase_id: string;
   phase_name: string;
-  workstreams: Array<{ id: string; name?: string; required?: boolean; status: string }>;
+  workstreams: Array<{
+    id: string;
+    name?: string;
+    required?: boolean;
+    status: string;
+    dependencies?: Array<{ workstream_id?: string; type?: string; required_status?: string }>;
+    dependency_state?: {
+      status?: string;
+      blocker_reason?: string;
+      blockers?: Array<Record<string, unknown>>;
+      provisional?: Array<Record<string, unknown>>;
+    };
+  }>;
   current_state: {
     status: string;
     all_workstreams_completed?: boolean;
@@ -157,7 +168,7 @@ test.describe("Live ATLAS agency full product loop", () => {
     const apiCalls: ApiCall[] = [];
     const pageRequests = collectLiveProductModeApiRequests(page);
     const fixture = await seedLiveAtlasLegacyConsultProductMode(request, testInfo);
-    await configureAtlasAgencyPolicies(request, fixture, testInfo, apiCalls);
+    await configureAtlasAgencyConnectorAvailability(request, fixture, testInfo, apiCalls);
 
     const { thread, message } = await createLegacyRequestMessageThroughUi(page, request, fixture, apiCalls);
     await expectWhiteboardCountForMessage(request, fixture, message.id, 0, apiCalls);
@@ -175,45 +186,46 @@ test.describe("Live ATLAS agency full product loop", () => {
     expect(onboardingBoard.event_version).toBe("whiteboard_board_v1");
     expect(onboardingBoard.cards.length).toBeGreaterThan(0);
 
-    await startPhaseThroughUi(page, request, fixture, whiteboard.id, strategyPhaseId);
-    const strategy = await completeStartedPhase(
-      request,
-      fixture,
-      whiteboard.id,
-      strategyPhaseId,
-      {
-        context_quality: 95,
-        channel_feasibility: 94,
-        measurement_readiness: 92,
-        compliance_precheck: "pass",
-      },
-      testInfo,
-      apiCalls,
-    );
-    expect(strategy.whiteboard.status).toBe("in_content");
-    expect(strategy.contract.current_state.gate?.result).toBe("pass");
+    await startPhaseThroughUi(page, request, fixture, whiteboard.id, agencyPhaseId, apiCalls);
+    const startedAgency = await fetchPhaseContract(request, fixture, whiteboard.id, agencyPhaseId, apiCalls);
+    const initialWorkstreams = workstreamsById(startedAgency);
+    const initialParallelIds = [
+      "account_brief_compilation",
+      "strategy_brief",
+      "legal_claims_precheck",
+      "tech_execution_readiness",
+      "media_channel_plan",
+      "copy_message_house",
+      "analytics_measurement_plan",
+      "traffic_dependency_map",
+    ];
+    for (const workstreamId of initialParallelIds) {
+      expect(initialWorkstreams[workstreamId]?.status).not.toBe("blocked");
+    }
+    expect(initialWorkstreams.copy_message_house?.dependency_state?.status).toBe("provisional");
+    expect(initialWorkstreams.content_asset_map?.status).toBe("blocked");
+    expect(initialWorkstreams.timing_flighting_plan?.status).toBe("blocked");
+    expect(initialWorkstreams.deployment_readiness_plan?.status).toBe("blocked");
 
-    await startPhaseThroughUi(page, request, fixture, whiteboard.id, contentPhaseId);
-    const content = await completeStartedPhase(
+    const agency = await completeAgencyPhaseInDependencyOrder(
       request,
       fixture,
       whiteboard.id,
-      contentPhaseId,
+      agencyPhaseId,
       {
-        brand_alignment: 94,
-        strategy_alignment: 95,
-        channel_fit: 93,
-        claim_support: "pass",
-        legal_compliance: "pass",
-        format_compliance: 97,
+        strategy_readiness: 94,
+        legal_precheck: "pass",
+        measurement_readiness: 91,
         execution_readiness: 90,
+        asset_plan_readiness: 92,
+        timing_readiness: 89,
       },
       testInfo,
       apiCalls,
     );
-    expect(content.whiteboard.status).toBe("in_approval");
-    expect(content.contract.current_state.gate?.result).toBe("pass");
-    const approvalTaskId = content.contract.current_state.applied_actions?.approval_task_id;
+    expect(agency.whiteboard.status).toBe("in_approval");
+    expect(agency.contract.current_state.gate?.result).toBe("pass");
+    const approvalTaskId = agency.contract.current_state.applied_actions?.approval_task_id;
     expect(approvalTaskId).toBeTruthy();
 
     const preDeploymentPerformance = await rawPost(
@@ -287,10 +299,17 @@ test.describe("Live ATLAS agency full product loop", () => {
     expect((evaluation.performance_contract.current_state.routing_record_ids ?? []).length).toBeGreaterThan(0);
     const finalBoard = await fetchWhiteboardBoard(request, fixture, whiteboard.id, apiCalls);
     expect(finalBoard.cards.length).toBeGreaterThanOrEqual(onboardingBoard.cards.length);
-    expect(finalBoard.cards.some((card) => /strategy/i.test(card.department_slug))).toBe(true);
-    expect(finalBoard.cards.some((card) => /content|creative/i.test(card.department_slug))).toBe(true);
-    expect(finalBoard.cards.some((card) => /deployment/i.test(card.department_slug))).toBe(true);
-    expect(finalBoard.cards.some((card) => /performance|analytics/i.test(card.department_slug))).toBe(true);
+    const finalLaneSlugs = finalBoard.lanes.map((lane) => lane.department_slug);
+    expect(finalLaneSlugs).toEqual(
+      expect.arrayContaining([
+        "strategy_research",
+        "qa_compliance",
+        "channel_execution",
+        "brand_content",
+        "analytics_performance",
+        "client_approval_ops",
+      ]),
+    );
 
     await expectOtherClientIsolation(request, fixture, thread.id, whiteboard.id, apiCalls);
     await assertWorkspaceRendering(browser, page, request, fixture, whiteboard.id, apiCalls);
@@ -305,7 +324,7 @@ test.describe("Live ATLAS agency full product loop", () => {
     ];
     expect(verticalLiveProductModeApiRequests(pageRequests)).toEqual([]);
     expectNoVerticalRoutes(allApiRequests);
-    expect(sawLiveApiPath(pageRequests, `/api/graphs/${fixture.companyId}`)).toBe(true);
+    expect(sawLiveApiPath(allApiRequests, `/api/graphs/${fixture.companyId}`)).toBe(true);
     expect(allApiRequests.some((call) => call.pathname.startsWith("/api/communication/"))).toBe(true);
     expect(allApiRequests.some((call) => call.pathname.startsWith("/api/whiteboards/"))).toBe(true);
     await expectNoFunctionCompaniesCreated(request, fixture, apiCalls);
@@ -325,15 +344,30 @@ test.describe("Live ATLAS agency full product loop", () => {
             lanes: finalBoard.lanes.map((lane) => lane.department_slug),
             allowedActions: finalBoard.allowed_actions,
           },
-          strategy: {
-            phaseId: strategy.contract.phase_id,
-            result: strategy.contract.current_state.gate?.result,
-            workstreams: strategy.contract.workstreams.map((item) => item.id),
-          },
-          content: {
-            phaseId: content.contract.phase_id,
-            result: content.contract.current_state.gate?.result,
+          agency: {
+            phaseId: agency.contract.phase_id,
+            result: agency.contract.current_state.gate?.result,
             approvalTaskId,
+            initialFanout: initialParallelIds.map((id) => ({
+              id,
+              status: initialWorkstreams[id]?.status,
+              dependencyStatus: initialWorkstreams[id]?.dependency_state?.status,
+            })),
+            blockedBefore: ["content_asset_map", "timing_flighting_plan", "deployment_readiness_plan"].map((id) => ({
+              id,
+              status: initialWorkstreams[id]?.status,
+              reason: initialWorkstreams[id]?.dependency_state?.blocker_reason,
+            })),
+            afterFoundations: agency.afterFoundations.workstreams.map((item) => ({
+              id: item.id,
+              status: item.status,
+              dependencyStatus: item.dependency_state?.status,
+            })),
+            afterContentTiming: agency.afterContentTiming.workstreams.map((item) => ({
+              id: item.id,
+              status: item.status,
+              dependencyStatus: item.dependency_state?.status,
+            })),
           },
           approval,
           deployment: {
@@ -361,329 +395,7 @@ test.describe("Live ATLAS agency full product loop", () => {
   });
 });
 
-function atlasStrategyPhasePolicy(): Record<string, unknown> {
-  return {
-    phase_id: strategyPhaseId,
-    source_policy_id: "atlas_agency_ops.v1.strategy.policy",
-    pack_id: "atlas_agency_ops.v1",
-    phase_name: "Strategy Development",
-    whiteboard_required_status: "ready_for_strategy",
-    set_status_on_start: "in_strategy",
-    workstreams: [
-      {
-        id: "industry_research",
-        name: "Industry Research",
-        department: "strategy",
-        output_type: "research",
-        required: true,
-      },
-      {
-        id: "competitor_research",
-        name: "Competitor Research",
-        department: "strategy",
-        output_type: "research",
-        required: true,
-      },
-      {
-        id: "campaign_scaffolding",
-        name: "Campaign Scaffolding",
-        department: "strategy",
-        output_type: "strategy",
-        required: true,
-      },
-      {
-        id: "persona_simulation",
-        name: "Persona Simulation",
-        department: "strategy",
-        output_type: "simulation",
-        required: true,
-      },
-      {
-        id: "brand_profile_definition",
-        name: "Brand Profile Definition",
-        department: "strategy",
-        output_type: "profile",
-        required: true,
-      },
-      { id: "channel_strategy", name: "Channel Strategy", department: "strategy", output_type: "plan", required: true },
-      {
-        id: "measurement_framework",
-        name: "Measurement Framework",
-        department: "analytics",
-        output_type: "measurement",
-        required: true,
-      },
-      {
-        id: "compliance_precheck",
-        name: "Compliance Precheck",
-        department: "compliance",
-        output_type: "review",
-        required: true,
-      },
-    ],
-    gate: {
-      gate_id: "atlas_agency_ops.v1.strategy_gate",
-      criteria: [
-        { key: "context_quality", value_type: "number", operator: ">=", threshold: 90, required: true },
-        { key: "channel_feasibility", value_type: "number", operator: ">=", threshold: 90, required: true },
-        { key: "measurement_readiness", value_type: "number", operator: ">=", threshold: 85, required: true },
-        {
-          key: "compliance_precheck",
-          value_type: "enum",
-          operator: "==",
-          expected: "pass",
-          required: true,
-          hard_fail: true,
-        },
-      ],
-      on_pass: { set_whiteboard_status: "in_content", route_to_department: "content_or_creative" },
-      on_fail: { set_whiteboard_status: "in_strategy", route_to_department: "strategy_revision", create_signal: true },
-    },
-  };
-}
-
-function atlasContentPhasePolicy(): Record<string, unknown> {
-  return {
-    phase_id: contentPhaseId,
-    source_policy_id: "atlas_agency_ops.v1.content_production.policy",
-    pack_id: "atlas_agency_ops.v1",
-    phase_name: "Content Production",
-    whiteboard_required_status: "in_content",
-    set_status_on_start: "in_content",
-    workstreams: [
-      { id: "copywriting", name: "Copywriting", department: "content", output_type: "asset", required: true },
-      {
-        id: "social_content",
-        name: "Social Content",
-        department: "social",
-        output_type: "publication_draft",
-        required: true,
-      },
-      {
-        id: "email_sequence",
-        name: "Email Sequence",
-        department: "crm",
-        output_type: "publication_draft",
-        required: true,
-      },
-      {
-        id: "whatsapp_script",
-        name: "WhatsApp Script",
-        department: "conversational_commerce",
-        output_type: "publication_draft",
-        required: true,
-      },
-      { id: "landing_page_copy", name: "Landing Page Copy", department: "web", output_type: "asset", required: true },
-      { id: "ad_copy", name: "Ad Copy", department: "paid_media", output_type: "publication_draft", required: true },
-      { id: "visual_concepts", name: "Visual Concepts", department: "creative", output_type: "asset", required: true },
-      {
-        id: "video_storyboard",
-        name: "Video Storyboard",
-        department: "creative",
-        output_type: "asset",
-        required: true,
-      },
-    ],
-    gate: {
-      gate_id: "atlas_agency_ops.v1.content_quality_gate",
-      approval_required: true,
-      criteria: [
-        { key: "brand_alignment", value_type: "number", operator: ">=", threshold: 90, required: true },
-        { key: "strategy_alignment", value_type: "number", operator: ">=", threshold: 90, required: true },
-        { key: "channel_fit", value_type: "number", operator: ">=", threshold: 90, required: true },
-        { key: "claim_support", value_type: "enum", operator: "==", expected: "pass", required: true, hard_fail: true },
-        {
-          key: "legal_compliance",
-          value_type: "enum",
-          operator: "==",
-          expected: "pass",
-          required: true,
-          hard_fail: true,
-        },
-        { key: "format_compliance", value_type: "number", operator: ">=", threshold: 95, required: true },
-        { key: "execution_readiness", value_type: "number", operator: ">=", threshold: 85, required: true },
-      ],
-      on_pass: {
-        set_whiteboard_status: "in_approval",
-        route_to_department: "client_services_or_approval",
-        approval_required: true,
-      },
-      on_fail: {
-        set_whiteboard_status: "in_content",
-        route_to_department: "content_revision",
-        create_signal: true,
-      },
-    },
-  };
-}
-
-function atlasDeploymentPolicy(): Record<string, unknown> {
-  return {
-    policy_id: deploymentPolicyId,
-    source_policy_id: "atlas_agency_ops.v1.launch_deployment.policy",
-    pack_id: "atlas_agency_ops.v1",
-    required_whiteboard_status: "in_approval",
-    required_approval_status: "approved",
-    channels: [
-      {
-        id: "email",
-        display_name: "Email",
-        department: "crm",
-        required_connector: "email_connector",
-        tool_id: "email.send_dry_run",
-        approval_required: true,
-        allow_dry_run: true,
-        allow_sandbox_evidence: true,
-        requires_unsubscribe_footer: true,
-        risk_level: "medium",
-      },
-      {
-        id: "whatsapp",
-        display_name: "WhatsApp",
-        department: "deployment_ops",
-        required_connector: "whatsapp_connector",
-        tool_id: "whatsapp.send_dry_run",
-        approval_required: true,
-        allow_dry_run: true,
-        allow_sandbox_evidence: true,
-        allow_web_automation_evidence: false,
-        operator_confirmation_required: true,
-        risk_level: "high",
-      },
-      {
-        id: "instagram",
-        display_name: "Instagram",
-        department: "deployment_ops",
-        required_connector: "social_connector",
-        tool_id: "social.publish_dry_run",
-        platform: "instagram",
-        approval_required: true,
-        allow_dry_run: true,
-        allow_sandbox_evidence: true,
-        allow_manual_publish_evidence: false,
-        allow_provider_publish: false,
-        requires_compliance_gate: true,
-        requires_originality_check: true,
-        risk_level: "high",
-      },
-      {
-        id: "facebook",
-        display_name: "Facebook",
-        department: "deployment_ops",
-        required_connector: "social_connector",
-        tool_id: "social.publish_dry_run",
-        platform: "facebook",
-        approval_required: true,
-        allow_dry_run: true,
-        allow_sandbox_evidence: true,
-        allow_manual_publish_evidence: false,
-        allow_provider_publish: false,
-        requires_compliance_gate: true,
-        requires_originality_check: true,
-        risk_level: "high",
-      },
-      {
-        id: "tiktok",
-        display_name: "TikTok",
-        department: "deployment_ops",
-        required_connector: "tiktok_publishing_connector",
-        tool_id: "social.tiktok_publish",
-        approval_required: true,
-        allow_dry_run: false,
-        risk_level: "high",
-      },
-      {
-        id: "landing_page",
-        display_name: "Landing Page",
-        department: "deployment_ops",
-        required_connector: "cms_landing_page_connector",
-        tool_id: "cms.landing_page_publish",
-        approval_required: true,
-        allow_dry_run: false,
-        risk_level: "high",
-      },
-    ],
-    on_blocked: { route_to_department: "deployment_ops" },
-  };
-}
-
-function atlasPerformancePolicy(): Record<string, unknown> {
-  return {
-    policy_id: performancePolicyId,
-    source_policy_id: "atlas_agency_ops.v1.launch_performance_review.policy",
-    pack_id: "atlas_agency_ops.v1",
-    required_whiteboard_status: "in_deployment",
-    cadence: "weekly",
-    metric_sources: [
-      {
-        id: "email",
-        display_name: "Email",
-        department: "performance_or_analytics",
-        required_connector: "analytics_connector",
-        tool_id: "analytics_connector",
-        metrics: ["channel_signal_quality", "execution_completeness", "optimization_confidence"],
-        sample_metrics: {
-          channel_signal_quality: 76,
-          execution_completeness: 84,
-          optimization_confidence: 80,
-          conditions: ["optimization_followup"],
-        },
-      },
-      {
-        id: "whatsapp",
-        display_name: "WhatsApp",
-        department: "deployment_ops",
-        required_connector: "whatsapp_connector",
-        tool_id: "whatsapp.send_dry_run",
-        metrics: ["message_replies"],
-      },
-      {
-        id: "social",
-        display_name: "Social",
-        department: "deployment_ops",
-        required_connector: "social_analytics_connector",
-        metrics: ["engagement"],
-      },
-      {
-        id: "landing_page",
-        display_name: "Landing Page",
-        department: "deployment_ops",
-        required_connector: "analytics_landing_page_connector",
-        metrics: ["conversion_signal"],
-      },
-    ],
-    evaluation_criteria: [
-      { key: "channel_signal_quality", value_type: "number", operator: ">=", threshold: 70, required: true },
-      { key: "execution_completeness", value_type: "number", operator: ">=", threshold: 80, required: true },
-      { key: "optimization_confidence", value_type: "number", operator: ">=", threshold: 75, required: true },
-    ],
-    routing_rules: [
-      {
-        condition: "missing_metric_connector",
-        route_to_department: "deployment_ops",
-        priority: "high",
-        create_signal: true,
-        reason: "Metric source is missing a configured connector.",
-      },
-      {
-        condition: "channel_signal_quality",
-        route_to_department: "content_or_creative",
-        priority: "normal",
-        create_signal: true,
-        reason: "Performance review identified weak channel signal quality.",
-      },
-      {
-        condition: "optimization_followup",
-        route_to_department: "performance_or_analytics",
-        priority: "normal",
-        create_signal: false,
-        reason: "Continue optimization follow-up from collected metrics.",
-      },
-    ],
-  };
-}
-
-async function configureAtlasAgencyPolicies(
+async function configureAtlasAgencyConnectorAvailability(
   request: APIRequestContext,
   fixture: LiveAtlasLegacyConsultFixture,
   testInfo: TestInfo,
@@ -700,21 +412,22 @@ async function configureAtlasAgencyPolicies(
     packs.packs.find((pack) => pack.role === "primary") ??
     packs.packs[0];
   expect(installation).toBeTruthy();
-  const config = {
-    ...(installation.config ?? {}),
-    skip_graph_version: true,
-    available_connectors: ["email_connector", "social_connector", "analytics_connector"],
-    workstream_phases: [atlasStrategyPhasePolicy(), atlasContentPhasePolicy()],
-    deployment_policies: [atlasDeploymentPolicy()],
-    performance_policies: [atlasPerformancePolicy()],
-  };
+  const config: Record<string, unknown> = { ...(installation.config ?? {}) };
+  delete config.workstream_phases;
+  delete config.phases;
+  delete config.deployment_policies;
+  delete config.deployments;
+  delete config.performance_policies;
+  delete config.measurement_policies;
+  config.skip_graph_version = true;
+  config.available_connectors = ["email_connector", "social_connector", "analytics_connector"];
   await postOrPatchData<{ installation: PackInstallation }>(
     "PATCH",
     request,
     `/api/companies/${fixture.companyId}/packs/${installation.id}`,
     fixture.accessToken,
     { config },
-    idempotency(testInfo, "configure-atlas-agency-policies"),
+    idempotency(testInfo, "configure-atlas-agency-connectors"),
     apiCalls,
   );
 }
@@ -887,7 +600,9 @@ async function completeOnboarding(
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
   await page.getByTestId("whiteboard-mark-ready-button").click();
-  await expect(page.getByTestId("whiteboard-status")).toContainText(/Ready For Strategy/i, { timeout: 30_000 });
+  await expect(page.getByTestId("whiteboard-status")).toContainText(/Ready For Planning|Ready For Strategy/i, {
+    timeout: 30_000,
+  });
   const ready = await getData<{ whiteboard: WorkWhiteboard }>(
     request,
     `/api/whiteboards/${whiteboardId}`,
@@ -903,15 +618,146 @@ async function startPhaseThroughUi(
   fixture: LiveAtlasLegacyConsultFixture,
   whiteboardId: string,
   phaseId: string,
+  apiCalls: ApiCall[],
 ): Promise<void> {
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
   const startButton = page.getByTestId(`whiteboard-phase-start-${phaseId}`);
   await expect(startButton).toBeVisible({ timeout: 30_000 });
+  const startResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/whiteboards/${whiteboardId}/phases/${phaseId}/start`) &&
+      response.request().method() === "POST",
+    { timeout: 30_000 },
+  );
   await startButton.click();
+  const startResponse = await startResponsePromise;
+  expect(startResponse.ok()).toBeTruthy();
   await expect(page.getByTestId(`whiteboard-phase-${phaseId}`)).toContainText(/In |Started|Strategy|Content/i, {
     timeout: 30_000,
   });
+  await expect
+    .poll(
+      async () => {
+        const contract = await fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls);
+        return contract.workstreams.some((workstream) => workstream.status !== "not_started");
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+}
+
+async function fetchPhaseContract(
+  request: APIRequestContext,
+  fixture: LiveAtlasLegacyConsultFixture,
+  whiteboardId: string,
+  phaseId: string,
+  apiCalls: ApiCall[],
+): Promise<PhaseContract> {
+  const response = await getData<{ whiteboard_phase_contract: PhaseContract }>(
+    request,
+    `/api/whiteboards/${whiteboardId}/phases/${phaseId}`,
+    fixture.accessToken,
+    apiCalls,
+  );
+  return response.whiteboard_phase_contract;
+}
+
+function workstreamsById(contract: PhaseContract): Record<string, PhaseContract["workstreams"][number]> {
+  return Object.fromEntries(contract.workstreams.map((workstream) => [workstream.id, workstream]));
+}
+
+async function completeAgencyPhaseInDependencyOrder(
+  request: APIRequestContext,
+  fixture: LiveAtlasLegacyConsultFixture,
+  whiteboardId: string,
+  phaseId: string,
+  scorecard: Record<string, unknown>,
+  testInfo: TestInfo,
+  apiCalls: ApiCall[],
+): Promise<{
+  whiteboard: WorkWhiteboard;
+  contract: PhaseContract;
+  afterFoundations: PhaseContract;
+  afterContentTiming: PhaseContract;
+}> {
+  const foundationalBatch = [
+    "account_brief_compilation",
+    "strategy_brief",
+    "legal_claims_precheck",
+    "tech_execution_readiness",
+    "media_channel_plan",
+    "copy_message_house",
+    "analytics_measurement_plan",
+    "traffic_dependency_map",
+  ];
+  for (const workstreamId of foundationalBatch) {
+    await completePhaseWorkstream(request, fixture, whiteboardId, phaseId, workstreamId, testInfo, apiCalls);
+  }
+  const afterFoundations = await fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls);
+  const foundationState = workstreamsById(afterFoundations);
+  expect(foundationState.content_asset_map?.status).toBe("queued");
+  expect(foundationState.timing_flighting_plan?.status).toBe("queued");
+  expect(foundationState.deployment_readiness_plan?.status).toBe("blocked");
+
+  for (const workstreamId of ["content_asset_map", "timing_flighting_plan"]) {
+    await completePhaseWorkstream(request, fixture, whiteboardId, phaseId, workstreamId, testInfo, apiCalls);
+  }
+  const afterContentTiming = await fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls);
+  expect(workstreamsById(afterContentTiming).deployment_readiness_plan?.status).toBe("queued");
+
+  await completePhaseWorkstream(request, fixture, whiteboardId, phaseId, "deployment_readiness_plan", testInfo, apiCalls);
+  await postData<{ whiteboard_phase_contract: PhaseContract; whiteboard: WorkWhiteboard }>(
+    request,
+    `/api/whiteboards/${whiteboardId}/phases/${phaseId}/synthesize`,
+    fixture.accessToken,
+    {},
+    idempotency(testInfo, `phase-synthesize-${phaseId}`),
+    apiCalls,
+  );
+  const evaluated = await postData<{ whiteboard_phase_contract: PhaseContract; whiteboard: WorkWhiteboard }>(
+    request,
+    `/api/whiteboards/${whiteboardId}/phases/${phaseId}/evaluate`,
+    fixture.accessToken,
+    { scorecard },
+    idempotency(testInfo, `phase-evaluate-${phaseId}`),
+    apiCalls,
+  );
+  return {
+    whiteboard: evaluated.whiteboard,
+    contract: evaluated.whiteboard_phase_contract,
+    afterFoundations,
+    afterContentTiming,
+  };
+}
+
+async function completePhaseWorkstream(
+  request: APIRequestContext,
+  fixture: LiveAtlasLegacyConsultFixture,
+  whiteboardId: string,
+  phaseId: string,
+  workstreamId: string,
+  testInfo: TestInfo,
+  apiCalls: ApiCall[],
+): Promise<void> {
+  await postData<{ whiteboard_phase_contract: PhaseContract }>(
+    request,
+    `/api/whiteboards/${whiteboardId}/phases/${phaseId}/workstreams/${workstreamId}/complete`,
+    fixture.accessToken,
+    {
+      result: {
+        summary: `${workstreamId} completed for Legacy DEPP GOLD.`,
+        context: {
+          company: liveLegacyCompanyName,
+          product: "Legacy DEPP GOLD",
+          price: "599 MXN",
+          budget: "10000 MXN",
+        },
+      },
+    },
+    idempotency(testInfo, `phase-complete-${phaseId}-${workstreamId}`),
+    apiCalls,
+  );
 }
 
 async function completeStartedPhase(
@@ -1017,7 +863,15 @@ async function prepareDeploymentThroughUi(
 ): Promise<{ deployment_contract: DeploymentContract; whiteboard: WorkWhiteboard }> {
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
+  const deploymentResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/whiteboards/${whiteboardId}/deployment/prepare`) &&
+      response.request().method() === "POST",
+    { timeout: 60_000 },
+  );
   await page.getByTestId("whiteboard-prepare-deployment-button").click();
+  const deploymentResponse = await deploymentResponsePromise;
+  expect(deploymentResponse.ok()).toBeTruthy();
   await expect(page.getByTestId("whiteboard-deployment-section")).toContainText(/Receipt|Blocked/i, {
     timeout: 30_000,
   });
@@ -1045,10 +899,32 @@ async function startPerformanceThroughUi(
 ): Promise<{ performance_contract: PerformanceContract; whiteboard: WorkWhiteboard }> {
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
+  const performanceResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/whiteboards/${whiteboardId}/performance/start`) &&
+      response.request().method() === "POST",
+    { timeout: 60_000 },
+  );
   await page.getByTestId("whiteboard-start-performance-button").click();
+  const performanceResponse = await performanceResponsePromise;
+  expect(performanceResponse.ok()).toBeTruthy();
   await expect(page.getByTestId("whiteboard-performance-section")).toContainText(/Receipt|Blocked|Metrics/i, {
     timeout: 30_000,
   });
+  await expect
+    .poll(
+      async () => {
+        const contract = await getData<{ performance_contract: PerformanceContract }>(
+          request,
+          `/api/whiteboards/${whiteboardId}/performance`,
+          fixture.accessToken,
+          apiCalls,
+        );
+        return contract.performance_contract.current_state.metric_snapshot_id ?? "";
+      },
+      { timeout: 30_000 },
+    )
+    .not.toBe("");
   const performanceContract = await getData<{ performance_contract: PerformanceContract }>(
     request,
     `/api/whiteboards/${whiteboardId}/performance`,
@@ -1082,7 +958,7 @@ async function assertWorkspaceRendering(
   await expect(page.getByTestId("whiteboard-summary")).toContainText(/DEPP GOLD/i, { timeout: 30_000 });
   await page.getByTestId("whiteboard-board").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("whiteboard-board")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("whiteboard-board")).toContainText(/Strategy|Content|Deployment|Performance/i, {
+  await expect(page.getByTestId("whiteboard-board")).toContainText(/Strategy|Content|Channel|Analytics/i, {
     timeout: 30_000,
   });
   const startButtons = page.locator('[data-testid^="whiteboard-card-start-"]');
@@ -1094,7 +970,7 @@ async function assertWorkspaceRendering(
   }
   await page.getByTestId("whiteboard-phase-section").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("whiteboard-phase-section")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId(`whiteboard-phase-${contentPhaseId}`)).toContainText(/Copywriting/i);
+  await expect(page.getByTestId(`whiteboard-phase-${agencyPhaseId}`)).toContainText(/Strategy brief|Deployment readiness/i);
   await page.getByTestId("whiteboard-deployment-section").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("whiteboard-deployment-section")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("whiteboard-performance-section").scrollIntoViewIfNeeded();

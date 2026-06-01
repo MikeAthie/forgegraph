@@ -24,6 +24,7 @@ files:
   signals: signals.yml
   dashboards: dashboards.yml
   reports: reports.yml
+  agency_ops: agency_ops.yml
 install:
   default_program_template: dmp.engagement
   default_projection_type: currently_true_state

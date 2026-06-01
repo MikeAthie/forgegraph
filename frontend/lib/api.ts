@@ -5296,12 +5296,34 @@ export type WorkWhiteboardRoutingRecordDTO = {
   created_at: string;
 };
 
+export type WorkWhiteboardPhaseDependencyDTO = {
+  workstream_id?: string;
+  type: "hard" | "soft" | "external" | "approval" | string;
+  required_status?: string;
+  current_status?: string;
+  satisfied?: boolean;
+  source_ref?: string;
+  label?: string;
+  evidence_key?: string;
+  approval_task_id?: string;
+};
+
+export type WorkWhiteboardPhaseDependencyStateDTO = {
+  status: "ready" | "blocked" | "provisional" | string;
+  dependencies?: WorkWhiteboardPhaseDependencyDTO[];
+  blockers?: WorkWhiteboardPhaseDependencyDTO[];
+  provisional?: WorkWhiteboardPhaseDependencyDTO[];
+  blocker_reason?: string;
+};
+
 export type WorkWhiteboardPhaseWorkstreamDTO = {
   id: string;
   name: string;
   status: string;
   required: boolean;
   output_type?: string;
+  dependencies?: WorkWhiteboardPhaseDependencyDTO[];
+  dependency_state?: WorkWhiteboardPhaseDependencyStateDTO;
   routing_record_id?: string;
   department_id?: string;
   department_name?: string;

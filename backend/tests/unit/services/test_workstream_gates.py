@@ -5,11 +5,16 @@ from typing import cast
 
 import pytest
 
+from application.services.deployment_orchestration import list_available_deployment_policies
+from application.services.operating_model_packs import install_pack_for_company
+from application.services.performance_orchestration import list_available_performance_policies
 from application.services.routing import list_department_inbox
 from application.services.workstream_gates import (
+    WorkstreamGateError,
     complete_workstream,
     evaluate_gate,
     get_phase_contract,
+    list_available_phase_definitions,
     list_phase_workstreams,
     start_phase_for_whiteboard,
     synthesize_phase_outputs,
@@ -105,6 +110,63 @@ def _complete_all(user: User, whiteboard: WorkWhiteboard, definition: dict[str, 
         )
 
 
+def _dependency_phase_policy() -> dict[str, object]:
+    return {
+        "phase_id": "dependency_ops.v1.launch",
+        "source_policy_id": "dependency_ops.v1.launch",
+        "pack_id": "dependency_ops.v1",
+        "phase_name": "Dependency Launch",
+        "workstreams": [
+            {
+                "id": "foundation",
+                "name": "Foundation",
+                "department": "strategy",
+                "required": True,
+            },
+            {
+                "id": "legal",
+                "name": "Legal",
+                "department": "legal",
+                "required": True,
+            },
+            {
+                "id": "copy",
+                "name": "Copy",
+                "department": "content",
+                "required": True,
+                "dependencies": [
+                    {
+                        "workstream_id": "foundation",
+                        "type": "soft",
+                        "required_status": "completed",
+                    }
+                ],
+            },
+            {
+                "id": "content",
+                "name": "Content",
+                "department": "content",
+                "required": True,
+                "dependencies": [
+                    {"workstream_id": "copy", "type": "hard", "required_status": "completed"},
+                    {
+                        "workstream_id": "legal",
+                        "type": "hard",
+                        "required_status": "completed",
+                    },
+                ],
+            },
+            {
+                "id": "launch",
+                "name": "Launch",
+                "department": "deployment",
+                "required": True,
+                "dependencies": ["content"],
+            },
+        ],
+    }
+
+
 def test_phase_definition_creates_whiteboard_scoped_workstreams_idempotently() -> None:
     org = Organization.objects.create(name="ATLAS")
     owner = _user(org, "phase-start@example.com", "owner")
@@ -152,6 +214,149 @@ def test_phase_definition_creates_whiteboard_scoped_workstreams_idempotently() -
     assert StateProjection.objects.filter(
         company=company, projection_type__startswith="workstream_phase:"
     ).exists()
+
+
+def test_phase_dependencies_block_provision_and_auto_unblock_from_backend_state() -> None:
+    org = Organization.objects.create(name="Dependency Ops")
+    owner = _user(org, "phase-dependencies@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    whiteboard = _whiteboard(company, owner)
+    definition = _dependency_phase_policy()
+    phase_id = str(definition["phase_id"])
+
+    contract = start_phase_for_whiteboard(
+        user=owner,
+        whiteboard=whiteboard,
+        phase_id=phase_id,
+        definition=definition,
+    )
+    workstreams = {item["id"]: item for item in contract["workstreams"]}
+
+    assert workstreams["foundation"]["status"] == "queued"
+    assert workstreams["copy"]["status"] == "queued"
+    assert workstreams["copy"]["dependencies"][0]["type"] == "soft"
+    assert workstreams["copy"]["dependency_state"]["status"] == "provisional"
+    assert workstreams["content"]["status"] == "blocked"
+    assert workstreams["content"]["dependency_state"]["blockers"]
+    assert workstreams["launch"]["dependencies"][0]["type"] == "hard"
+
+    with pytest.raises(WorkstreamGateError) as blocked:
+        complete_workstream(
+            user=owner,
+            whiteboard=whiteboard,
+            phase_id=phase_id,
+            workstream_id="content",
+            result={"summary": "too early"},
+            definition=definition,
+        )
+    assert blocked.value.code == "workstream_dependencies_blocked"
+
+    complete_workstream(
+        user=owner,
+        whiteboard=whiteboard,
+        phase_id=phase_id,
+        workstream_id="foundation",
+        result={"summary": "foundation complete"},
+        definition=definition,
+    )
+    refreshed = {
+        item["id"]: item
+        for item in list_phase_workstreams(
+            whiteboard=whiteboard, phase_id=phase_id, definition=definition
+        )
+    }
+    assert refreshed["copy"]["status"] == "queued"
+    assert refreshed["copy"]["dependency_state"]["status"] == "ready"
+    assert refreshed["content"]["status"] == "blocked"
+
+    for workstream_id in ("legal", "copy"):
+        complete_workstream(
+            user=owner,
+            whiteboard=whiteboard,
+            phase_id=phase_id,
+            workstream_id=workstream_id,
+            result={"summary": f"{workstream_id} complete"},
+            definition=definition,
+        )
+    refreshed = {
+        item["id"]: item
+        for item in list_phase_workstreams(
+            whiteboard=whiteboard, phase_id=phase_id, definition=definition
+        )
+    }
+    assert refreshed["content"]["status"] == "queued"
+
+    with pytest.raises(WorkstreamGateError) as incomplete:
+        synthesize_phase_outputs(
+            user=owner,
+            whiteboard=whiteboard,
+            phase_id=phase_id,
+            definition=definition,
+        )
+    assert incomplete.value.code == "workstreams_incomplete"
+
+    complete_workstream(
+        user=owner,
+        whiteboard=whiteboard,
+        phase_id=phase_id,
+        workstream_id="content",
+        result={"summary": "content complete"},
+        definition=definition,
+    )
+    refreshed = {
+        item["id"]: item
+        for item in list_phase_workstreams(
+            whiteboard=whiteboard, phase_id=phase_id, definition=definition
+        )
+    }
+    assert refreshed["launch"]["status"] == "queued"
+    complete_workstream(
+        user=owner,
+        whiteboard=whiteboard,
+        phase_id=phase_id,
+        workstream_id="launch",
+        result={"summary": "launch complete"},
+        definition=definition,
+    )
+
+    asset, version = synthesize_phase_outputs(
+        user=owner,
+        whiteboard=whiteboard,
+        phase_id=phase_id,
+        definition=definition,
+    )
+    assert asset.id
+    assert version.id
+
+
+def test_digital_marketing_pack_loads_agency_phase_deployment_and_performance_policies() -> None:
+    org = Organization.objects.create(name="Pack Policies")
+    owner = _user(org, "phase-pack-policies@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    whiteboard = _whiteboard(company, owner)
+    install_pack_for_company(
+        company=company,
+        user=owner,
+        pack_id="digital_marketing_pro.v1",
+        config={"skip_graph_version": True},
+        role="primary",
+    )
+
+    phase_ids = {
+        item["phase_id"] for item in list_available_phase_definitions(whiteboard=whiteboard)
+    }
+    deployment_ids = {
+        item["policy_id"] for item in list_available_deployment_policies(whiteboard=whiteboard)
+    }
+    performance_ids = {
+        item["policy_id"] for item in list_available_performance_policies(whiteboard=whiteboard)
+    }
+
+    assert "digital_marketing_pro.v1.atlas_agency_work_graph" in phase_ids
+    assert "digital_marketing_pro.v1.atlas_launch_deployment" in deployment_ids
+    assert "digital_marketing_pro.v1.atlas_performance_review" in performance_ids
 
 
 def test_atlas_content_policy_passes_into_approval_with_generic_primitives() -> None:
