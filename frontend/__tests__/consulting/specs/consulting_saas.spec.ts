@@ -262,54 +262,54 @@ test.describe("Consulting SaaS Experiment", () => {
 
     const caseResults = await Promise.all(
       CONSULTING_CASE_PACK_V2.map(async (consultingCase) => {
-      const executionInput = buildConsultingExecutionInput(consultingCase);
-      const graphId = await createGraph(request, accessToken, consultingCase);
-      const graphVersion = await createGraphVersion(request, accessToken, graphId);
-      const graphVersionId = graphVersion.id;
-      const baselineStatePromise = runBaseline(executionInput);
-      const runId = await createRun(request, accessToken, graphVersionId, executionInput);
-      const [run, persistedGraphVersion, baselineState] = await Promise.all([
-        pollRunDetail(request, accessToken, runId),
-        fetchGraphVersion(request, accessToken, graphId, graphVersionId),
-        baselineStatePromise,
-      ]);
+        const executionInput = buildConsultingExecutionInput(consultingCase);
+        const graphId = await createGraph(request, accessToken, consultingCase);
+        const graphVersion = await createGraphVersion(request, accessToken, graphId);
+        const graphVersionId = graphVersion.id;
+        const baselineStatePromise = runBaseline(executionInput);
+        const runId = await createRun(request, accessToken, graphVersionId, executionInput);
+        const [run, persistedGraphVersion, baselineState] = await Promise.all([
+          pollRunDetail(request, accessToken, runId),
+          fetchGraphVersion(request, accessToken, graphId, graphVersionId),
+          baselineStatePromise,
+        ]);
 
-      if (run.status !== "succeeded") {
-        console.error(
-          JSON.stringify(
-            {
-              case_id: consultingCase.case_id,
-              run_id: run.id,
-              status: run.status,
-              error_message: run.error_message ?? null,
-              execution_state: run.output_json ?? {},
-              node_runs: run.node_runs,
-            },
-            null,
-            2,
-          ),
-        );
-        throw new Error(`Consulting run ${run.id} for ${consultingCase.case_id} ended with ${run.status}.`);
-      }
+        if (run.status !== "succeeded") {
+          console.error(
+            JSON.stringify(
+              {
+                case_id: consultingCase.case_id,
+                run_id: run.id,
+                status: run.status,
+                error_message: run.error_message ?? null,
+                execution_state: run.output_json ?? {},
+                node_runs: run.node_runs,
+              },
+              null,
+              2,
+            ),
+          );
+          throw new Error(`Consulting run ${run.id} for ${consultingCase.case_id} ended with ${run.status}.`);
+        }
 
-      const forgegraphState = (run.output_json ?? {}) as ConsultingExecutionState;
-      const forgegraphStructure = evaluateStructure(forgegraphState);
-      const forgegraphEvaluation = evaluateReadiness(forgegraphState, consultingCase.hidden_benchmark);
+        const forgegraphState = (run.output_json ?? {}) as ConsultingExecutionState;
+        const forgegraphStructure = evaluateStructure(forgegraphState);
+        const forgegraphEvaluation = evaluateReadiness(forgegraphState, consultingCase.hidden_benchmark);
 
-      const baselineStructure = evaluateStructure(baselineState);
-      const baselineEvaluation = evaluateReadiness(baselineState, consultingCase.hidden_benchmark);
+        const baselineStructure = evaluateStructure(baselineState);
+        const baselineEvaluation = evaluateReadiness(baselineState, consultingCase.hidden_benchmark);
 
-      const pairwise = judgePairwise(forgegraphEvaluation, baselineEvaluation);
+        const pairwise = judgePairwise(forgegraphEvaluation, baselineEvaluation);
 
-      await attachCaseArtifacts(testInfo, consultingCase, run, persistedGraphVersion, baselineState);
+        await attachCaseArtifacts(testInfo, consultingCase, run, persistedGraphVersion, baselineState);
 
-      expect(run.backend_attempt_id).toBeTruthy();
-      expect(run.graph_id).toBe(graphId);
-      expect(run.graph_version_id).toBe(graphVersionId);
-      expect(run.status_history[0]).toBe("pending");
-      expect(run.status_history).toContain("running");
-      expect(run.status_history.at(-1)).toBe("succeeded");
-      expect(persistedGraphVersion.graph_json).toEqual(graphVersion.graphJson);
+        expect(run.backend_attempt_id).toBeTruthy();
+        expect(run.graph_id).toBe(graphId);
+        expect(run.graph_version_id).toBe(graphVersionId);
+        expect(run.status_history[0]).toBe("pending");
+        expect(run.status_history).toContain("running");
+        expect(run.status_history.at(-1)).toBe("succeeded");
+        expect(persistedGraphVersion.graph_json).toEqual(graphVersion.graphJson);
 
         return {
           runId: run.id,

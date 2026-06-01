@@ -81,12 +81,10 @@ export interface AgentWizardCompletePayload {
 }
 
 function parseListInput(value: string): string[] {
-  return value
-    .split(/[\n,]/)
-    .flatMap((item) => {
-      const trimmed = item.trim();
-      return trimmed ? [trimmed] : [];
-    });
+  return value.split(/[\n,]/).flatMap((item) => {
+    const trimmed = item.trim();
+    return trimmed ? [trimmed] : [];
+  });
 }
 
 function formatListInput(items?: string[]): string {
@@ -278,17 +276,8 @@ function RoleStep() {
     jobDescription: initial.jobDescription || "",
     notes: initial.notes || "",
   });
-  const {
-    agentLabel,
-    instructions,
-    systemPrompt,
-    provider,
-    model,
-    temperature,
-    role,
-    jobDescription,
-    notes,
-  } = roleState;
+  const { agentLabel, instructions, systemPrompt, provider, model, temperature, role, jobDescription, notes } =
+    roleState;
   const updateRoleState = (patch: Partial<RoleStepState>) => dispatchRoleState({ type: "patch", patch });
 
   useEffect(() => {
@@ -805,10 +794,7 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
           )}
         </div>
 
-        <WizardNavigation
-          onComplete={handleComplete}
-          canProceedOverride={canProceedOverride}
-        />
+        <WizardNavigation onComplete={handleComplete} canProceedOverride={canProceedOverride} />
       </div>
     </div>
   );

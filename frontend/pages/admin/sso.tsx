@@ -257,13 +257,7 @@ function SsoFeedback({ error, success }: { error: string | null; success: string
   );
 }
 
-function IdentityStatusGrid({
-  config,
-  tokenInfo,
-}: {
-  config: SsoProviderConfig;
-  tokenInfo: ScimTokenInfo | null;
-}) {
+function IdentityStatusGrid({ config, tokenInfo }: { config: SsoProviderConfig; tokenInfo: ScimTokenInfo | null }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <IdentityStatusCard
@@ -297,8 +291,8 @@ function SsoTruthAlert({ onBack }: { onBack: () => void }) {
       <ShieldCheck className="size-4" />
       <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <span>
-          Identity stays truthful here: unavailable means nothing is configured, partial means configuration exists but is
-          not fully active yet, and configured means the feature is ready for operators to rely on.
+          Identity stays truthful here: unavailable means nothing is configured, partial means configuration exists but
+          is not fully active yet, and configured means the feature is ready for operators to rely on.
         </span>
         <Button variant="ghost" className="justify-start px-0 sm:justify-center" onClick={onBack}>
           Back to Governance Hub
@@ -464,9 +458,7 @@ function ScimTokenCard({
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="outline">{tokenInfo?.token_last4 ? `Token ••••${tokenInfo.token_last4}` : "No token"}</Badge>
           {tokenInfo?.last_used_at && (
-            <span className="text-xs text-muted-foreground">
-              Last used {formatUtcDateTime(tokenInfo.last_used_at)}
-            </span>
+            <span className="text-xs text-muted-foreground">Last used {formatUtcDateTime(tokenInfo.last_used_at)}</span>
           )}
         </div>
         {newToken && (

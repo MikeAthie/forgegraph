@@ -154,6 +154,40 @@ def test_company_signal_creation_is_idempotent_by_source_external_key(user):
     assert CompanySignal.objects.filter(company=company).count() == 1
 
 
+def test_company_signal_persists_explicit_generic_semantics(user):
+    company = _create_company(user)
+
+    signal = create_company_signal(
+        company=company,
+        actor=user,
+        signal_type="manual",
+        signal_kind="capability_gap",
+        domain_context="connector",
+        source="manual",
+        external_key="capability-gap-1",
+        title="Connector missing",
+    )
+
+    assert signal.signal_kind == "capability_gap"
+    assert signal.domain_context == "connector"
+
+
+def test_legacy_signal_type_derives_generic_semantics(user):
+    company = _create_company(user)
+
+    signal = create_company_signal(
+        company=company,
+        actor=user,
+        signal_type="stockout",
+        source="manual",
+        external_key="legacy-stockout-1",
+        title="Legacy compatibility signal",
+    )
+
+    assert signal.signal_kind == "risk"
+    assert signal.domain_context == "inventory"
+
+
 def test_qualify_signal_creates_one_opportunity(user):
     company = _create_company(user)
     signal = create_company_signal(
@@ -246,6 +280,10 @@ def test_paid_order_follow_up_trigger_is_idempotent(user):
 
     assert second_signal.id == first_signal.id
     assert second_run.id == first_run.id
+    assert first_signal.signal_kind == "milestone"
+    assert first_signal.domain_context == "commerce"
+    assert first_run.company_objective.operation_family == "follow_up"
+    assert first_run.company_objective.domain_context == "commerce"
     assert CompanySignal.objects.filter(company=company, signal_type="paid_order").count() == 1
     assert Run.objects.filter(graph_version__graph=company).count() == 1
 
@@ -265,12 +303,16 @@ def test_company_operation_launch_records_objective_contract(user):
     context_pack = run.context_packs.get()
 
     assert objective.run_type == "rehearsal"
-    assert "sell-through operating brief" in objective.run_goal
+    assert objective.operation_family == "brief"
+    assert objective.domain_context == "general"
+    assert "backend-owned company context" in objective.run_goal
+    assert "sell-through" not in objective.run_goal.lower()
     assert len(objective.action_plan_json) == 7
     assert objective.action_plan_json[0]["department"] == "Routing Department"
     assert "without executing" in objective.action_plan_json[0]["responsibility"]
-    assert "stock_drift" in objective.integrity_gates_json
+    assert "state_drift" in objective.integrity_gates_json
     assert run.input_json["company_ops_objective_id"] == str(objective.id)
+    assert run.input_json["operation_family"] == "brief"
     assert context_pack.scope_json["objective_contract"]["run_goal"] == objective.run_goal
 
 
@@ -288,10 +330,10 @@ def test_objective_evaluation_records_score_miss_and_next_decision(user):
         success_score=82,
         miss_analysis="Draft direction was useful but no buyer-facing demand was tested.",
         next_decision="Run a rehearsal content drop review before publishing.",
-        integrity_gates={"stock_drift": {"observed": 0, "status": "pass"}},
+        integrity_gates={"state_drift": {"observed": 0, "status": "pass"}},
     )
 
     assert evaluated.status == "evaluated"
     assert evaluated.success_score == 82
     assert "rehearsal content" in evaluated.next_decision
-    assert evaluated.integrity_gates_json["stock_drift"]["status"] == "pass"
+    assert evaluated.integrity_gates_json["state_drift"]["status"] == "pass"

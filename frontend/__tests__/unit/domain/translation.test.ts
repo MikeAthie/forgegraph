@@ -1,5 +1,6 @@
-import { toOperationVM } from "@/domain/translation";
-import type { RunDetail } from "@/lib/api";
+import { toCompanyVM, toOperationVM } from "@/domain/translation";
+import { buildCompanyGraphJson, buildCompanyProfile } from "@/lib/company-workspace";
+import type { CompanyDTO, CompanyOperatingModelVersionDTO, RunDetail } from "@/lib/api";
 
 describe("domain translation", () => {
   it("maps backend operation detail into product-safe deliverable and task view models", () => {
@@ -52,5 +53,45 @@ describe("domain translation", () => {
     expect(operation.deliverable.preview).toContain("Revenue is up 8%");
     expect(operation.tasks).toHaveLength(1);
     expect(operation.tasks[0]?.status).toBe("completed");
+  });
+
+  it("maps company alias DTOs into product-safe company view models", () => {
+    const profile = buildCompanyProfile({
+      companyName: "Alias Company",
+      companyType: "General Company",
+      objective: "Operate through the company alias API.",
+    });
+    const company = {
+      id: "company-1",
+      company_id: "company-1",
+      workflow_definition_id: "company-1",
+      storage_model: "Graph",
+      organization_id: "org-1",
+      name: "Alias Company",
+      description: "Operate through the company alias API.",
+      created_at: "2026-05-12T00:00:00Z",
+      updated_at: "2026-05-12T00:00:00Z",
+      setup_version_count: 1,
+      latest_setup_version: 1,
+    } satisfies CompanyDTO;
+    const setupVersion = {
+      id: "version-1",
+      company_id: "company-1",
+      workflow_definition_id: "company-1",
+      version: 1,
+      model_json: buildCompanyGraphJson(profile),
+      checksum: "checksum",
+      created_at: "2026-05-12T00:00:00Z",
+    } satisfies CompanyOperatingModelVersionDTO;
+
+    const vm = toCompanyVM(company, setupVersion, [], 0);
+
+    expect(vm.id).toBe("company-1");
+    expect(vm.name).toBe("Alias Company");
+    expect(vm.description).toBe("Operate through the company alias API.");
+    expect(vm.setupVersion).toBe(1);
+    expect(vm.setupVersionCount).toBe(1);
+    expect(vm.status).toBe("Ready to launch");
+    expect(vm.departments.length).toBeGreaterThan(0);
   });
 });

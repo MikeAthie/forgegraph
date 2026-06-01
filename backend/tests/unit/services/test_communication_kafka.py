@@ -12,6 +12,7 @@ from django.test import override_settings
 from application.services.communication_kafka import (
     KafkaOutboxPublisher,
     build_communication_kafka_payload,
+    build_communication_kafka_readiness_payload,
     communication_kafka_config,
     communication_kafka_key,
     communication_kafka_topic,
@@ -35,9 +36,17 @@ pytestmark = pytest.mark.django_db
 
 
 class FakeProducer:
-    def __init__(self, config: dict[str, Any], *, fail: bool = False) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        *,
+        fail: bool = False,
+        buffer_once: bool = False,
+    ) -> None:
         self.config = config
         self.fail = fail
+        self.buffer_once = buffer_once
+        self.polls = 0
         self.messages: list[dict[str, Any]] = []
 
     def produce(
@@ -46,15 +55,42 @@ class FakeProducer:
         *,
         key: str,
         value: bytes,
+        headers: list[tuple[str, bytes]] | None = None,
         callback: Any | None = None,
     ) -> None:
-        self.messages.append({"topic": topic, "key": key, "value": value})
+        if self.buffer_once:
+            self.buffer_once = False
+            raise BufferError("local producer queue is full")
+        self.messages.append({"topic": topic, "key": key, "value": value, "headers": headers or []})
         if callback is not None:
             callback(RuntimeError("broker unavailable") if self.fail else None, None)
+
+    def poll(self, timeout: float | None = None) -> int:
+        _ = timeout
+        self.polls += 1
+        return 0
 
     def flush(self, timeout: float | None = None) -> int:
         _ = timeout
         return 0
+
+
+class FakeTopicMetadata:
+    error = None
+
+
+class FakeClusterMetadata:
+    def __init__(self, topic: str) -> None:
+        self.topics = {topic: FakeTopicMetadata()}
+
+
+class FakeAdminClient:
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config = config
+
+    def list_topics(self, *, topic: str, timeout: float) -> FakeClusterMetadata:
+        _ = timeout
+        return FakeClusterMetadata(topic)
 
 
 def test_publish_command_exits_when_kafka_disabled() -> None:
@@ -110,6 +146,39 @@ def test_communication_kafka_payload_is_metadata_only() -> None:
     COMMUNICATION_KAFKA_ENABLED=True,
     COMMUNICATION_KAFKA_TOPIC="forgegraph.communication.events.v1",
 )
+def test_communication_kafka_payload_envelope_fields_are_authoritative() -> None:
+    _operator, _company, message = _create_message_with_body()
+    event = DomainEvent.objects.get(
+        event_type="communication.message.created",
+        aggregate_id=message.id,
+    )
+    outbox = DomainEventOutbox.objects.get(domain_event=event)
+    outbox.payload_json.update(
+        {
+            "event_id": str(uuid4()),
+            "event_type": "communication.thread.created",
+            "schema_version": "malicious_v9",
+            "aggregate_id": str(uuid4()),
+            "organization_id": str(uuid4()),
+            "idempotency_key": "malicious-key",
+        }
+    )
+    outbox.save(update_fields=["payload_json", "updated_at"])
+
+    payload = build_communication_kafka_payload(outbox)
+
+    assert payload["event_id"] == str(outbox.id)
+    assert payload["event_type"] == "communication.message.created"
+    assert payload["schema_version"] == "communication_event_v1"
+    assert payload["aggregate_id"] == str(message.id)
+    assert payload["organization_id"] == str(message.organization_id)
+    assert payload["idempotency_key"] == outbox.idempotency_key
+
+
+@override_settings(
+    COMMUNICATION_KAFKA_ENABLED=True,
+    COMMUNICATION_KAFKA_TOPIC="forgegraph.communication.events.v1",
+)
 def test_kafka_publisher_marks_outbox_published_with_fake_producer() -> None:
     _operator, company, message = _create_message_with_body()
     event = DomainEvent.objects.get(
@@ -139,9 +208,75 @@ def test_kafka_publisher_marks_outbox_published_with_fake_producer() -> None:
     assert outbox.publish_attempts == 1
     assert created[0].messages[0]["topic"] == "forgegraph.communication.events.v1"
     assert created[0].messages[0]["key"] == str(company.id)
+    assert ("event_id", str(outbox.id).encode("utf-8")) in created[0].messages[0]["headers"]
+    assert (
+        "schema_version",
+        b"communication_event_v1",
+    ) in created[0].messages[0]["headers"]
     kafka_payload = json.loads(created[0].messages[0]["value"].decode("utf-8"))
     assert kafka_payload["message_id"] == str(message.id)
     assert "Can you explain" not in str(kafka_payload)
+
+
+@override_settings(
+    COMMUNICATION_KAFKA_ENABLED=True,
+    COMMUNICATION_KAFKA_TOPIC="forgegraph.communication.events.v1",
+)
+def test_kafka_publisher_retries_once_when_local_queue_is_full() -> None:
+    _operator, _company, message = _create_message_with_body()
+    event = DomainEvent.objects.get(
+        event_type="communication.message.created",
+        aggregate_id=message.id,
+    )
+    outbox = DomainEventOutbox.objects.get(domain_event=event)
+    created: list[FakeProducer] = []
+
+    def factory(config: dict[str, Any]) -> FakeProducer:
+        producer = FakeProducer(config, buffer_once=True)
+        created.append(producer)
+        return producer
+
+    publisher = KafkaOutboxPublisher(
+        producer_factory=factory,
+        config={"bootstrap.servers": "localhost:9092"},
+        topic="forgegraph.communication.events.v1",
+        flush_timeout_seconds=0.1,
+    )
+
+    result = publish_outbox_event(outbox.id, publisher=publisher)
+
+    assert result.published is True
+    assert created[0].polls == 1
+    assert len(created[0].messages) == 1
+
+
+@override_settings(
+    COMMUNICATION_KAFKA_ENABLED=True,
+    COMMUNICATION_KAFKA_TOPIC="forgegraph.communication.events.v1",
+    COMMUNICATION_KAFKA_MAX_PAYLOAD_BYTES=1024,
+)
+def test_kafka_publisher_rejects_oversized_payload_before_delivery() -> None:
+    _operator, _company, message = _create_message_with_body()
+    event = DomainEvent.objects.get(
+        event_type="communication.message.created",
+        aggregate_id=message.id,
+    )
+    outbox = DomainEventOutbox.objects.get(domain_event=event)
+    outbox.payload_json["large_safe_metadata"] = "x" * 2048
+    outbox.save(update_fields=["payload_json", "updated_at"])
+    publisher = KafkaOutboxPublisher(
+        producer_factory=lambda config: FakeProducer(config),
+        config={"bootstrap.servers": "localhost:9092"},
+        topic="forgegraph.communication.events.v1",
+        flush_timeout_seconds=0.1,
+    )
+
+    result = publish_outbox_event(outbox.id, publisher=publisher)
+    outbox.refresh_from_db()
+
+    assert result.published is False
+    assert outbox.status == "failed"
+    assert "MAX_PAYLOAD_BYTES" in outbox.last_error
 
 
 @override_settings(
@@ -188,6 +323,24 @@ def test_kafka_config_accepts_standard_aliases() -> None:
     config = communication_kafka_config()
     assert config["bootstrap.servers"] == "redpanda:9092"
     assert config["client.id"] == "alias-client"
+    assert config["enable.idempotence"] is True
+    assert config["acks"] == "all"
+    assert config["retries"] == 5
+    assert config["compression.type"] == "lz4"
+
+
+@override_settings(
+    COMMUNICATION_KAFKA_ENABLED=True,
+    COMMUNICATION_KAFKA_BOOTSTRAP_SERVERS="managed.kafka:9092",
+    COMMUNICATION_KAFKA_TOPIC="forgegraph.communication.events.v1",
+)
+def test_communication_kafka_readiness_uses_admin_metadata_and_outbox_backlog() -> None:
+    payload = build_communication_kafka_readiness_payload(admin_client_factory=FakeAdminClient)
+
+    assert payload["ready"] is True
+    assert payload["broker_ready"] is True
+    assert payload["topic_ready"] is True
+    assert payload["backlog"] == 0
 
 
 def test_communication_kafka_key_falls_back_to_thread_id(user) -> None:

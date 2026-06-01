@@ -9,13 +9,7 @@ import {
   type CompanyDepartment,
   type CompanyProfile,
 } from "../../lib/company-workspace";
-import {
-  createTestUser,
-  ensureUserRegistered,
-  getAccessToken,
-  apiBaseUrl,
-  type TestUser,
-} from "../e2e/live-helpers";
+import { createTestUser, ensureUserRegistered, getAccessToken, apiBaseUrl, type TestUser } from "../e2e/live-helpers";
 
 const API_BASE_URL = apiBaseUrl();
 const LIVE_LLM_PLACEHOLDER_KEYS = new Set(["", "playwright-openai-key", "test-openai-key", "sk-test"]);
@@ -308,10 +302,14 @@ export type ToolExecutionReceipt = {
   result?: {
     provider?: string;
     mode?: string;
+    evidence_mode?: string;
+    provider_message_id?: string;
     message_id?: string;
     subject?: string;
     recipient_count?: number;
     recipient_domains?: string[];
+    recipient_hashes?: string[];
+    allowlist_matched?: boolean;
     status?: string;
     send_intent?: string;
     tool_id?: string;
@@ -588,7 +586,12 @@ export async function seedLiveAtlasLegacyConsultProductMode(
       testInfo,
     );
 
-    const serviceCatalogItem = await createAtlasConsultServiceCatalogItem(request, fixture.accessToken, fixture, testInfo);
+    const serviceCatalogItem = await createAtlasConsultServiceCatalogItem(
+      request,
+      fixture.accessToken,
+      fixture,
+      testInfo,
+    );
     const serviceEngagement = await createAtlasLegacyConsultEngagement(
       request,
       fixture.accessToken,
@@ -682,9 +685,7 @@ async function startLiveRunViaApi(
         return recovered;
       }
     }
-    throw new Error(
-      `Live run start failed with ${response.status()} ${response.statusText()}: ${responseText}`,
-    );
+    throw new Error(`Live run start failed with ${response.status()} ${response.statusText()}: ${responseText}`);
   }
   const body = (await response.json()) as ApiSuccess<{ id: string }>;
   return { runId: body.data.id };
@@ -749,7 +750,12 @@ async function createLiveReportFromSource(
   const review = await getPrimaryPeriodicReview(request, accessToken, fixture, testInfo);
   const metricSnapshot = await createMetricSnapshot(request, accessToken, fixture, review, testInfo);
   const reportRun = await runPeriodicReview(request, accessToken, review, metricSnapshot, source, testInfo);
-  const serviceHistoryProjection = await findProjection(request, accessToken, fixture.companyId, "client_service_history");
+  const serviceHistoryProjection = await findProjection(
+    request,
+    accessToken,
+    fixture.companyId,
+    "client_service_history",
+  );
   const currentStateProjection = await findProjection(request, accessToken, fixture.companyId, "currently_true_state");
 
   expect(reportRun.company_id).toBe(fixture.companyId);
@@ -807,7 +813,12 @@ export async function launchLiveOperationFromUi(
       if (uiRunId) {
         return { runId: uiRunId, mode: "ui" };
       }
-      const recoveredRun = await findRecentlyStartedLiveRun(request, fixture.accessToken, fixture.versionId, startedAfter);
+      const recoveredRun = await findRecentlyStartedLiveRun(
+        request,
+        fixture.accessToken,
+        fixture.versionId,
+        startedAfter,
+      );
       if (recoveredRun) {
         console.warn(
           `Recovered UI-launched live run ${recoveredRun.runId} after /api/runs/start returned ${runStartResponse.status()} ${runStartResponse.statusText()}.`,
@@ -1011,8 +1022,7 @@ export async function runAtlasLegacyConsultQualityJudge(
     product_specs: legacySeededContext().product_context,
     brand_constraints: legacySeededContext().brand_guidelines,
     recent_metrics: legacySeededContext().recent_metrics,
-    measurement_readiness:
-      evidence.measurementReadiness ?? buildMeasurementReadinessEvidence(report.metricSnapshot.id),
+    measurement_readiness: evidence.measurementReadiness ?? buildMeasurementReadinessEvidence(report.metricSnapshot.id),
     tool_catalog: buildAtlasLegacyToolCatalogEvidence(fixture),
     tool_execution_receipts: [
       evidence.emailSandboxReceipt,
@@ -1158,7 +1168,7 @@ export async function executeAtlasLegacyEmailSandboxTool(
 ): Promise<ToolExecutionReceipt> {
   return executeAtlasLegacyPackTool(request, fixture, completedRun, testInfo, {
     key: "email-sandbox-tool",
-    toolId: "email_service_connector",
+    toolId: "email.send_dry_run",
     description: "execute generic email sandbox tool",
     inputs: {
       subject: "Legacy DEPP GOLD strategy review checkpoint",
@@ -1524,7 +1534,8 @@ export async function materializeAtlasLegacyConsultOutputs(
   existingReport?: LiveReportResult,
 ): Promise<LiveAtlasLegacyConsultOutputs> {
   const report =
-    existingReport ?? (await createLiveReportFromCompletedRun(request, fixture.accessToken, fixture, completedRun, testInfo));
+    existingReport ??
+    (await createLiveReportFromCompletedRun(request, fixture.accessToken, fixture, completedRun, testInfo));
   const reportArtifact = report.reportRun.artifact;
   if (!reportArtifact) {
     throw new Error("ATLAS Legacy consult did not create a generic WorkArtifact through report generation.");
@@ -1585,7 +1596,10 @@ export async function createAtlasLegacyConsultReviewBoardSignal(
     ...scorecard.engagement.required_improvements.map((item) => `engagement: ${item}`),
   ];
   const response = await postJsonWithRetry(request, `${API_BASE_URL}/api/company-ops/signals`, {
-    headers: commandHeaders(fixture.accessToken, liveCommandKey(testInfo, "review-board-improvement", fixture.companyId)),
+    headers: commandHeaders(
+      fixture.accessToken,
+      liveCommandKey(testInfo, "review-board-improvement", fixture.companyId),
+    ),
     data: {
       company_id: fixture.companyId,
       signal_type: "manual",
@@ -1631,7 +1645,10 @@ async function restoreLiveLegacyCompanyGraphVersion(
   testInfo: TestInfo,
 ): Promise<string> {
   const response = await postJsonWithRetry(request, `${API_BASE_URL}/api/graphs/${fixture.companyId}/versions`, {
-    headers: commandHeaders(fixture.accessToken, liveCommandKey(testInfo, "restore-company-version", fixture.companyId)),
+    headers: commandHeaders(
+      fixture.accessToken,
+      liveCommandKey(testInfo, "restore-company-version", fixture.companyId),
+    ),
     data: {
       graph_json: buildLiveLegacyGraphJson(
         liveLegacyCompanyProfile(fixture.llm, fixture.llm.credentialId ?? null),
@@ -1794,8 +1811,7 @@ async function createAtlasLegacyConsultEngagement(
       status: "in_progress",
       customer_status: "working",
       intake_data: atlasLegacyConsultSeededContext(),
-      public_summary:
-        "ATLAS is preparing a reliable marketing growth strategy for Legacy Eyewear's DEPP GOLD model.",
+      public_summary: "ATLAS is preparing a reliable marketing growth strategy for Legacy Eyewear's DEPP GOLD model.",
       internal_notes:
         "Operator-only note: keep all work under the Legacy Eyewear Company and generic service primitives.",
       source_key: liveCommandKey(testInfo, "atlas-legacy-consult", fixture.companyId),
@@ -1862,8 +1878,7 @@ async function createAtlasLegacyConsultDeliverable(
         visibility: "customer",
         artifact_id: reportArtifact.id,
         report_run_id: reportRun.id,
-        summary:
-          "Generic customer deliverable linked to WorkArtifact and ReportRun outputs for Legacy Eyewear.",
+        summary: "Generic customer deliverable linked to WorkArtifact and ReportRun outputs for Legacy Eyewear.",
         metadata: {
           product_mode_live: true,
           run_id: completedRun.id,
@@ -1920,8 +1935,7 @@ async function createLegacyApprovalCheckpointDraft(
       title: "Legacy DEPP GOLD strategy approval checkpoint",
       channel: "approval",
       audience: "Legacy Eyewear owner",
-      body:
-        "Review the DEPP GOLD marketing strategy before any public social, email, WhatsApp, or landing-page deployment.",
+      body: "Review the DEPP GOLD marketing strategy before any public social, email, WhatsApp, or landing-page deployment.",
       call_to_action: "Approve the strategy checklist before execution.",
       signal_id: missingCapabilitySignal.id,
     },
@@ -2384,10 +2398,7 @@ function buildLiveLegacyGraphJson(
   };
 }
 
-function buildAtlasLegacyQualityJudgeGraphJson(
-  fixture: LiveAtlasLegacyConsultFixture,
-  testInfo: TestInfo,
-): GraphJson {
+function buildAtlasLegacyQualityJudgeGraphJson(fixture: LiveAtlasLegacyConsultFixture, testInfo: TestInfo): GraphJson {
   const namespace = liveProductModeRunNamespace(testInfo);
   return {
     nodes: [
@@ -2557,21 +2568,17 @@ async function installCompanyPack(
   role: "primary" | "addon",
   testInfo: TestInfo,
 ): Promise<PackInstallation> {
-  const response = await postJsonWithRetry(
-    request,
-    `${API_BASE_URL}/api/companies/${companyId}/packs/install`,
-    {
-      headers: commandHeaders(accessToken, liveCommandKey(testInfo, "install", companyId, packId)),
-      data: {
-        pack_id: packId,
-        role,
-        config: {
-          skip_graph_version: true,
-          selected_services: ["Legacy Eyewear shared operating context", "Backend-owned reporting"],
-        },
+  const response = await postJsonWithRetry(request, `${API_BASE_URL}/api/companies/${companyId}/packs/install`, {
+    headers: commandHeaders(accessToken, liveCommandKey(testInfo, "install", companyId, packId)),
+    data: {
+      pack_id: packId,
+      role,
+      config: {
+        skip_graph_version: true,
+        selected_services: ["Legacy Eyewear shared operating context", "Backend-owned reporting"],
       },
     },
-  );
+  });
   await expectApiOk(response, `install ${packId}`);
   const body = (await response.json()) as ApiSuccess<{ installation: PackInstallation }>;
   return body.data.installation;
@@ -2589,23 +2596,19 @@ async function createLegacyProgramIfPossible(
     return null;
   }
 
-  const response = await postJsonWithRetry(
-    request,
-    `${API_BASE_URL}/api/companies/${companyId}/programs`,
-    {
-      headers: commandHeaders(accessToken, liveCommandKey(testInfo, "program", companyId)),
-      data: {
-        template_id: "dmp.engagement",
-        pack_id: "digital_marketing_pro.v1",
-        title: "Legacy Eyewear shared operating program",
-        objective: "Keep Legacy Eyewear inventory, pricing, service history, and reporting under one Company.",
-        metadata: {
-          product_mode_live: true,
-          company_boundary: "single_company_multiple_pack_installations",
-        },
+  const response = await postJsonWithRetry(request, `${API_BASE_URL}/api/companies/${companyId}/programs`, {
+    headers: commandHeaders(accessToken, liveCommandKey(testInfo, "program", companyId)),
+    data: {
+      template_id: "dmp.engagement",
+      pack_id: "digital_marketing_pro.v1",
+      title: "Legacy Eyewear shared operating program",
+      objective: "Keep Legacy Eyewear inventory, pricing, service history, and reporting under one Company.",
+      metadata: {
+        product_mode_live: true,
+        company_boundary: "single_company_multiple_pack_installations",
       },
     },
-  );
+  });
   await expectApiOk(response, "create Legacy product-mode program");
   const body = (await response.json()) as ApiSuccess<{ program: { id: string } }>;
   return body.data.program.id;
@@ -2618,24 +2621,20 @@ async function createLegacyContextArtifact(
   programId: string | null,
   testInfo: TestInfo,
 ): Promise<WorkArtifact> {
-  const response = await postJsonWithRetry(
-    request,
-    `${API_BASE_URL}/api/work-artifacts`,
-    {
-      headers: commandHeaders(accessToken, liveCommandKey(testInfo, "context-artifact", companyId)),
-      data: {
-        company_id: companyId,
-        program_id: programId,
-        title: "Legacy Eyewear shared company context",
-        artifact_type: "company_context",
-        content: legacySeededContext(),
-        metadata: {
-          product_mode_live: true,
-          source: "playwright_live_fixture",
-        },
+  const response = await postJsonWithRetry(request, `${API_BASE_URL}/api/work-artifacts`, {
+    headers: commandHeaders(accessToken, liveCommandKey(testInfo, "context-artifact", companyId)),
+    data: {
+      company_id: companyId,
+      program_id: programId,
+      title: "Legacy Eyewear shared company context",
+      artifact_type: "company_context",
+      content: legacySeededContext(),
+      metadata: {
+        product_mode_live: true,
+        source: "playwright_live_fixture",
       },
     },
-  );
+  });
   await expectApiOk(response, "create Legacy context artifact");
   const body = (await response.json()) as ApiSuccess<{ artifact: WorkArtifact }>;
   return body.data.artifact;
@@ -2658,35 +2657,31 @@ async function getPrimaryPeriodicReview(
     return review;
   }
 
-  const createResponse = await postJsonWithRetry(
-    request,
-    `${API_BASE_URL}/api/periodic-reviews`,
-    {
-      headers: commandHeaders(accessToken, liveCommandKey(testInfo, "review-definition", fixture.companyId)),
-      data: {
-        company_id: fixture.companyId,
-        program_id: fixture.programId,
-        template_id: "legacy_live_product_mode_review.v1",
-        display_name: "Legacy Eyewear live product-mode review",
-        cadence: "monthly",
-        timezone: "UTC",
-        evaluation_profile_id: "",
-        report_template_id: "legacy_live_product_mode_report.v1",
-        history_projection_type: "client_service_history",
-        enabled: true,
-        metadata: {
-          product_mode_live: true,
-          architecture_boundary: "Organization -> Company -> PackInstallation -> generic primitives",
-          source: "playwright_live_fixture",
-          report_template: {
-            id: "legacy_live_product_mode_report.v1",
-            artifact_schema_id: "periodic_report",
-            sections: ["summary", "metric_snapshot", "next_actions"],
-          },
+  const createResponse = await postJsonWithRetry(request, `${API_BASE_URL}/api/periodic-reviews`, {
+    headers: commandHeaders(accessToken, liveCommandKey(testInfo, "review-definition", fixture.companyId)),
+    data: {
+      company_id: fixture.companyId,
+      program_id: fixture.programId,
+      template_id: "legacy_live_product_mode_review.v1",
+      display_name: "Legacy Eyewear live product-mode review",
+      cadence: "monthly",
+      timezone: "UTC",
+      evaluation_profile_id: "",
+      report_template_id: "legacy_live_product_mode_report.v1",
+      history_projection_type: "client_service_history",
+      enabled: true,
+      metadata: {
+        product_mode_live: true,
+        architecture_boundary: "Organization -> Company -> PackInstallation -> generic primitives",
+        source: "playwright_live_fixture",
+        report_template: {
+          id: "legacy_live_product_mode_report.v1",
+          artifact_schema_id: "periodic_report",
+          sections: ["summary", "metric_snapshot", "next_actions"],
         },
       },
     },
-  );
+  });
   await expectApiOk(createResponse, "create periodic review definition");
   const createBody = (await createResponse.json()) as ApiSuccess<{ periodic_review: PeriodicReview }>;
   return createBody.data.periodic_review;
@@ -2699,45 +2694,41 @@ async function createMetricSnapshot(
   review: PeriodicReview,
   testInfo: TestInfo,
 ): Promise<MetricSnapshot> {
-  const response = await postJsonWithRetry(
-    request,
-    `${API_BASE_URL}/api/metric-snapshots`,
-    {
-      headers: commandHeaders(accessToken, liveCommandKey(testInfo, "metrics", fixture.companyId)),
-      data: {
-        company_id: fixture.companyId,
-        program_id: fixture.programId,
-        review_definition_id: review.id,
-        period_start: review.current_due_period.period_start,
-        period_end: review.current_due_period.period_end,
-        metric_values: {
-          social_engagement_rate: 3.4,
-          meta_tiktok_ctr: 1.6,
-          google_search_ctr: 5.2,
-          landing_page_conversion: 15.5,
-          roas: 3.2,
-          email_open_rate: 26,
-          email_click_rate: 3.1,
-          customer_retention_rate: 78,
-          target_email_open_rate: 32,
-          target_email_click_rate: 4.5,
-          target_landing_page_conversion: 18,
-          target_roas: 3.8,
-        },
-        metric_sources: {
-          inventory: "Legacy Eyewear seeded context",
-          price_book: "Legacy Eyewear seeded context",
-          context_artifact_id: fixture.contextArtifact.id,
-          measurement_owner: "ATLAS consulting operator",
-          measurement_cadence: "weekly for first 4 weeks, then monthly",
-          next_measurement_date: nextIsoDate(14),
-        },
-        source_type: "seed",
-        notes:
-          "Live product-mode E2E metrics for Legacy Eyewear. Includes DEPP GOLD baseline/target metrics, weekly learning cadence, NC-29026 inventory constraints, and quiet-status brand context.",
+  const response = await postJsonWithRetry(request, `${API_BASE_URL}/api/metric-snapshots`, {
+    headers: commandHeaders(accessToken, liveCommandKey(testInfo, "metrics", fixture.companyId)),
+    data: {
+      company_id: fixture.companyId,
+      program_id: fixture.programId,
+      review_definition_id: review.id,
+      period_start: review.current_due_period.period_start,
+      period_end: review.current_due_period.period_end,
+      metric_values: {
+        social_engagement_rate: 3.4,
+        meta_tiktok_ctr: 1.6,
+        google_search_ctr: 5.2,
+        landing_page_conversion: 15.5,
+        roas: 3.2,
+        email_open_rate: 26,
+        email_click_rate: 3.1,
+        customer_retention_rate: 78,
+        target_email_open_rate: 32,
+        target_email_click_rate: 4.5,
+        target_landing_page_conversion: 18,
+        target_roas: 3.8,
       },
+      metric_sources: {
+        inventory: "Legacy Eyewear seeded context",
+        price_book: "Legacy Eyewear seeded context",
+        context_artifact_id: fixture.contextArtifact.id,
+        measurement_owner: "ATLAS consulting operator",
+        measurement_cadence: "weekly for first 4 weeks, then monthly",
+        next_measurement_date: nextIsoDate(14),
+      },
+      source_type: "seed",
+      notes:
+        "Live product-mode E2E metrics for Legacy Eyewear. Includes DEPP GOLD baseline/target metrics, weekly learning cadence, NC-29026 inventory constraints, and quiet-status brand context.",
     },
-  );
+  });
   await expectApiOk(response, "create metric snapshot");
   const body = (await response.json()) as ApiSuccess<{ metric_snapshot: MetricSnapshot }>;
   return body.data.metric_snapshot;
@@ -2751,18 +2742,14 @@ async function runPeriodicReview(
   source: { id: string; notes: string },
   testInfo: TestInfo,
 ): Promise<ReportRun> {
-  const response = await postJsonWithRetry(
-    request,
-    `${API_BASE_URL}/api/periodic-reviews/${review.id}/run`,
-    {
-      headers: commandHeaders(accessToken, liveCommandKey(testInfo, "review", review.id, source.id)),
-      data: {
-        metric_snapshot_id: metricSnapshot.id,
-        force: true,
-        notes: source.notes,
-      },
+  const response = await postJsonWithRetry(request, `${API_BASE_URL}/api/periodic-reviews/${review.id}/run`, {
+    headers: commandHeaders(accessToken, liveCommandKey(testInfo, "review", review.id, source.id)),
+    data: {
+      metric_snapshot_id: metricSnapshot.id,
+      force: true,
+      notes: source.notes,
     },
-  );
+  });
   await expectApiOk(response, "run periodic review");
   const body = (await response.json()) as ApiSuccess<{ report_run?: ReportRun }>;
   if (!body.data.report_run) {
@@ -2808,7 +2795,7 @@ export function atlasLegacyConsultOperationBrief(): string {
     "Brand constraints: quiet-status luxury, concise service language, no live checkout, no public outreach, no procurement side effects.",
     "Current channel capabilities: internal reporting, inventory review, product positioning, approval checkpoints, analytics context, report generation, and an email sandbox connector that can capture a draft/send receipt only after policy gating.",
     "Missing execution capabilities: social publishing, WhatsApp broadcast, and landing-page deployment connectors. Do not claim those channels were executed.",
-    "Tool evidence to use honestly: email_service_connector is available only for sandbox capture; report_builder, analytics_connector, and approval_router are available as generic internal tools; social, WhatsApp, production email, and landing-page deployment are missing and must become CompanySignal or OperationRecommendation items.",
+    "Tool evidence to use honestly: email_connector is available only for generic email dry-run capture; report_builder, analytics_connector, and approval_router are available as generic internal tools; social, WhatsApp, production email, and landing-page deployment are missing and must become CompanySignal or OperationRecommendation items.",
     "Commercial readiness plan required: keep 599 MXN as the price anchor; avoid blanket discounting; cap the first approved demand test at 6 of 18 units; reserve at least 12 units until a client-approved channel plan exists; pause public demand generation if inventory drops below 12 units; target Mexico City buyers who value quiet-status premium optical frames.",
     "Measurement baseline metrics: social engagement rate 3.4%, email open rate 26%, email click rate 3.1%, landing-page conversion 15.5%, ROAS 3.2.",
     "Measurement targets: email open rate 32%, email click rate 4.5%, landing-page conversion 18%, ROAS 3.8. Cadence: weekly for the first 4 weeks, then monthly. Owner: ATLAS consulting operator. Next measurement date: within 14 days of approval.",
@@ -2876,7 +2863,10 @@ function parseAtlasLegacyQualityScorecard(rawText: string): AtlasLegacyConsultQu
 }
 
 function parseJsonObject(rawText: string): Record<string, unknown> {
-  const cleaned = rawText.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  const cleaned = rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "");
   try {
     const parsed = JSON.parse(cleaned);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -2897,16 +2887,16 @@ function parseJsonObject(rawText: string): Record<string, unknown> {
 }
 
 function normalizeQualityDecision(value: unknown): AtlasLegacyConsultQualityScorecard["decision"] {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   if (normalized === "client_ready" || normalized === "revision_required" || normalized === "fail") {
     return normalized;
   }
   throw new Error(`ATLAS Legacy quality judge returned invalid decision: ${String(value)}`);
 }
 
-function normalizeClientReadinessLevel(
-  value: unknown,
-): AtlasLegacyConsultQualityScorecard["client_readiness_level"] {
+function normalizeClientReadinessLevel(value: unknown): AtlasLegacyConsultQualityScorecard["client_readiness_level"] {
   const normalized = String(value ?? "").trim();
   if (
     normalized === "not_ready" ||
@@ -2999,15 +2989,9 @@ function parseReviewBoardImprovements(value: unknown): ReviewBoardImprovement[] 
   });
 }
 
-function withAtlasLegacyMissingConnectorImprovement(
-  improvements: ReviewBoardImprovement[],
-): ReviewBoardImprovement[] {
+function withAtlasLegacyMissingConnectorImprovement(improvements: ReviewBoardImprovement[]): ReviewBoardImprovement[] {
   const missingConnectorPattern = /social|email|whatsapp|landing/i;
-  if (
-    improvements.some((item) =>
-      missingConnectorPattern.test(`${item.title} ${item.rationale}`),
-    )
-  ) {
+  if (improvements.some((item) => missingConnectorPattern.test(`${item.title} ${item.rationale}`))) {
     return improvements;
   }
 
@@ -3034,11 +3018,7 @@ function parseReviewBoardApprovalGate(value: unknown): ReviewBoardApprovalGate {
   const record = value as Record<string, unknown>;
   const clientStatus = stringValue(record.client_deliverable_status);
   const executionStatus = stringValue(record.execution_status);
-  if (
-    clientStatus !== "approved_for_review" &&
-    clientStatus !== "needs_revision" &&
-    clientStatus !== "blocked"
-  ) {
+  if (clientStatus !== "approved_for_review" && clientStatus !== "needs_revision" && clientStatus !== "blocked") {
     throw new Error("ATLAS Legacy quality judge approval gate has invalid client_deliverable_status.");
   }
   if (
@@ -3157,14 +3137,14 @@ function buildAtlasLegacyToolCatalogEvidence(fixture: LiveAtlasLegacyConsultFixt
     available_tools: dmpInstalled
       ? [
           {
-            tool_id: "email_service_connector",
+            tool_id: "email.send_dry_run",
             pack_id: "digital_marketing_pro.v1",
             status: "available",
             mode: "sandbox",
             approval_required_for_send: true,
           },
           {
-            tool_id: "dmp.email_draft_send_schedule",
+            tool_id: "email.send_dry_run",
             pack_id: "digital_marketing_pro.v1",
             status: "available",
             mode: "sandbox",

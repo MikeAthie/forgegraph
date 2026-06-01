@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer } from "react";
-import { LockKeyhole, MessageSquare, Paperclip, Send } from "lucide-react";
+import { GitBranch, LockKeyhole, MessageSquare, Paperclip, Send } from "lucide-react";
 
 import { StatusBadge, formatDateTime } from "@/components/os/operations-ui";
 import {
@@ -15,7 +15,7 @@ import {
 import { communicationRepository } from "@/domain/repositories";
 import { translateProductError } from "@/domain/errors";
 import type { CommunicationMessageDTO, CommunicationThreadDTO, CommunicationVisibility } from "@/lib/api";
-import { showError } from "@/lib/toast";
+import { showError, showSuccess } from "@/lib/toast";
 
 type CommunicationPanelProps = {
   companyId: string;
@@ -30,6 +30,8 @@ type CommunicationPanelState = {
   visibility: CommunicationVisibility;
   loading: boolean;
   sending: boolean;
+  routingMessageId: string | null;
+  routedMessageIds: string[];
   error: string | null;
 };
 
@@ -47,7 +49,11 @@ type CommunicationPanelAction =
   | { type: "send-thread-created"; thread: CommunicationThreadDTO }
   | { type: "send-success" }
   | { type: "send-error"; error: string }
-  | { type: "send-finish" };
+  | { type: "send-finish" }
+  | { type: "route-start"; messageId: string }
+  | { type: "route-success"; messageId: string }
+  | { type: "route-error"; error: string }
+  | { type: "route-finish" };
 
 const initialCommunicationPanelState: CommunicationPanelState = {
   threads: [],
@@ -57,6 +63,8 @@ const initialCommunicationPanelState: CommunicationPanelState = {
   visibility: "customer",
   loading: true,
   sending: false,
+  routingMessageId: null,
+  routedMessageIds: [],
   error: null,
 };
 
@@ -98,6 +106,19 @@ function communicationPanelReducer(
       return { ...state, error: action.error };
     case "send-finish":
       return { ...state, sending: false };
+    case "route-start":
+      return { ...state, routingMessageId: action.messageId, error: null };
+    case "route-success":
+      return {
+        ...state,
+        routedMessageIds: state.routedMessageIds.includes(action.messageId)
+          ? state.routedMessageIds
+          : [...state.routedMessageIds, action.messageId],
+      };
+    case "route-error":
+      return { ...state, error: action.error };
+    case "route-finish":
+      return { ...state, routingMessageId: null };
     default:
       return state;
   }
@@ -119,7 +140,18 @@ function attachmentLabel(type: string): string {
 
 export function CommunicationPanel({ companyId, companyName }: CommunicationPanelProps) {
   const [state, dispatch] = useReducer(communicationPanelReducer, initialCommunicationPanelState);
-  const { threads, messages, selectedThreadId, body, visibility, loading, sending, error } = state;
+  const {
+    threads,
+    messages,
+    selectedThreadId,
+    body,
+    visibility,
+    loading,
+    sending,
+    routingMessageId,
+    routedMessageIds,
+    error,
+  } = state;
 
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null,
@@ -205,6 +237,31 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
     }
   };
 
+  const handleRouteRequest = async (message: CommunicationMessageDTO) => {
+    if (routingMessageId) {
+      return;
+    }
+    dispatch({ type: "route-start", messageId: message.id });
+    try {
+      const result = await communicationRepository.routeRequest(message.id);
+      dispatch({ type: "route-success", messageId: message.id });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("forgegraph:whiteboards:changed", { detail: { companyId } }));
+      }
+      showSuccess(
+        "Request routed",
+        `Classification: ${result.classification.classification}. Whiteboard: ${result.whiteboard.id.slice(0, 8)}.`,
+      );
+      await loadMessages(message.thread_id);
+    } catch (routeError: unknown) {
+      const messageText = translateProductError(routeError, "company");
+      dispatch({ type: "route-error", error: messageText });
+      showError("Request not routed", messageText);
+    } finally {
+      dispatch({ type: "route-finish" });
+    }
+  };
+
   return (
     <div
       data-testid="communication-panel"
@@ -285,6 +342,36 @@ export function CommunicationPanel({ companyId, companyName }: CommunicationPane
                           {attachmentLabel(attachment.type)}
                         </span>
                       ))}
+                    </div>
+                  ) : null}
+                  {message.routed_whiteboard_id || routedMessageIds.includes(message.id) ? (
+                    <div
+                      data-testid={`communication-message-routed-${message.id}`}
+                      className="mt-3 rounded-[0.9rem] border border-emerald-800/15 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-200/15 dark:bg-emerald-500/10 dark:text-emerald-100"
+                    >
+                      <span className="font-semibold">Routed to whiteboard</span>
+                      {message.routed_classification ? (
+                        <span> · Classification: {message.routed_classification}</span>
+                      ) : null}
+                      {message.routed_whiteboard_id ? (
+                        <span> · Whiteboard: {message.routed_whiteboard_id.slice(0, 8)}</span>
+                      ) : null}
+                    </div>
+                  ) : selectedThread?.can_send_internal &&
+                    message.visibility === "customer" &&
+                    ["request", "missing_info_request"].includes(message.message_kind) ? (
+                    <div className="mt-3">
+                      <Button
+                        data-testid={`communication-message-route-request-${message.id}`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleRouteRequest(message)}
+                        disabled={routingMessageId === message.id}
+                      >
+                        {routingMessageId === message.id ? <Spinner size="xs" /> : <GitBranch className="size-4" />}
+                        Route request
+                      </Button>
                     </div>
                   ) : null}
                 </div>

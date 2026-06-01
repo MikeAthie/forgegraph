@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
+from typing import cast
 from uuid import UUID
 
 from django.core.management.base import BaseCommand, CommandError
@@ -182,7 +183,10 @@ class Command(BaseCommand):
             raise CommandError("graph_version_id must be a valid UUID.") from exc
 
         try:
-            return GraphVersion.objects.select_related("graph__owner").get(id=graph_version_id)
+            return cast(
+                GraphVersion,
+                GraphVersion.objects.select_related("graph__owner").get(id=graph_version_id),
+            )
         except GraphVersion.DoesNotExist as exc:
             raise CommandError(f"GraphVersion '{graph_version_id}' does not exist.") from exc
 

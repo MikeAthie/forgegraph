@@ -174,56 +174,56 @@ export async function mockOperationApis(
 
   await Promise.all([
     page.route(/\/api\/decisions\/count(?:\?.*)?$/, async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(apiSuccess({ count: 0 })),
-    });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(apiSuccess({ count: 0 })),
+      });
     }),
 
     page.route(/\/api\/runs\/?(?:\?.*)?$/, async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(apiSuccess(operations)),
-    });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(apiSuccess(operations)),
+      });
     }),
 
     page.route(/\/api\/runs\/[^/]+(?:\?.*)?$/, async (route: Route) => {
-    const operationId = route.request().url().split("/api/runs/")[1]?.split("?")[0] ?? "";
-    if (options?.missingOperationId && operationId === options.missingOperationId) {
-      await route.fulfill({
-        status: 404,
-        contentType: "application/json",
-        body: JSON.stringify({
-          error: {
-            code: "NOT_FOUND",
-            message: "Operation not found.",
-          },
-          meta: {
-            requestId: "playwright-operation-missing",
-            timestamp: "2026-04-01T12:00:00.000Z",
-          },
-        }),
-      });
-      return;
-    }
-
-    const detail = details[operationId];
-    await route.fulfill({
-      status: detail ? 200 : 404,
-      contentType: "application/json",
-      body: JSON.stringify(
-        detail
-          ? apiSuccess(detail)
-          : {
-              error: {
-                code: "NOT_FOUND",
-                message: "Operation not found.",
-              },
+      const operationId = route.request().url().split("/api/runs/")[1]?.split("?")[0] ?? "";
+      if (options?.missingOperationId && operationId === options.missingOperationId) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: {
+              code: "NOT_FOUND",
+              message: "Operation not found.",
             },
-      ),
-    });
+            meta: {
+              requestId: "playwright-operation-missing",
+              timestamp: "2026-04-01T12:00:00.000Z",
+            },
+          }),
+        });
+        return;
+      }
+
+      const detail = details[operationId];
+      await route.fulfill({
+        status: detail ? 200 : 404,
+        contentType: "application/json",
+        body: JSON.stringify(
+          detail
+            ? apiSuccess(detail)
+            : {
+                error: {
+                  code: "NOT_FOUND",
+                  message: "Operation not found.",
+                },
+              },
+        ),
+      });
     }),
   ]);
 }

@@ -184,26 +184,77 @@ function useCommerceInventoryController({ companyId }: CommerceInventoryPanelPro
     },
     [],
   );
-  const setOverview = useCallback((value: SetStateAction<InventoryOverview | null>) => setPanelField("overview", value), [setPanelField]);
-  const setCommerceOverview = useCallback((value: SetStateAction<CommerceOperationsOverview | null>) => setPanelField("commerceOverview", value), [setPanelField]);
-  const setCompanyOpsOverview = useCallback((value: SetStateAction<CompanyOpsOverview | null>) => setPanelField("companyOpsOverview", value), [setPanelField]);
-  const setOrders = useCallback((value: SetStateAction<CommerceOrder[]>) => setPanelField("orders", value), [setPanelField]);
+  const setOverview = useCallback(
+    (value: SetStateAction<InventoryOverview | null>) => setPanelField("overview", value),
+    [setPanelField],
+  );
+  const setCommerceOverview = useCallback(
+    (value: SetStateAction<CommerceOperationsOverview | null>) => setPanelField("commerceOverview", value),
+    [setPanelField],
+  );
+  const setCompanyOpsOverview = useCallback(
+    (value: SetStateAction<CompanyOpsOverview | null>) => setPanelField("companyOpsOverview", value),
+    [setPanelField],
+  );
+  const setOrders = useCallback(
+    (value: SetStateAction<CommerceOrder[]>) => setPanelField("orders", value),
+    [setPanelField],
+  );
   const setLoading = useCallback((value: SetStateAction<boolean>) => setPanelField("loading", value), [setPanelField]);
-  const setActionLoading = useCallback((value: SetStateAction<string | null>) => setPanelField("actionLoading", value), [setPanelField]);
-  const setSelectedProductId = useCallback((value: SetStateAction<string>) => setPanelField("selectedProductId", value), [setPanelField]);
+  const setActionLoading = useCallback(
+    (value: SetStateAction<string | null>) => setPanelField("actionLoading", value),
+    [setPanelField],
+  );
+  const setSelectedProductId = useCallback(
+    (value: SetStateAction<string>) => setPanelField("selectedProductId", value),
+    [setPanelField],
+  );
   const setQuantity = useCallback((value: SetStateAction<string>) => setPanelField("quantity", value), [setPanelField]);
-  const setBuyerAlias = useCallback((value: SetStateAction<string>) => setPanelField("buyerAlias", value), [setPanelField]);
-  const setChannel = useCallback((value: SetStateAction<(typeof channels)[number]>) => setPanelField("channel", value), [setPanelField]);
+  const setBuyerAlias = useCallback(
+    (value: SetStateAction<string>) => setPanelField("buyerAlias", value),
+    [setPanelField],
+  );
+  const setChannel = useCallback(
+    (value: SetStateAction<(typeof channels)[number]>) => setPanelField("channel", value),
+    [setPanelField],
+  );
   const setNote = useCallback((value: SetStateAction<string>) => setPanelField("note", value), [setPanelField]);
-  const setError = useCallback((value: SetStateAction<string | null>) => setPanelField("error", value), [setPanelField]);
-  const setCredentials = useCallback((value: SetStateAction<Credential[]>) => setPanelField("credentials", value), [setPanelField]);
-  const setMediaAssets = useCallback((value: SetStateAction<ArchiveAsset[]>) => setPanelField("mediaAssets", value), [setPanelField]);
-  const setMediaPreviewUrls = useCallback((value: SetStateAction<Record<string, string>>) => setPanelField("mediaPreviewUrls", value), [setPanelField]);
-  const setMediaJobs = useCallback((value: SetStateAction<MediaGenerationJob[]>) => setPanelField("mediaJobs", value), [setPanelField]);
-  const setMediaPrompt = useCallback((value: SetStateAction<string>) => setPanelField("mediaPrompt", value), [setPanelField]);
-  const setMediaLoading = useCallback((value: SetStateAction<boolean>) => setPanelField("mediaLoading", value), [setPanelField]);
-  const setMediaActionLoading = useCallback((value: SetStateAction<"image" | "video" | null>) => setPanelField("mediaActionLoading", value), [setPanelField]);
-  const setMediaError = useCallback((value: SetStateAction<string | null>) => setPanelField("mediaError", value), [setPanelField]);
+  const setError = useCallback(
+    (value: SetStateAction<string | null>) => setPanelField("error", value),
+    [setPanelField],
+  );
+  const setCredentials = useCallback(
+    (value: SetStateAction<Credential[]>) => setPanelField("credentials", value),
+    [setPanelField],
+  );
+  const setMediaAssets = useCallback(
+    (value: SetStateAction<ArchiveAsset[]>) => setPanelField("mediaAssets", value),
+    [setPanelField],
+  );
+  const setMediaPreviewUrls = useCallback(
+    (value: SetStateAction<Record<string, string>>) => setPanelField("mediaPreviewUrls", value),
+    [setPanelField],
+  );
+  const setMediaJobs = useCallback(
+    (value: SetStateAction<MediaGenerationJob[]>) => setPanelField("mediaJobs", value),
+    [setPanelField],
+  );
+  const setMediaPrompt = useCallback(
+    (value: SetStateAction<string>) => setPanelField("mediaPrompt", value),
+    [setPanelField],
+  );
+  const setMediaLoading = useCallback(
+    (value: SetStateAction<boolean>) => setPanelField("mediaLoading", value),
+    [setPanelField],
+  );
+  const setMediaActionLoading = useCallback(
+    (value: SetStateAction<"image" | "video" | null>) => setPanelField("mediaActionLoading", value),
+    [setPanelField],
+  );
+  const setMediaError = useCallback(
+    (value: SetStateAction<string | null>) => setPanelField("mediaError", value),
+    [setPanelField],
+  );
   const mediaPreviewUrlRef = useRef<Record<string, string>>({});
 
   const products = useMemo(() => overview?.products ?? [], [overview?.products]);
@@ -231,13 +282,16 @@ function useCommerceInventoryController({ companyId }: CommerceInventoryPanelPro
     return drafts;
   }, [companyOpsOverview?.publication_drafts]);
 
-  const replaceMediaPreviewUrls = useCallback((nextUrls: Record<string, string>) => {
-    for (const url of Object.values(mediaPreviewUrlRef.current)) {
-      URL.revokeObjectURL(url);
-    }
-    mediaPreviewUrlRef.current = nextUrls;
-    setMediaPreviewUrls(nextUrls);
-  }, [setMediaPreviewUrls]);
+  const replaceMediaPreviewUrls = useCallback(
+    (nextUrls: Record<string, string>) => {
+      for (const url of Object.values(mediaPreviewUrlRef.current)) {
+        URL.revokeObjectURL(url);
+      }
+      mediaPreviewUrlRef.current = nextUrls;
+      setMediaPreviewUrls(nextUrls);
+    },
+    [setMediaPreviewUrls],
+  );
 
   const loadMediaDrafts = useCallback(async () => {
     setMediaLoading(true);
@@ -256,13 +310,13 @@ function useCommerceInventoryController({ companyId }: CommerceInventoryPanelPro
           if (asset.asset_type !== "image" || !asset.latest_version_id) {
             return null;
           }
-            try {
-              const blob = await archiveApi.getAssetVersionContent(asset.id, asset.latest_version_id as string);
-              return [asset.id, URL.createObjectURL(blob)] as const;
-            } catch {
-              // A broken preview should not hide the backend-owned asset record.
-              return null;
-            }
+          try {
+            const blob = await archiveApi.getAssetVersionContent(asset.id, asset.latest_version_id as string);
+            return [asset.id, URL.createObjectURL(blob)] as const;
+          } catch {
+            // A broken preview should not hide the backend-owned asset record.
+            return null;
+          }
         }),
       );
       const nextPreviewUrls = Object.fromEntries(
@@ -675,9 +729,23 @@ export function CommerceInventoryPanel(props: CommerceInventoryPanelProps) {
 function InventoryMetricGrid({ controller }: { controller: CommerceInventoryController }) {
   return (
     <div className="grid gap-3 md:grid-cols-4">
-      <InventoryMetric icon={<PackageOpen className="size-4" />} label="Total" value={controller.overview?.summary.total_units ?? 0} />
-      <InventoryMetric icon={<PackageCheck className="size-4" />} label="Available" value={controller.overview?.summary.available_units ?? 0} tone="emerald" />
-      <InventoryMetric icon={<Clock3 className="size-4" />} label="Held" value={controller.overview?.summary.held_units ?? 0} tone="amber" />
+      <InventoryMetric
+        icon={<PackageOpen className="size-4" />}
+        label="Total"
+        value={controller.overview?.summary.total_units ?? 0}
+      />
+      <InventoryMetric
+        icon={<PackageCheck className="size-4" />}
+        label="Available"
+        value={controller.overview?.summary.available_units ?? 0}
+        tone="emerald"
+      />
+      <InventoryMetric
+        icon={<Clock3 className="size-4" />}
+        label="Held"
+        value={controller.overview?.summary.held_units ?? 0}
+        tone="amber"
+      />
       <InventoryMetric
         icon={<AlertTriangle className="size-4" />}
         label="Low stock"
@@ -690,17 +758,38 @@ function InventoryMetricGrid({ controller }: { controller: CommerceInventoryCont
 
 function StockStatesPanel({ controller }: { controller: CommerceInventoryController }) {
   return (
-    <Panel title="Stock States" description={controller.stockStateSummary?.definition_used ?? "Canonical stock semantics will appear after inventory loads."}>
+    <Panel
+      title="Stock States"
+      description={
+        controller.stockStateSummary?.definition_used ?? "Canonical stock semantics will appear after inventory loads."
+      }
+    >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <InventoryMetric icon={<PackageCheck className="size-4" />} label="Active" value={controller.stockStateSummary?.active_count ?? 0} tone="emerald" />
-        <InventoryMetric icon={<AlertTriangle className="size-4" />} label="Low" value={controller.stockStateSummary?.low_stock_count ?? 0} tone="amber" />
+        <InventoryMetric
+          icon={<PackageCheck className="size-4" />}
+          label="Active"
+          value={controller.stockStateSummary?.active_count ?? 0}
+          tone="emerald"
+        />
+        <InventoryMetric
+          icon={<AlertTriangle className="size-4" />}
+          label="Low"
+          value={controller.stockStateSummary?.low_stock_count ?? 0}
+          tone="amber"
+        />
         <InventoryMetric
           icon={<Clock3 className="size-4" />}
           label="Last piece"
-          value={controller.stockStateSummary?.last_piece_count ?? controller.overview?.summary.last_piece_products ?? 0}
+          value={
+            controller.stockStateSummary?.last_piece_count ?? controller.overview?.summary.last_piece_products ?? 0
+          }
           tone="rose"
         />
-        <InventoryMetric icon={<PackageOpen className="size-4" />} label="Sold out" value={controller.stockStateSummary?.sold_out_count ?? controller.overview?.summary.sold_out_products ?? 0} />
+        <InventoryMetric
+          icon={<PackageOpen className="size-4" />}
+          label="Sold out"
+          value={controller.stockStateSummary?.sold_out_count ?? controller.overview?.summary.sold_out_products ?? 0}
+        />
       </div>
     </Panel>
   );
@@ -757,7 +846,11 @@ function MediaGenerationControls({ controller }: { controller: CommerceInventory
         <Button
           variant="outline"
           onClick={() => void controller.generateMediaDraft("video")}
-          disabled={!controller.mediaCredential || controller.mediaCredential.provider !== "google" || controller.mediaActionLoading !== null}
+          disabled={
+            !controller.mediaCredential ||
+            controller.mediaCredential.provider !== "google" ||
+            controller.mediaActionLoading !== null
+          }
         >
           {controller.mediaActionLoading === "video" ? <Spinner size="sm" /> : <Video className="size-4" />}
           Generate video draft
@@ -790,8 +883,13 @@ function MediaJobList({ jobs }: { jobs: MediaGenerationJob[] }) {
   return (
     <div className="grid gap-2">
       {jobs.map((job) => (
-        <div key={job.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-900/8 bg-[var(--panel-muted)] px-3 py-2 text-sm dark:border-white/8">
-          <span className="font-medium text-zinc-950 dark:text-zinc-50">{job.modality} draft {job.id.slice(0, 8)}</span>
+        <div
+          key={job.id}
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-900/8 bg-[var(--panel-muted)] px-3 py-2 text-sm dark:border-white/8"
+        >
+          <span className="font-medium text-zinc-950 dark:text-zinc-50">
+            {job.modality} draft {job.id.slice(0, 8)}
+          </span>
           <StatusBadge status={job.status} label={job.status.replaceAll("_", " ")} />
         </div>
       ))}
@@ -830,12 +928,16 @@ function MediaDraftGallery({ controller }: { controller: CommerceInventoryContro
 
 function SocialPostPackageCard() {
   return (
-    <div className="rounded-xl border border-zinc-900/10 bg-zinc-950 p-4 text-white dark:border-white/10 lg:col-span-2" data-testid="social-post-package-card">
+    <div
+      className="rounded-xl border border-zinc-900/10 bg-zinc-950 p-4 text-white dark:border-white/10 lg:col-span-2"
+      data-testid="social-post-package-card"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">Commercial handoff</p>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-300">
-            Generated image drafts become social post packages with caption, channel, CTA, and human approval before Instagram or Facebook publication.
+            Generated image drafts become social post packages with caption, channel, CTA, and human approval before
+            Instagram or Facebook publication.
           </p>
         </div>
         <StatusBadge status="approval_gated" label="approval gated" />
@@ -843,7 +945,9 @@ function SocialPostPackageCard() {
       <div className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
         {["Creative", "Caption", "Approval"].map((label, index) => (
           <div key={label} className="rounded-lg bg-white/10 p-3">
-            <p className="font-semibold text-white">{index + 1}. {label}</p>
+            <p className="font-semibold text-white">
+              {index + 1}. {label}
+            </p>
             <p className="mt-1 text-zinc-300">
               {label === "Creative"
                 ? "Use the archive image as the campaign asset."
@@ -866,11 +970,30 @@ function CommerceMetricGrid({ controller }: { controller: CommerceInventoryContr
 
   return (
     <div className="grid gap-3 md:grid-cols-5">
-      <InventoryMetric icon={<CreditCard className="size-4" />} label="Paid" value={controller.commerceOverview?.summary.orders_paid ?? 0} tone="emerald" />
-      <InventoryMetric icon={<Clock3 className="size-4" />} label="Pending" value={controller.commerceOverview?.summary.orders_pending_payment ?? 0} tone="amber" />
-      <InventoryMetric icon={<AlertTriangle className="size-4" />} label="Stuck" value={controller.commerceOverview?.summary.orders_stuck ?? 0} tone="rose" />
+      <InventoryMetric
+        icon={<CreditCard className="size-4" />}
+        label="Paid"
+        value={controller.commerceOverview?.summary.orders_paid ?? 0}
+        tone="emerald"
+      />
+      <InventoryMetric
+        icon={<Clock3 className="size-4" />}
+        label="Pending"
+        value={controller.commerceOverview?.summary.orders_pending_payment ?? 0}
+        tone="amber"
+      />
+      <InventoryMetric
+        icon={<AlertTriangle className="size-4" />}
+        label="Stuck"
+        value={controller.commerceOverview?.summary.orders_stuck ?? 0}
+        tone="rose"
+      />
       <InventoryMetric icon={<Truck className="size-4" />} label="To fulfill" value={fulfillmentCount} />
-      <InventoryMetric icon={<ReceiptText className="size-4" />} label="Sales MXN" value={Number(controller.commerceOverview?.summary.cash_sales_mxn ?? 0)} />
+      <InventoryMetric
+        icon={<ReceiptText className="size-4" />}
+        label="Sales MXN"
+        value={Number(controller.commerceOverview?.summary.cash_sales_mxn ?? 0)}
+      />
     </div>
   );
 }
@@ -878,11 +1001,37 @@ function CommerceMetricGrid({ controller }: { controller: CommerceInventoryContr
 function CompanyOpsMetricGrid({ controller }: { controller: CommerceInventoryController }) {
   return (
     <div className="grid gap-3 md:grid-cols-5">
-      <InventoryMetric icon={<Brain className="size-4" />} label="Signals" value={(controller.companyOpsOverview?.summary.signals_new ?? 0) + (controller.companyOpsOverview?.summary.signals_qualified ?? 0)} />
-      <InventoryMetric icon={<ShoppingBag className="size-4" />} label="Opportunities" value={controller.companyOpsOverview?.summary.opportunities_open ?? 0} tone="emerald" />
-      <InventoryMetric icon={<Megaphone className="size-4" />} label="Drafts" value={controller.companyOpsOverview?.summary.publication_drafts ?? 0} tone="amber" />
-      <InventoryMetric icon={<FileCheck2 className="size-4" />} label="Procurement" value={controller.companyOpsOverview?.summary.procurement_drafts ?? 0} />
-      <InventoryMetric icon={<AlertTriangle className="size-4" />} label="Ops stuck" value={controller.companyOpsOverview?.summary.stuck_orders ?? 0} tone="rose" />
+      <InventoryMetric
+        icon={<Brain className="size-4" />}
+        label="Signals"
+        value={
+          (controller.companyOpsOverview?.summary.signals_new ?? 0) +
+          (controller.companyOpsOverview?.summary.signals_qualified ?? 0)
+        }
+      />
+      <InventoryMetric
+        icon={<ShoppingBag className="size-4" />}
+        label="Opportunities"
+        value={controller.companyOpsOverview?.summary.opportunities_open ?? 0}
+        tone="emerald"
+      />
+      <InventoryMetric
+        icon={<Megaphone className="size-4" />}
+        label="Drafts"
+        value={controller.companyOpsOverview?.summary.publication_drafts ?? 0}
+        tone="amber"
+      />
+      <InventoryMetric
+        icon={<FileCheck2 className="size-4" />}
+        label="Procurement"
+        value={controller.companyOpsOverview?.summary.procurement_drafts ?? 0}
+      />
+      <InventoryMetric
+        icon={<AlertTriangle className="size-4" />}
+        label="Ops stuck"
+        value={controller.companyOpsOverview?.summary.stuck_orders ?? 0}
+        tone="rose"
+      />
     </div>
   );
 }
@@ -919,7 +1068,12 @@ function ProductsPanel({ controller }: { controller: CommerceInventoryController
           </div>
         ) : null}
         {controller.products.map((product) => (
-          <ProductRow key={product.id} product={product} selected={product.id === controller.selectedProductId} onSelect={() => controller.setSelectedProductId(product.id)} />
+          <ProductRow
+            key={product.id}
+            product={product}
+            selected={product.id === controller.selectedProductId}
+            onSelect={() => controller.setSelectedProductId(product.id)}
+          />
         ))}
       </div>
     </Panel>
@@ -943,21 +1097,47 @@ function CreateHoldPanel({ controller }: { controller: CommerceInventoryControll
           </SelectContent>
         </Select>
         <div className="grid grid-cols-[5.5rem_1fr] gap-2">
-          <Input aria-label="Quantity" type="number" min={1} value={controller.quantity} onChange={(event) => controller.setQuantity(event.target.value)} />
-          <Input aria-label="Buyer alias" value={controller.buyerAlias} onChange={(event) => controller.setBuyerAlias(event.target.value)} placeholder="Buyer alias" />
+          <Input
+            aria-label="Quantity"
+            type="number"
+            min={1}
+            value={controller.quantity}
+            onChange={(event) => controller.setQuantity(event.target.value)}
+          />
+          <Input
+            aria-label="Buyer alias"
+            value={controller.buyerAlias}
+            onChange={(event) => controller.setBuyerAlias(event.target.value)}
+            placeholder="Buyer alias"
+          />
         </div>
-        <Select value={controller.channel} onValueChange={(value) => controller.setChannel(value as typeof controller.channel)}>
+        <Select
+          value={controller.channel}
+          onValueChange={(value) => controller.setChannel(value as typeof controller.channel)}
+        >
           <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {channels.map((item) => (
-              <SelectItem key={item} value={item}>{item}</SelectItem>
+              <SelectItem key={item} value={item}>
+                {item}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Textarea aria-label="Hold note" value={controller.note} onChange={(event) => controller.setNote(event.target.value)} placeholder="Operator note" rows={3} />
-        <Button className="w-full" onClick={controller.createHold} disabled={!controller.selectedProduct || controller.actionLoading === "create"}>
+        <Textarea
+          aria-label="Hold note"
+          value={controller.note}
+          onChange={(event) => controller.setNote(event.target.value)}
+          placeholder="Operator note"
+          rows={3}
+        />
+        <Button
+          className="w-full"
+          onClick={controller.createHold}
+          disabled={!controller.selectedProduct || controller.actionLoading === "create"}
+        >
           {controller.actionLoading === "create" ? <Spinner size="sm" /> : <Clock3 className="size-4" />}
           Hold 30m
         </Button>
@@ -971,16 +1151,28 @@ function HoldsPanel({ controller }: { controller: CommerceInventoryController })
     <Panel
       title="Holds And Orders"
       action={
-        <Button variant="outline" size="sm" onClick={controller.expireDue} disabled={controller.actionLoading === "expire-due"}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={controller.expireDue}
+          disabled={controller.actionLoading === "expire-due"}
+        >
           {controller.actionLoading === "expire-due" ? <Spinner size="sm" /> : <Clock3 className="size-4" />}
           Expire Due
         </Button>
       }
     >
       <div className="space-y-3">
-        {controller.operationalReservations.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No active holds or payment orders.</p> : null}
+        {controller.operationalReservations.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No active holds or payment orders.</p>
+        ) : null}
         {controller.operationalReservations.map((reservation) => (
-          <ReservationRow key={reservation.id} reservation={reservation} actionLoading={controller.actionLoading} onAction={controller.runReservationAction} />
+          <ReservationRow
+            key={reservation.id}
+            reservation={reservation}
+            actionLoading={controller.actionLoading}
+            onAction={controller.runReservationAction}
+          />
         ))}
       </div>
     </Panel>
@@ -991,9 +1183,16 @@ function OrdersPanel({ controller }: { controller: CommerceInventoryController }
   return (
     <Panel title="Orders And Fulfillment" action={<Truck className="size-4 text-zinc-500" />}>
       <div className="grid gap-2">
-        {controller.recentOrders.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No commerce orders yet.</p> : null}
+        {controller.recentOrders.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No commerce orders yet.</p>
+        ) : null}
         {controller.recentOrders.map((order) => (
-          <OrderRow key={order.id} order={order} actionLoading={controller.actionLoading} onAction={(nextAction) => controller.runOrderAction(order, nextAction)} />
+          <OrderRow
+            key={order.id}
+            order={order}
+            actionLoading={controller.actionLoading}
+            onAction={(nextAction) => controller.runOrderAction(order, nextAction)}
+          />
         ))}
       </div>
     </Panel>
@@ -1009,8 +1208,18 @@ function OperatingLoopPanel({ controller }: { controller: CommerceInventoryContr
         <SignalsPanel controller={controller} />
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <DraftColumn title="Publication Drafts" drafts={controller.companyOpsOverview?.publication_drafts ?? []} actionLoading={controller.actionLoading} onRequestApproval={(draft) => controller.requestDraftApproval(draft, "publication")} />
-        <DraftColumn title="Procurement Drafts" drafts={controller.companyOpsOverview?.procurement_drafts ?? []} actionLoading={controller.actionLoading} onRequestApproval={(draft) => controller.requestDraftApproval(draft, "procurement")} />
+        <DraftColumn
+          title="Publication Drafts"
+          drafts={controller.companyOpsOverview?.publication_drafts ?? []}
+          actionLoading={controller.actionLoading}
+          onRequestApproval={(draft) => controller.requestDraftApproval(draft, "publication")}
+        />
+        <DraftColumn
+          title="Procurement Drafts"
+          drafts={controller.companyOpsOverview?.procurement_drafts ?? []}
+          actionLoading={controller.actionLoading}
+          onRequestApproval={(draft) => controller.requestDraftApproval(draft, "procurement")}
+        />
       </div>
       <ObjectiveReviews controller={controller} />
       <OpportunityDecisionGrid controller={controller} />
@@ -1025,7 +1234,8 @@ function ObjectiveContractIntro() {
         <div>
           <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Objective Contract</p>
           <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-            Sell-through learning is the scorecard: each operation records the goal, target signal, integrity gates, miss analysis, and next decision.
+            Company learning is the scorecard: each operation records the goal, target signal, integrity gates, miss
+            analysis, and next decision.
           </p>
         </div>
         <StatusBadge status="rehearsal" label="Learning + integrity" />
@@ -1038,15 +1248,29 @@ function RecommendedOperations({ controller }: { controller: CommerceInventoryCo
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Recommended Operations</h3>
-      {controller.recommendedOperations.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No operating-loop recommendations yet.</p> : null}
+      {controller.recommendedOperations.length === 0 ? (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">No operating-loop recommendations yet.</p>
+      ) : null}
       {controller.recommendedOperations.map((operation) => (
-        <div key={operation.operation_type} className="grid gap-3 rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5 md:grid-cols-[1fr_auto]">
+        <div
+          key={operation.operation_type}
+          className="grid gap-3 rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5 md:grid-cols-[1fr_auto]"
+        >
           <div>
             <p className="font-medium text-zinc-950 dark:text-zinc-50">{operation.label}</p>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">{operation.reason}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => void controller.launchCompanyOperation(operation.operation_type)} disabled={controller.actionLoading === `operation:${operation.operation_type}:manual`}>
-            {controller.actionLoading === `operation:${operation.operation_type}:manual` ? <Spinner size="sm" /> : <PlayCircle className="size-4" />}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void controller.launchCompanyOperation(operation.operation_type)}
+            disabled={controller.actionLoading === `operation:${operation.operation_type}:manual`}
+          >
+            {controller.actionLoading === `operation:${operation.operation_type}:manual` ? (
+              <Spinner size="sm" />
+            ) : (
+              <PlayCircle className="size-4" />
+            )}
             Launch
           </Button>
         </div>
@@ -1062,9 +1286,17 @@ function SignalsPanel({ controller }: { controller: CommerceInventoryController 
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Signals</h3>
       {signals.slice(0, 5).map((signal) => (
-        <SignalRow key={signal.id} signal={signal} actionLoading={controller.actionLoading} onQualify={controller.qualifyCompanySignal} onLaunch={controller.launchCompanyOperation} />
+        <SignalRow
+          key={signal.id}
+          signal={signal}
+          actionLoading={controller.actionLoading}
+          onQualify={controller.qualifyCompanySignal}
+          onLaunch={controller.launchCompanyOperation}
+        />
       ))}
-      {controller.companyOpsOverview && signals.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No company signals captured yet.</p> : null}
+      {controller.companyOpsOverview && signals.length === 0 ? (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">No company signals captured yet.</p>
+      ) : null}
     </div>
   );
 }
@@ -1077,7 +1309,9 @@ function ObjectiveReviews({ controller }: { controller: CommerceInventoryControl
         {controller.objectiveContracts.slice(0, 4).map((objective) => (
           <ObjectiveContractRow key={objective.id} objective={objective} />
         ))}
-        {controller.objectiveContracts.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No operation objective contracts recorded yet.</p> : null}
+        {controller.objectiveContracts.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No operation objective contracts recorded yet.</p>
+        ) : null}
       </div>
     </div>
   );
@@ -1100,15 +1334,22 @@ function OpportunitiesPanel({ controller }: { controller: CommerceInventoryContr
       <h3 className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">Opportunities</h3>
       <div className="grid gap-2">
         {opportunities.slice(0, 5).map((opportunity) => (
-          <div key={opportunity.id} className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+          <div
+            key={opportunity.id}
+            className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-medium text-zinc-950 dark:text-zinc-50">{opportunity.title}</p>
               <StatusBadge status={opportunity.status} label={opportunity.status.replaceAll("_", " ")} />
             </div>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{opportunity.next_action || opportunity.summary || "No next action recorded."}</p>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              {opportunity.next_action || opportunity.summary || "No next action recorded."}
+            </p>
           </div>
         ))}
-        {controller.companyOpsOverview && opportunities.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No qualified opportunities yet.</p> : null}
+        {controller.companyOpsOverview && opportunities.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No qualified opportunities yet.</p>
+        ) : null}
       </div>
     </div>
   );
@@ -1123,21 +1364,33 @@ function DecisionsPoliciesPanel({ controller }: { controller: CommerceInventoryC
       <h3 className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50">Decisions And Policies</h3>
       <div className="grid gap-2">
         {decisions.slice(0, 3).map((decision) => (
-          <div key={decision.id} className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+          <div
+            key={decision.id}
+            className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-medium text-zinc-950 dark:text-zinc-50">{decision.decision_type.replaceAll("_", " ")}</p>
+              <p className="font-medium text-zinc-950 dark:text-zinc-50">
+                {decision.decision_type.replaceAll("_", " ")}
+              </p>
               <StatusBadge status={decision.status} />
             </div>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{decision.requested_at ? formatDateTime(decision.requested_at) : "No timestamp"}</p>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {decision.requested_at ? formatDateTime(decision.requested_at) : "No timestamp"}
+            </p>
           </div>
         ))}
         {policies.slice(0, 3).map((policy) => (
-          <div key={policy.id} className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+          <div
+            key={policy.id}
+            className="rounded-xl border border-zinc-900/10 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-medium text-zinc-950 dark:text-zinc-50">{policy.title}</p>
               <StatusBadge status={policy.status} />
             </div>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Confidence {Math.round(policy.confidence * 100)}%</p>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Confidence {Math.round(policy.confidence * 100)}%
+            </p>
           </div>
         ))}
         {controller.companyOpsOverview && decisions.length === 0 && policies.length === 0 ? (
@@ -1153,13 +1406,18 @@ function InventoryTimelinePanel({ controller }: { controller: CommerceInventoryC
     <Panel title="Inventory Timeline" action={<ReceiptText className="size-4 text-zinc-500" />}>
       <div className="grid gap-2">
         {(controller.overview?.events ?? []).slice(0, 8).map((event) => (
-          <div key={event.id} className="grid gap-2 rounded-xl border border-zinc-900/10 bg-white/80 p-3 text-sm dark:border-white/10 dark:bg-white/5 md:grid-cols-[8rem_1fr_auto]">
+          <div
+            key={event.id}
+            className="grid gap-2 rounded-xl border border-zinc-900/10 bg-white/80 p-3 text-sm dark:border-white/10 dark:bg-white/5 md:grid-cols-[8rem_1fr_auto]"
+          >
             <StatusBadge status={event.event_type} />
             <span className="text-zinc-700 dark:text-zinc-200">{event.message}</span>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">{formatDateTime(event.created_at)}</span>
           </div>
         ))}
-        {controller.overview && controller.overview.events.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">No inventory events yet.</p> : null}
+        {controller.overview && controller.overview.events.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No inventory events yet.</p>
+        ) : null}
       </div>
     </Panel>
   );
@@ -1419,12 +1677,14 @@ function SignalRow({
   onQualify: (signal: CompanySignal) => void;
   onLaunch: (operationType: string, sourceSignalId?: string | null) => void;
 }) {
+  const signalKind = signal.signal_kind || signal.semantic_aliases?.signal_kind || "manual";
+  const domainContext = signal.domain_context || signal.semantic_aliases?.domain_context || "general";
   const launchType =
-    signal.signal_type === "stockout"
+    signalKind === "risk" && domainContext === "inventory"
       ? "sold_out_demand_capture"
-      : signal.signal_type === "fulfillment_issue"
+      : signalKind === "exception" && domainContext === "operations"
         ? "fulfillment_exception_review"
-        : signal.signal_type === "paid_order"
+        : signalKind === "milestone" && domainContext === "commerce"
           ? "paid_order_follow_up"
           : "daily_operating_brief";
 
@@ -1434,7 +1694,8 @@ function SignalRow({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium text-zinc-950 dark:text-zinc-50">{signal.title}</p>
-            <StatusBadge status={signal.signal_type} label={signal.signal_type.replaceAll("_", " ")} />
+            <StatusBadge status={signalKind} label={signalKind.replaceAll("_", " ")} />
+            <StatusBadge status={domainContext} label={domainContext.replaceAll("_", " ")} />
             <StatusBadge status={signal.status} />
           </div>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -1474,6 +1735,7 @@ function SignalRow({
 
 function ObjectiveContractRow({ objective }: { objective: CompanyOperationObjective }) {
   const scoreLabel = objective.success_score === null ? "pending score" : `${objective.success_score}/100`;
+  const operationFamily = objective.operation_family || objective.semantic_aliases?.operation_family || objective.run_type;
   const integrityGateCount =
     objective.integrity_gates && typeof objective.integrity_gates === "object"
       ? Object.keys(objective.integrity_gates).length
@@ -1484,7 +1746,7 @@ function ObjectiveContractRow({ objective }: { objective: CompanyOperationObject
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium text-zinc-950 dark:text-zinc-50">{objective.run_goal || "Operation objective"}</p>
-            <StatusBadge status={objective.run_type} label={objective.run_type.replaceAll("_", " ")} />
+            <StatusBadge status={operationFamily} label={operationFamily.replaceAll("_", " ")} />
             <StatusBadge status={objective.status} />
           </div>
           <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">

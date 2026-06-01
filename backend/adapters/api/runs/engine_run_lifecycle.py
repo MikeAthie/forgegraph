@@ -5,7 +5,7 @@
 from adapters.api.runs.common import *  # noqa: F403
 
 
-class EngineRunLifecycleMixin:
+class EngineRunLifecycleMixin(EngineCallbackComposableMixin):
     def _run_started_duplicate_response(
         self, context: EngineCallbackContext, current_status: str
     ) -> Response | None:
@@ -398,7 +398,7 @@ class EngineRunLifecycleMixin:
             )
             mutation = self._run_lifecycle_mutation(context=context, run=run)
             if mutation.error_response is not None:
-                return mutation.error_response
+                return cast(Response, mutation.error_response)
             run_payload = mutation.run_payload
             update_fields = mutation.update_fields
             pause_payload = mutation.pause_payload

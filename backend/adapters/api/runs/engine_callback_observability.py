@@ -5,7 +5,7 @@
 from adapters.api.runs.common import *  # noqa: F403
 
 
-class EngineCallbackObservabilityMixin:
+class EngineCallbackObservabilityMixin(EngineCallbackComposableMixin):
     def _handle_engine_schema_validation_event(self, context: EngineCallbackContext) -> Response:
         run = context.run
         event = context.event

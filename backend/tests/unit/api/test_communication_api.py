@@ -14,7 +14,9 @@ from infrastructure.orm.models import (
     Graph,
     Organization,
     OrganizationMembership,
+    RequestClassificationRecord,
     User,
+    WorkWhiteboard,
 )
 
 pytestmark = pytest.mark.django_db
@@ -221,7 +223,9 @@ def test_atlas_legacy_canonical_communication_visibility(api_client) -> None:
         "customer",
         "internal",
     ]
-    internal_payload = next(message for message in atlas_messages if message["id"] == str(internal_message.id))
+    internal_payload = next(
+        message for message in atlas_messages if message["id"] == str(internal_message.id)
+    )
     assert "Execution remains blocked" in internal_payload["body"]
     assert internal_payload["attachments"] == [
         {
@@ -237,6 +241,70 @@ def test_atlas_legacy_canonical_communication_visibility(api_client) -> None:
     assert other_thread_response.status_code == 404
     assert other_threads_response.status_code == 200
     assert other_threads_response.json()["data"]["threads"] == []
+
+
+def test_operator_can_route_customer_request_to_whiteboard(api_client) -> None:
+    operator, legacy_owner, _other_user, legacy, _other = _setup()
+    thread = create_thread(
+        company=legacy,
+        user=operator,
+        data={
+            "title": "Legacy launch request",
+            "thread_type": "support",
+            "visibility_mode": "mixed",
+            "source_key": "legacy-launch-request",
+        },
+    )
+    message = create_message(
+        thread=thread,
+        sender_user=legacy_owner,
+        message_kind="request",
+        body=(
+            "We want to launch a campaign for Legacy DEPP GOLD with 10,000 MXN budget "
+            "across email, WhatsApp, Instagram, Facebook, TikTok, and a landing page."
+        ),
+        visibility="customer",
+        idempotency_key="legacy-launch-request-message",
+    )
+
+    api_client.force_authenticate(user=legacy_owner)
+    viewer_response = api_client.post(
+        f"/api/communication/messages/{message.id}/route-request",
+        data={},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="viewer-route-request",
+    )
+    api_client.force_authenticate(user=operator)
+    messages_before_route = api_client.get(f"/api/communication/threads/{thread.id}/messages")
+    response = api_client.post(
+        f"/api/communication/messages/{message.id}/route-request",
+        data={},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="operator-route-request",
+    )
+    messages_after_route = api_client.get(f"/api/communication/threads/{thread.id}/messages")
+    duplicate_response = api_client.post(
+        f"/api/communication/messages/{message.id}/route-request",
+        data={},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="operator-route-request-retry",
+    )
+
+    assert viewer_response.status_code == 403
+    assert messages_before_route.status_code == 200
+    assert messages_before_route.json()["data"]["messages"][0]["routed_whiteboard_id"] is None
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["classification"]["classification"] == RequestClassificationRecord.CLASS_NEW
+    assert payload["whiteboard"]["company_id"] == str(legacy.id)
+    assert payload["whiteboard"]["status"] == WorkWhiteboard.STATUS_ONBOARDING
+    assert messages_after_route.status_code == 200
+    routed_message = messages_after_route.json()["data"]["messages"][0]
+    assert routed_message["routed_whiteboard_id"] == payload["whiteboard"]["id"]
+    assert routed_message["routed_classification"] == RequestClassificationRecord.CLASS_NEW
+    assert WorkWhiteboard.objects.filter(source_message=message, company=legacy).count() == 1
+    assert duplicate_response.status_code == 200
+    assert WorkWhiteboard.objects.filter(source_message=message, company=legacy).count() == 1
 
 
 def test_customer_cannot_create_internal_message_but_operator_can(api_client) -> None:

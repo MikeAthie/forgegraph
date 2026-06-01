@@ -32,7 +32,7 @@ from application.services.communications import (
     message_payload,
     thread_payload,
 )
-from application.services.company_access import accessible_company_queryset
+from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.processed_commands import (
     IdempotencyConflict,
     build_idempotency_context,
@@ -40,6 +40,9 @@ from application.services.processed_commands import (
     record_processed_command,
     replay_processed_command,
 )
+from application.services.rbac import has_min_role
+from application.services.request_router import RequestRouterError, classify_and_route_request
+from application.services.work_whiteboards import whiteboard_payload
 from infrastructure.orm.models import CommunicationMessage, Graph, User
 
 
@@ -193,7 +196,9 @@ class CommunicationAttachmentCreateView(APIView):
             return disabled
         user = cast(User, request.user)
         message = (
-            CommunicationMessage.objects.select_related("thread__company", "company", "organization")
+            CommunicationMessage.objects.select_related(
+                "thread__company", "company", "organization"
+            )
             .prefetch_related("attachments")
             .filter(id=message_id)
             .first()
@@ -224,7 +229,9 @@ class CommunicationAttachmentCreateView(APIView):
         except CommunicationError as exc:
             return _communication_error(exc)
         message = (
-            CommunicationMessage.objects.select_related("thread__company", "company", "organization")
+            CommunicationMessage.objects.select_related(
+                "thread__company", "company", "organization"
+            )
             .prefetch_related("attachments")
             .get(id=message.id)
         )
@@ -240,6 +247,70 @@ class CommunicationAttachmentCreateView(APIView):
             response=response,
             resource_type="communication_message",
             resource_id=str(message.id),
+        )
+
+
+class CommunicationMessageRouteRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, message_id: UUID) -> Response:
+        if (disabled := _communication_disabled()) is not None:
+            return disabled
+        user = cast(User, request.user)
+        message = (
+            CommunicationMessage.objects.select_related(
+                "thread__service_engagement",
+                "thread__company",
+                "company",
+                "organization",
+                "sender_user",
+            )
+            .filter(id=message_id)
+            .first()
+        )
+        if message is None or not can_read_thread(user=user, thread=message.thread):
+            return _not_found("Communication message was not found.")
+        if message.company is None:
+            return _not_found("Communication message was not company-scoped.")
+        if not (
+            has_company_access(user, message.company, "member")
+            and has_min_role(user, "member", str(message.organization_id))
+        ):
+            return _forbidden("You do not have permission to route this communication request.")
+        command = _prepare_command(
+            request=request,
+            company=message.company,
+            action=f"communication.message.route_request:{message.id}",
+        )
+        if isinstance(command, Response):
+            return command
+        context, replay = command
+        if replay is not None:
+            return replay
+        try:
+            classification, whiteboard, routing_records = classify_and_route_request(
+                message=message,
+                idempotency_key=f"request-router:message:{message.id}",
+            )
+        except RequestRouterError as exc:
+            return error_response(
+                exc.code.upper(), exc.message, status=http_status.HTTP_400_BAD_REQUEST
+            )
+        response = success_response(
+            {
+                "classification": _classification_payload(classification),
+                "whiteboard": whiteboard_payload(whiteboard, user=user)
+                if whiteboard is not None
+                else None,
+                "routing_record_ids": [str(record.id) for record in routing_records],
+            },
+            status=http_status.HTTP_200_OK,
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="request_classification",
+            resource_id=str(classification.id),
         )
 
 
@@ -291,7 +362,7 @@ def _prepare_command(
 
 
 def _communication_error(exc: CommunicationError) -> Response:
-    status_code = http_status.HTTP_400_BAD_REQUEST
+    status_code: int = http_status.HTTP_400_BAD_REQUEST
     if exc.code in {
         "company_not_found",
         "linked_object_not_found",
@@ -324,3 +395,30 @@ def _not_found(message: str) -> Response:
 
 def _forbidden(message: str) -> Response:
     return error_response("FORBIDDEN", message, status=http_status.HTTP_403_FORBIDDEN)
+
+
+def _classification_payload(classification: Any) -> dict[str, Any]:
+    return {
+        "id": str(classification.id),
+        "organization_id": str(classification.organization_id),
+        "company_id": str(classification.company_id),
+        "communication_thread_id": str(classification.communication_thread_id)
+        if classification.communication_thread_id
+        else None,
+        "communication_message_id": str(classification.communication_message_id)
+        if classification.communication_message_id
+        else None,
+        "service_engagement_id": str(classification.service_engagement_id)
+        if classification.service_engagement_id
+        else None,
+        "classification": classification.classification,
+        "confidence": float(classification.confidence),
+        "rationale": classification.rationale,
+        "matched_whiteboard_id": str(classification.matched_whiteboard_id)
+        if classification.matched_whiteboard_id
+        else None,
+        "matched_service_engagement_id": str(classification.matched_service_engagement_id)
+        if classification.matched_service_engagement_id
+        else None,
+        "created_at": classification.created_at.isoformat(),
+    }

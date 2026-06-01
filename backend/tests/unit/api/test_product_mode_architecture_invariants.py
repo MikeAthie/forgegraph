@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
@@ -37,6 +38,7 @@ from infrastructure.orm.models import (
     StateProjection,
     ToolExecution,
     User,
+    WorkWhiteboard,
 )
 
 pytestmark = pytest.mark.django_db
@@ -212,7 +214,7 @@ def _review_board_section(
         if exceptional
         else "Strong rationale grounded in Legacy context and the submitted evidence."
     )
-    scores = [
+    scores: list[dict[str, Any]] = [
         {
             "area": area,
             "score": score,
@@ -481,9 +483,11 @@ def test_pack_namespace_claim_validation_rejects_invalid_namespaced_ids(
         status="active",
     ).first()
     assert existing_claim is not None
+    organization = company.organization
+    assert organization is not None
     with pytest.raises(IntegrityError):
         PackNamespaceClaim.objects.create(
-            organization=company.organization,
+            organization=organization,
             company=company,
             installation_id=installation["id"],
             pack_id=existing_claim.pack_id,
@@ -724,9 +728,10 @@ def test_review_board_scorecard_client_ready_persists_sanitized_generic_pass(
     signals = CompanySignal.objects.filter(company=company, source="consulting_review_board")
     assert signals.count() == 2
     assert {str(signal.id) for signal in signals} == set(signal_ids)
-    assert {
-        signal.metadata_json["primitive"] for signal in signals
-    } == {"CompanySignal", "OperationRecommendation"}
+    assert {signal.metadata_json["primitive"] for signal in signals} == {
+        "CompanySignal",
+        "OperationRecommendation",
+    }
     scorecard = EvaluationScorecard.objects.get(evaluation=persisted)
     assert scorecard.composite_score == 4.3
     assert scorecard.dimensions_json["schema_version"] == "consulting_review_board_v1"
@@ -767,9 +772,10 @@ def test_review_board_scorecard_revision_required_persists_generic_warn_with_imp
     )
     assert evaluation["findings"][0]["severity"] == "WARNING"
     assert evaluation["findings"][0]["blocking"] is False
-    assert {
-        item["primitive"] for item in evaluation["result"]["company_improvement_plan"]
-    } >= {"CompanySignal", "OperationRecommendation"}
+    assert {item["primitive"] for item in evaluation["result"]["company_improvement_plan"]} >= {
+        "CompanySignal",
+        "OperationRecommendation",
+    }
     persisted = EvaluationRun.objects.get(id=evaluation["id"])
     assert persisted.status == "WARN"
     assert persisted.result_json["signal_ids"]
@@ -806,7 +812,9 @@ def test_review_board_scorecard_hard_fail_persists_generic_block(
     assert evaluation["result"]["approval_gate"]["client_deliverable_status"] == "blocked"
     assert evaluation["findings"][0]["severity"] == "CRITICAL"
     assert evaluation["findings"][0]["blocking"] is True
-    assert not CompanySignal.objects.filter(company=company, source="consulting_review_board").exists()
+    assert not CompanySignal.objects.filter(
+        company=company, source="consulting_review_board"
+    ).exists()
 
 
 def test_review_board_downgrades_unapproved_client_ready_gate_to_warn(
@@ -1012,3 +1020,103 @@ def test_product_mode_routes_and_models_remain_generic():
 
     assert marketing_routes == []
     assert marketing_models == []
+
+
+def test_company_ops_default_objective_language_remains_generic():
+    from application.services.company_ops import (
+        COMPANY_PROGRESS_OBJECTIVE,
+        build_operation_objective_contract,
+    )
+
+    contract = build_operation_objective_contract(operation_type="daily_operating_brief")
+    serialized = str(
+        {
+            "primary_objective": COMPANY_PROGRESS_OBJECTIVE,
+            "run_goal": contract["run_goal"],
+            "hypothesis": contract["hypothesis"],
+            "target_signal": contract["target_signal"],
+            "action_plan": contract["action_plan_json"],
+            "integrity_gates": contract["integrity_gates_json"],
+        }
+    ).lower()
+
+    assert contract["operation_family"] == "brief"
+    assert contract["domain_context"] == "general"
+    assert "sell-through" not in serialized
+    assert "paid order" not in serialized
+    assert "stockout" not in serialized
+    assert "fulfillment" not in serialized
+    assert "procurement" not in serialized
+
+
+def test_work_whiteboard_generic_boundary_fields_and_primary_frontend_methods():
+    field_names = {field.name for field in WorkWhiteboard._meta.fields}
+    assert {
+        "work_status",
+        "project_name",
+        "stakeholder_context_json",
+        "resource_context_json",
+        "delivery_context_json",
+        "work_missing_fields_json",
+    }.issubset(field_names)
+
+    work_status_values = {choice[0] for choice in WorkWhiteboard.WORK_STATUS_CHOICES}
+    assert work_status_values == {
+        "draft",
+        "intake",
+        "ready_for_planning",
+        "planning",
+        "in_progress",
+        "review",
+        "delivery",
+        "measurement",
+        "closed",
+    }
+
+    root = Path(__file__).resolve().parents[4]
+    repository = (
+        root / "frontend" / "domain" / "repositories" / "whiteboardRepository.ts"
+    ).read_text(encoding="utf-8")
+    api = (root / "frontend" / "lib" / "api.ts").read_text(encoding="utf-8")
+
+    assert "readyForPlanning" in repository
+    assert "startPlanning" in repository
+    assert "getPlanning" in repository
+    assert "synthesizePlanning" in repository
+    assert "Compatibility helper" in repository
+    assert "/ready-for-planning" in api
+    assert "/start-planning" in api
+    assert "/planning" in api
+    assert "/planning/synthesize" in api
+
+
+def _markdown_section(document: str, heading: str) -> str:
+    start = document.index(heading)
+    next_heading = document.find("\n## ", start + len(heading))
+    if next_heading == -1:
+        return document[start:]
+    return document[start:next_heading]
+
+
+def test_company_ops_docs_keep_vertical_terms_out_of_generic_sections():
+    root = Path(__file__).resolve().parents[4]
+    document = (root / "docs" / "ops" / "company-operating-loop.md").read_text(encoding="utf-8")
+    generic_objects = _markdown_section(document, "## Generic Objects").lower()
+    operating_templates = _markdown_section(document, "## Operating Templates").lower()
+    vertical_terms = [
+        "sell-through",
+        "paid order",
+        "paid_order",
+        "stockout",
+        "fulfillment",
+        "content",
+        "procurement",
+    ]
+
+    for term in vertical_terms:
+        assert term not in generic_objects
+
+    for line in operating_templates.splitlines():
+        if not any(term in line for term in vertical_terms):
+            continue
+        assert "compatibility" in line or "domain-specific" in line or "operation type values" in line

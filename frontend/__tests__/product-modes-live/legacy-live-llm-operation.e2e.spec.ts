@@ -59,7 +59,11 @@ test.describe("Live product modes", () => {
     await expect(primaryCards).toHaveCount(1);
     await expect(addOnCards).toHaveCount(fixture.installedPacks.filter((pack) => pack.role === "addon").length);
 
-    const { launch, completedRun, attempts: liveRunAttempts } = await withLiveLlmExecutionLock(testInfo, async () =>
+    const {
+      launch,
+      completedRun,
+      attempts: liveRunAttempts,
+    } = await withLiveLlmExecutionLock(testInfo, async () =>
       launchAndWaitForLiveOperationFromUi(page, request, fixture, testInfo),
     );
     const runId = launch.runId;
@@ -97,7 +101,13 @@ test.describe("Live product modes", () => {
     expect(runOutputText).toContain(liveLegacyCompanyName);
     expect(runOutputText).toMatch(/NC-29026|GAGA|quiet-status|price-book/i);
 
-    const report = await createLiveReportFromCompletedRun(request, fixture.accessToken, fixture, completedRun, testInfo);
+    const report = await createLiveReportFromCompletedRun(
+      request,
+      fixture.accessToken,
+      fixture,
+      completedRun,
+      testInfo,
+    );
 
     await page.goto(`/companies/${fixture.companyId}`);
     await page.waitForLoadState("networkidle");

@@ -86,9 +86,7 @@ def test_record_domain_event_enqueues_generic_outbox_idempotently(user) -> None:
     assert outbox.payload_json["organization_id"] == str(organization.id)
     assert outbox.payload_json["aggregate_type"] == "test"
     assert outbox.payload_json["aggregate_id"] == str(aggregate_id)
-    assert outbox.payload_json["idempotency_key"] == (
-        "domain-event-outbox:" + str(first.event.id)
-    )
+    assert outbox.payload_json["idempotency_key"] == ("domain-event-outbox:" + str(first.event.id))
     assert outbox.payload_json["safe"] == "ok"
     payload_text = str(outbox.payload_json)
     assert "hidden" not in payload_text
@@ -96,6 +94,49 @@ def test_record_domain_event_enqueues_generic_outbox_idempotently(user) -> None:
     assert "raw_prompt" not in payload_text
     assert "evidence_bundle" not in payload_text
     assert "debug_trace" not in payload_text
+    domain_payload_text = str(first.event.payload)
+    assert "hidden" not in domain_payload_text
+    assert "private_config" not in domain_payload_text
+    assert "raw_prompt" not in domain_payload_text
+    assert "evidence_bundle" not in domain_payload_text
+    assert "debug_trace" not in domain_payload_text
+
+
+def test_domain_event_payload_is_sanitized_before_durable_persistence(user) -> None:
+    organization = user.default_organization
+    assert organization is not None
+
+    event = record_domain_event(
+        organization=organization,
+        aggregate_type="approval",
+        aggregate_id=uuid4(),
+        event_type="decision.approval_created",
+        idempotency_key="domain-event:sanitized-payload",
+        payload={
+            "approval_task_id": str(uuid4()),
+            "safe_reference": "approval:123",
+            "payload": {
+                "prompt_message": "Do not persist this prompt.",
+                "required_fields": ["approved"],
+            },
+            "result": {
+                "evidence": "Do not persist raw evidence.",
+                "approved": True,
+            },
+            "tool_output": {"secret": "hidden"},
+            "metadata": {"api_key": "sk-hidden", "safe": "ok"},
+        },
+    ).event
+
+    payload_text = str(event.payload)
+    assert event.payload["safe_reference"] == "approval:123"
+    assert event.payload["metadata"]["api_key"] == "***REDACTED***"
+    assert event.payload["metadata"]["safe"] == "ok"
+    assert "Do not persist" not in payload_text
+    assert "prompt_message" not in payload_text
+    assert "evidence" not in payload_text
+    assert "tool_output" not in payload_text
+    assert "hidden" not in payload_text
 
 
 def test_outbox_rolls_back_with_domain_event_transaction(user) -> None:

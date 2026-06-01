@@ -85,9 +85,16 @@ class RequestClassificationRecord(models.Model):
     class Meta:
         db_table = "request_classification_records"
         indexes = [
-            models.Index(fields=["organization", "company", "created_at"], name="req_class_org_comp_created_idx"),
-            models.Index(fields=["communication_message", "created_at"], name="req_class_msg_created_idx"),
-            models.Index(fields=["classification", "created_at"], name="req_class_type_created_idx"),
+            models.Index(
+                fields=["organization", "company", "created_at"],
+                name="req_class_org_comp_created_idx",
+            ),
+            models.Index(
+                fields=["communication_message", "created_at"], name="req_class_msg_created_idx"
+            ),
+            models.Index(
+                fields=["classification", "created_at"], name="req_class_type_created_idx"
+            ),
             models.Index(fields=["matched_whiteboard"], name="req_class_whiteboard_idx"),
             models.Index(fields=["idempotency_key"], name="req_class_idem_idx"),
         ]
@@ -101,9 +108,18 @@ class RequestClassificationRecord(models.Model):
 
     def clean(self) -> None:
         super().clean()
-        _validate_company_scope("communication_thread", self.communication_thread, self.organization_id, self.company_id)
-        _validate_company_scope("communication_message", self.communication_message, self.organization_id, self.company_id)
-        _validate_company_scope("service_engagement", self.service_engagement, self.organization_id, self.company_id)
+        _validate_company_scope(
+            "communication_thread", self.communication_thread, self.organization_id, self.company_id
+        )
+        _validate_company_scope(
+            "communication_message",
+            self.communication_message,
+            self.organization_id,
+            self.company_id,
+        )
+        _validate_company_scope(
+            "service_engagement", self.service_engagement, self.organization_id, self.company_id
+        )
         _validate_company_scope(
             "matched_service_engagement",
             self.matched_service_engagement,
@@ -118,12 +134,34 @@ class RequestClassificationRecord(models.Model):
                 self.company_id,
             )
         if self.confidence < 0 or self.confidence > 1:
-            raise ValidationError({"confidence": "Classification confidence must be between 0 and 1."})
+            raise ValidationError(
+                {"confidence": "Classification confidence must be between 0 and 1."}
+            )
 
 
 class WorkWhiteboard(models.Model):
     """Durable company-scoped context board for an active work request."""
 
+    WORK_STATUS_DRAFT = "draft"
+    WORK_STATUS_INTAKE = "intake"
+    WORK_STATUS_READY_FOR_PLANNING = "ready_for_planning"
+    WORK_STATUS_PLANNING = "planning"
+    WORK_STATUS_IN_PROGRESS = "in_progress"
+    WORK_STATUS_REVIEW = "review"
+    WORK_STATUS_DELIVERY = "delivery"
+    WORK_STATUS_MEASUREMENT = "measurement"
+    WORK_STATUS_CLOSED = "closed"
+    WORK_STATUS_CHOICES = [
+        (WORK_STATUS_DRAFT, "Draft"),
+        (WORK_STATUS_INTAKE, "Intake"),
+        (WORK_STATUS_READY_FOR_PLANNING, "Ready for planning"),
+        (WORK_STATUS_PLANNING, "Planning"),
+        (WORK_STATUS_IN_PROGRESS, "In progress"),
+        (WORK_STATUS_REVIEW, "Review"),
+        (WORK_STATUS_DELIVERY, "Delivery"),
+        (WORK_STATUS_MEASUREMENT, "Measurement"),
+        (WORK_STATUS_CLOSED, "Closed"),
+    ]
     STATUS_DRAFT = "draft"
     STATUS_ONBOARDING = "onboarding"
     STATUS_READY_FOR_STRATEGY = "ready_for_strategy"
@@ -178,7 +216,13 @@ class WorkWhiteboard(models.Model):
         related_name="source_work_whiteboards",
     )
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    work_status = models.CharField(
+        max_length=32,
+        choices=WORK_STATUS_CHOICES,
+        default=WORK_STATUS_DRAFT,
+    )
     request_type = models.CharField(max_length=80, blank=True, default="")
+    project_name = models.CharField(max_length=255, blank=True, default="")
     client_name = models.CharField(max_length=255, blank=True, default="")
     request_summary = models.TextField(blank=True, default="")
     objective = models.TextField(blank=True, default="")
@@ -189,9 +233,13 @@ class WorkWhiteboard(models.Model):
     brand_context_json = models.JSONField(default=dict, blank=True)
     product_context_json = models.JSONField(default=dict, blank=True)
     channel_context_json = models.JSONField(default=dict, blank=True)
+    stakeholder_context_json = models.JSONField(default=dict, blank=True)
+    resource_context_json = models.JSONField(default=dict, blank=True)
+    delivery_context_json = models.JSONField(default=dict, blank=True)
     known_facts_json = models.JSONField(default=dict, blank=True)
     assumptions_json = models.JSONField(default=list, blank=True)
     missing_fields_json = models.JSONField(default=list, blank=True)
+    work_missing_fields_json = models.JSONField(default=list, blank=True)
     completion_score = models.FloatField(default=0.0)
     redis_snapshot_key = models.CharField(max_length=255, blank=True, default="")
     metadata_json = models.JSONField(default=dict, blank=True)
@@ -209,8 +257,16 @@ class WorkWhiteboard(models.Model):
     class Meta:
         db_table = "work_whiteboards"
         indexes = [
-            models.Index(fields=["organization", "company", "status", "updated_at"], name="whiteboard_org_comp_status_idx"),
-            models.Index(fields=["company", "status", "updated_at"], name="whiteboard_comp_status_idx"),
+            models.Index(
+                fields=["organization", "company", "status", "updated_at"],
+                name="whiteboard_org_comp_status_idx",
+            ),
+            models.Index(
+                fields=["company", "status", "updated_at"], name="whiteboard_comp_status_idx"
+            ),
+            models.Index(
+                fields=["company", "work_status"], name="whiteboard_comp_work_stat_idx"
+            ),
             models.Index(fields=["communication_thread"], name="whiteboard_thread_idx"),
             models.Index(fields=["source_message"], name="whiteboard_source_msg_idx"),
             models.Index(fields=["service_engagement"], name="whiteboard_service_idx"),
@@ -226,11 +282,19 @@ class WorkWhiteboard(models.Model):
 
     def clean(self) -> None:
         super().clean()
-        _validate_company_scope("service_engagement", self.service_engagement, self.organization_id, self.company_id)
-        _validate_company_scope("communication_thread", self.communication_thread, self.organization_id, self.company_id)
-        _validate_company_scope("source_message", self.source_message, self.organization_id, self.company_id)
+        _validate_company_scope(
+            "service_engagement", self.service_engagement, self.organization_id, self.company_id
+        )
+        _validate_company_scope(
+            "communication_thread", self.communication_thread, self.organization_id, self.company_id
+        )
+        _validate_company_scope(
+            "source_message", self.source_message, self.organization_id, self.company_id
+        )
         if self.completion_score < 0 or self.completion_score > 100:
-            raise ValidationError({"completion_score": "Completion score must be between 0 and 100."})
+            raise ValidationError(
+                {"completion_score": "Completion score must be between 0 and 100."}
+            )
 
 
 def _validate_company_scope(
@@ -248,4 +312,6 @@ def _validate_company_scope(
     if value_company_id is None and isinstance(value, CommunicationThread):
         value_company_id = value.company_id
     if value_organization_id != organization_id or value_company_id != company_id:
-        raise ValidationError({field_name: "Linked object must belong to the same organization and company."})
+        raise ValidationError(
+            {field_name: "Linked object must belong to the same organization and company."}
+        )

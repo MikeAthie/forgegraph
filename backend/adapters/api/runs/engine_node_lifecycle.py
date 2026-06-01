@@ -5,7 +5,7 @@
 from adapters.api.runs.common import *  # noqa: F403
 
 
-class EngineNodeLifecycleMixin:
+class EngineNodeLifecycleMixin(EngineCallbackComposableMixin):
     def _build_engine_node_payload(
         self, context: EngineCallbackContext
     ) -> tuple[Any, Any, int, dict[str, Any]]:

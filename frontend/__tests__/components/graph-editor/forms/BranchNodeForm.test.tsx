@@ -229,12 +229,10 @@ describe("BranchNodeForm", () => {
       renderWithConfig(config);
 
       // Get all condition cards
-      const conditionCards = screen
-        .getAllByText(/condition \d/i)
-        .flatMap((el) => {
-          const card = el.closest("div")?.parentElement;
-          return card ? [card] : [];
-        });
+      const conditionCards = screen.getAllByText(/condition \d/i).flatMap((el) => {
+        const card = el.closest("div")?.parentElement;
+        return card ? [card] : [];
+      });
 
       // Find delete button in the second condition card
       expect(conditionCards.length).toBeGreaterThan(1);

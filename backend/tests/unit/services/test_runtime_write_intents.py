@@ -349,13 +349,15 @@ def test_process_runtime_intent_retries_transient_outcome_write_lock(
     original_update_or_create = RuntimeIntentOutcome.objects.update_or_create
     attempts = {"count": 0}
 
-    def flaky_update_or_create(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def flaky_update_or_create(*args, **kwargs):
         attempts["count"] += 1
         if attempts["count"] == 1:
             raise OperationalError("database is locked")
         return original_update_or_create(*args, **kwargs)
 
-    with patch.object(RuntimeIntentOutcome.objects, "update_or_create", side_effect=flaky_update_or_create):
+    with patch.object(
+        RuntimeIntentOutcome.objects, "update_or_create", side_effect=flaky_update_or_create
+    ):
         result = process_runtime_intent_message(
             stream_message_id="1700000000099-lock",
             fields=_intent_fields(intent),

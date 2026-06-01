@@ -282,7 +282,10 @@ function PromptWizardStep({
 
           <div className="space-y-4">
             {examples.map((example, index) => (
-              <div key={`${example.input}\u0000${example.output}`} className="rounded-lg border border-border p-3 space-y-3">
+              <div
+                key={`${example.input}\u0000${example.output}`}
+                className="rounded-lg border border-border p-3 space-y-3"
+              >
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-medium text-foreground">Example {index + 1}</div>
                   {examples.length > 1 ? (
@@ -334,7 +337,10 @@ function PromptWizardStep({
           </div>
 
           <FormField label="Output format preset">
-            <Select value={outputPreset} onValueChange={(value) => onOutputPresetChange(value as PromptWizardOutputPreset)}>
+            <Select
+              value={outputPreset}
+              onValueChange={(value) => onOutputPresetChange(value as PromptWizardOutputPreset)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Choose a format" />
               </SelectTrigger>
@@ -871,21 +877,10 @@ function PromptWizardPreview({ mode, promptTemplate }: { mode: WizardMode; promp
   );
 }
 
-function PromptWizardFooter({
-  wizard,
-  onCancel,
-}: {
-  wizard: PromptNodeWizardDialogController;
-  onCancel: () => void;
-}) {
+function PromptWizardFooter({ wizard, onCancel }: { wizard: PromptNodeWizardDialogController; onCancel: () => void }) {
   return (
     <DialogFooter>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onCancel}
-        disabled={wizard.submitting || wizard.loadingExisting}
-      >
+      <Button type="button" variant="outline" onClick={onCancel} disabled={wizard.submitting || wizard.loadingExisting}>
         Cancel
       </Button>
 

@@ -1,5 +1,7 @@
 import type {
   ApprovalTask,
+  CompanyDTO,
+  CompanyOperatingModelVersionDTO,
   DecisionRecord,
   GraphDetail,
   GraphListItem,
@@ -33,6 +35,9 @@ import type {
 } from "./viewModels";
 
 export type * from "./viewModels";
+
+type CompanySourceDTO = GraphListItem | GraphDetail | CompanyDTO;
+type SetupVersionSourceDTO = GraphVersion | CompanyOperatingModelVersionDTO | null;
 
 function truncate(value: string, length = 220): string {
   return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
@@ -293,12 +298,30 @@ export function toOperationListVM(operation: RunListItem): OperationVM {
 }
 
 export function toCompanyVM(
-  company: GraphListItem | GraphDetail,
-  setupVersion: GraphVersion | null,
+  company: CompanySourceDTO,
+  setupVersion: SetupVersionSourceDTO,
   operations: OperationVM[],
   pendingApprovalCount: number,
 ): CompanyVM {
-  const profile = getCompanyProfileFromGraph(company, setupVersion?.graph_json ?? null);
+  const setupJson = setupVersion
+    ? "model_json" in setupVersion
+      ? setupVersion.model_json
+      : setupVersion.graph_json
+    : null;
+  const setupVersionCount =
+    "setup_version_count" in company
+      ? company.setup_version_count
+      : "version_count" in company
+        ? company.version_count
+        : company.versions.length;
+  const latestSetupVersion =
+    setupVersion?.version ??
+    ("latest_setup_version" in company
+      ? company.latest_setup_version
+      : "latest_version" in company
+        ? company.latest_version
+        : null);
+  const profile = getCompanyProfileFromGraph(company, setupJson);
   const latestOperation = operations[0] ?? null;
   const companyStatus =
     pendingApprovalCount > 0
@@ -318,10 +341,10 @@ export function toCompanyVM(
     createdAt: company.created_at,
     updatedAt: company.updated_at,
     setupVersionId: setupVersion?.id ?? null,
-    setupVersion: setupVersion?.version ?? ("latest_version" in company ? company.latest_version : null),
-    setupVersionCount: "version_count" in company ? company.version_count : company.versions.length,
+    setupVersion: latestSetupVersion,
+    setupVersionCount,
     profile,
-    departments: toDepartmentVMs(setupVersion?.graph_json ?? null),
+    departments: toDepartmentVMs(setupJson),
     status: companyStatus,
     pendingApprovalCount,
     operationCount: operations.length,
@@ -341,9 +364,9 @@ function estimateApprovalRisk(promptMessage: string, requiredFields: string[]): 
 
 export function toApprovalVM(approval: ApprovalTask): ApprovalVM {
   const requiredFields = approval.payload?.required_fields ?? [];
-  const risk = estimateApprovalRisk(approval.prompt_message ?? "", requiredFields);
-  const estimatedCost =
-    Math.round((0.18 + (approval.prompt_message?.length ?? 0) * 0.00045 + requiredFields.length * 0.06) * 100) / 100;
+  const promptMessage = approval.prompt_message || approval.payload?.prompt_message || "";
+  const risk = estimateApprovalRisk(promptMessage, requiredFields);
+  const estimatedCost = Math.round((0.18 + promptMessage.length * 0.00045 + requiredFields.length * 0.06) * 100) / 100;
 
   return {
     id: approval.id,
@@ -354,11 +377,12 @@ export function toApprovalVM(approval: ApprovalTask): ApprovalVM {
     departmentId: approval.node_id,
     departmentName: approval.node_name,
     status: approval.status,
-    promptMessage: approval.prompt_message,
+    promptMessage,
     requiredFields,
     result: approval.result ?? null,
     createdAt: approval.created_at,
     resolvedAt: approval.resolved_at ?? null,
+    resolutionMode: approval.resolution_mode ?? "resume_run",
     estimatedCost,
     risk,
     consequence:
@@ -402,6 +426,7 @@ export function toApprovalVMFromDecision(decision: DecisionRecord): ApprovalVM {
     result: decision.resolution_json ?? null,
     createdAt: decision.requested_at ?? decision.created_at,
     resolvedAt: decision.resolved_at,
+    resolutionMode: "direct",
     estimatedCost: Math.round((0.12 + promptMessage.length * 0.00035) * 100) / 100,
     risk,
     consequence:
@@ -414,10 +439,7 @@ export function toApprovalVMFromDecision(decision: DecisionRecord): ApprovalVM {
   };
 }
 
-function getDepartmentProgressVM(
-  operation: OperationVM,
-  setupJson: GraphJson | null | undefined,
-): DepartmentVM[] {
+function getDepartmentProgressVM(operation: OperationVM, setupJson: GraphJson | null | undefined): DepartmentVM[] {
   const tasksByDepartmentId = new Map(operation.tasks.map((task) => [task.departmentId, task]));
   return getDepartmentNodes(setupJson).map((department, index) => {
     const task = tasksByDepartmentId.get(department.id);

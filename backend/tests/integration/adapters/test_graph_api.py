@@ -10,6 +10,7 @@ import pytest
 from rest_framework import status
 
 from infrastructure.orm.models import (
+    CompanySignal,
     Graph,
     GraphVersion,
     MemoryConfiguration,
@@ -81,6 +82,12 @@ class TestGraphListCreate:
         assert response.data["data"]["description"] == "A test workflow"
         assert response.data["data"]["version_count"] == 0
         assert response.data["data"]["latest_version"] is None
+        assert response.data["data"]["semantic_aliases"] == {
+            "storage_model": "Graph",
+            "company_scope_id": response.data["data"]["id"],
+            "workflow_definition_id": response.data["data"]["id"],
+            "workflow_definition_storage_note": ("GraphVersion rows hold executable revisions."),
+        }
 
         # Verify it was created in database
         assert Graph.objects.filter(name="New Workflow", owner=user).exists()
@@ -126,6 +133,8 @@ class TestGraphDetail:
         assert response.status_code == status.HTTP_200_OK
         assert "data" in response.data
         assert response.data["data"]["name"] == "Test Graph"
+        assert response.data["data"]["semantic_aliases"]["company_scope_id"] == str(graph.id)
+        assert response.data["data"]["semantic_aliases"]["workflow_definition_id"] == str(graph.id)
         assert len(response.data["data"]["versions"]) == 2
         assert response.data["data"]["versions"][0]["version"] == 2  # Latest first
         assert response.data["data"]["versions"][1]["version"] == 1
@@ -190,6 +199,24 @@ class TestGraphDetail:
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not Graph.objects.filter(id=graph.id).exists()
         assert not GraphVersion.objects.filter(graph_id=graph.id).exists()
+
+    def test_delete_graph_blocks_when_row_is_company_scope(self, authenticated_client, user):
+        """Deleting workflow storage must not cascade company-scoped state."""
+        graph = Graph.objects.create(owner=user, name="Company Scope")
+        GraphVersion.objects.create(graph=graph, version=1, graph_json={"nodes": [], "edges": []})
+        CompanySignal.objects.create(
+            organization=user.default_organization,
+            company=graph,
+            signal_type="manual",
+            title="Customer signal",
+        )
+
+        response = authenticated_client.delete(f"/api/graphs/{graph.id}")
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["error"]["code"] == "GRAPH_DELETE_BLOCKED_BY_COMPANY_SCOPE"
+        assert Graph.objects.filter(id=graph.id).exists()
+        assert GraphVersion.objects.filter(graph_id=graph.id).exists()
 
     def test_delete_graph_not_found(self, authenticated_client):
         """Should return 404 when deleting non-existent graph."""

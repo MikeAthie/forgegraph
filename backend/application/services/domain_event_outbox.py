@@ -31,6 +31,9 @@ _DROPPED_OUTBOX_KEYS = {
     "raw_private_config",
     "raw_prompt",
     "prompt",
+    "prompt_message",
+    "prompt_template",
+    "system_prompt",
     "prompts",
     "chain_of_thought",
     "cot",
@@ -43,6 +46,12 @@ _DROPPED_OUTBOX_KEYS = {
     "debug_traces",
     "trace",
     "traces",
+    "raw_tool_result",
+    "raw_tool_results",
+    "tool_input",
+    "tool_inputs",
+    "tool_output",
+    "tool_outputs",
     "pack_manifest",
     "manifest",
     "namespace_claim",
@@ -197,9 +206,7 @@ def publish_due_outbox_events(
     if topic:
         queryset = queryset.filter(topic=topic)
     ids = list(
-        queryset.order_by("created_at").values_list("id", flat=True)[
-            : max(int(limit or 0), 0)
-        ]
+        queryset.order_by("created_at").values_list("id", flat=True)[: max(int(limit or 0), 0)]
     )
     published = 0
     failed = 0
@@ -317,7 +324,10 @@ def _compact_key(value: str) -> str:
 
 
 def _drop_sensitive_outbox_metadata(value: Any, *, field_name: str = "") -> Any:
-    if field_name.strip().lower() in _DROPPED_OUTBOX_KEYS:
+    normalized_field_name = field_name.strip().lower()
+    if normalized_field_name == "evidence" and not isinstance(value, (dict, list)):
+        return None
+    if normalized_field_name in _DROPPED_OUTBOX_KEYS:
         return None
     if isinstance(value, dict):
         result: dict[str, Any] = {}
@@ -330,7 +340,6 @@ def _drop_sensitive_outbox_metadata(value: Any, *, field_name: str = "") -> Any:
         return [
             cleaned
             for item in value
-            if (cleaned := _drop_sensitive_outbox_metadata(item, field_name=field_name))
-            is not None
+            if (cleaned := _drop_sensitive_outbox_metadata(item, field_name=field_name)) is not None
         ]
     return value

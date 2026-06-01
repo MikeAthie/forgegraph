@@ -790,7 +790,7 @@ def task_summary(task: TaskRecord) -> dict[str, Any]:
         "execution_id": str(task.execution_id),
         "agent_id": str(task.agent_id) if task.agent_id else None,
         "department_id": str(task.department_id) if task.department_id else None,
-        "department_name": task.department.name if task.department_id else None,
+        "department_name": task.department.name if task.department is not None else None,
         "title": task.title,
         "status": task.status,
         "priority": task.priority,

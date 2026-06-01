@@ -49,7 +49,10 @@ def _user(org: Organization, email: str, role: str = "member") -> User:
 
 
 def _company(org: Organization, owner: User, *, name: str = "Legacy Eyewear") -> Graph:
-    company = cast(Graph, Graph.objects.create(owner=owner, organization=org, name=name, description="Test company"))
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=owner, organization=org, name=name, description="Test company"),
+    )
     CompanyAccessPolicy.objects.create(
         organization=org,
         company=company,
@@ -69,9 +72,13 @@ def _assign(org: Organization, company: Graph, user: User, role: str = "member")
     )
 
 
-def _whiteboard(company: Graph, owner: User, *, status: str = WorkWhiteboard.STATUS_READY_FOR_STRATEGY) -> WorkWhiteboard:
+def _whiteboard(
+    company: Graph, owner: User, *, status: str = WorkWhiteboard.STATUS_READY_FOR_STRATEGY
+) -> WorkWhiteboard:
+    organization = company.organization
+    assert organization is not None
     return WorkWhiteboard.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         status=status,
         request_type="service_request",
@@ -85,7 +92,8 @@ def _whiteboard(company: Graph, owner: User, *, status: str = WorkWhiteboard.STA
 
 def _complete_all(user: User, whiteboard: WorkWhiteboard, definition: dict[str, object]) -> None:
     phase_id = str(definition["phase_id"])
-    for item in definition["workstreams"]:
+    workstreams = cast(list[object], definition["workstreams"])
+    for item in workstreams:
         workstream = cast(dict[str, object], item)
         complete_workstream(
             user=user,
@@ -105,24 +113,45 @@ def test_phase_definition_creates_whiteboard_scoped_workstreams_idempotently() -
     whiteboard = _whiteboard(company, owner)
     definition = atlas_content_production_policy()
 
-    first = start_phase_for_whiteboard(user=owner, whiteboard=whiteboard, phase_id=str(definition["phase_id"]), definition=definition)
-    second = start_phase_for_whiteboard(user=owner, whiteboard=whiteboard, phase_id=str(definition["phase_id"]), definition=definition)
+    first = start_phase_for_whiteboard(
+        user=owner,
+        whiteboard=whiteboard,
+        phase_id=str(definition["phase_id"]),
+        definition=definition,
+    )
+    second = start_phase_for_whiteboard(
+        user=owner,
+        whiteboard=whiteboard,
+        phase_id=str(definition["phase_id"]),
+        definition=definition,
+    )
 
     assert len(first["workstreams"]) == 8
     assert len(second["workstreams"]) == 8
-    assert TaskRoutingRecord.objects.filter(
-        company=company,
-        metadata_json__whiteboard_id=str(whiteboard.id),
-        metadata_json__phase_id=definition["phase_id"],
-    ).count() == 8
-    assert Run.objects.filter(input_json__whiteboard_id=str(whiteboard.id), input_json__phase_id=definition["phase_id"]).count() == 8
+    assert (
+        TaskRoutingRecord.objects.filter(
+            company=company,
+            metadata_json__whiteboard_id=str(whiteboard.id),
+            metadata_json__phase_id=definition["phase_id"],
+        ).count()
+        == 8
+    )
+    assert (
+        Run.objects.filter(
+            input_json__whiteboard_id=str(whiteboard.id),
+            input_json__phase_id=definition["phase_id"],
+        ).count()
+        == 8
+    )
     workstream_assets = Asset.objects.filter(
         company=company,
         source_key__startswith=f"whiteboard:{whiteboard.id}:phase:{definition['phase_id']}:workstream:",
     )
     assert workstream_assets.count() == 8
     assert all(asset.versions.exists() for asset in workstream_assets)
-    assert StateProjection.objects.filter(company=company, projection_type__startswith="workstream_phase:").exists()
+    assert StateProjection.objects.filter(
+        company=company, projection_type__startswith="workstream_phase:"
+    ).exists()
 
 
 def test_atlas_content_policy_passes_into_approval_with_generic_primitives() -> None:
@@ -133,9 +162,13 @@ def test_atlas_content_policy_passes_into_approval_with_generic_primitives() -> 
     definition = atlas_content_production_policy()
     phase_id = str(definition["phase_id"])
     passing_whiteboard = _whiteboard(company, owner)
-    start_phase_for_whiteboard(user=owner, whiteboard=passing_whiteboard, phase_id=phase_id, definition=definition)
+    start_phase_for_whiteboard(
+        user=owner, whiteboard=passing_whiteboard, phase_id=phase_id, definition=definition
+    )
     _complete_all(owner, passing_whiteboard, definition)
-    synthesize_phase_outputs(user=owner, whiteboard=passing_whiteboard, phase_id=phase_id, definition=definition)
+    synthesize_phase_outputs(
+        user=owner, whiteboard=passing_whiteboard, phase_id=phase_id, definition=definition
+    )
     evaluation = evaluate_gate(
         user=owner,
         whiteboard=passing_whiteboard,
@@ -165,9 +198,13 @@ def test_atlas_content_policy_failure_routes_revision_signal_without_approval() 
     definition = atlas_content_production_policy()
     phase_id = str(definition["phase_id"])
     failing_whiteboard = _whiteboard(company, owner)
-    start_phase_for_whiteboard(user=owner, whiteboard=failing_whiteboard, phase_id=phase_id, definition=definition)
+    start_phase_for_whiteboard(
+        user=owner, whiteboard=failing_whiteboard, phase_id=phase_id, definition=definition
+    )
     _complete_all(owner, failing_whiteboard, definition)
-    synthesize_phase_outputs(user=owner, whiteboard=failing_whiteboard, phase_id=phase_id, definition=definition)
+    synthesize_phase_outputs(
+        user=owner, whiteboard=failing_whiteboard, phase_id=phase_id, definition=definition
+    )
     failing_eval = evaluate_gate(
         user=owner,
         whiteboard=failing_whiteboard,
@@ -180,7 +217,9 @@ def test_atlas_content_policy_failure_routes_revision_signal_without_approval() 
     assert failing_eval.status == "BLOCK"
     assert failing_whiteboard.status == WorkWhiteboard.STATUS_IN_CONTENT
     assert not ApprovalTask.objects.filter(run=failing_eval.operation).exists()
-    signal = CompanySignal.objects.get(company=company, metadata_json__whiteboard_id=str(failing_whiteboard.id))
+    signal = CompanySignal.objects.get(
+        company=company, metadata_json__whiteboard_id=str(failing_whiteboard.id)
+    )
     assert set(signal.metadata_json["weak_areas"]) == {"strategy_alignment", "legal_compliance"}
     routing_record = TaskRoutingRecord.objects.get(
         company=company,
@@ -222,9 +261,13 @@ def test_non_marketing_fixture_works_with_different_criteria() -> None:
     definition = legal_contract_review_policy()
     phase_id = str(definition["phase_id"])
 
-    start_phase_for_whiteboard(user=owner, whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    start_phase_for_whiteboard(
+        user=owner, whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
     _complete_all(owner, whiteboard, definition)
-    synthesize_phase_outputs(user=owner, whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    synthesize_phase_outputs(
+        user=owner, whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
     evaluation = evaluate_gate(
         user=owner,
         whiteboard=whiteboard,
@@ -234,7 +277,12 @@ def test_non_marketing_fixture_works_with_different_criteria() -> None:
     )
 
     assert evaluation.status == "PASS"
-    assert {item["id"] for item in list_phase_workstreams(whiteboard=whiteboard, phase_id=phase_id, definition=definition)} == {
+    assert {
+        item["id"]
+        for item in list_phase_workstreams(
+            whiteboard=whiteboard, phase_id=phase_id, definition=definition
+        )
+    } == {
         "clause_extraction",
         "risk_review",
     }
@@ -249,8 +297,15 @@ def test_department_membership_without_company_access_cannot_see_phase_routing()
     whiteboard = _whiteboard(company, owner)
     definition = atlas_content_production_policy()
 
-    start_phase_for_whiteboard(user=owner, whiteboard=whiteboard, phase_id=str(definition["phase_id"]), definition=definition)
-    record = TaskRoutingRecord.objects.filter(metadata_json__whiteboard_id=str(whiteboard.id)).first()
+    start_phase_for_whiteboard(
+        user=owner,
+        whiteboard=whiteboard,
+        phase_id=str(definition["phase_id"]),
+        definition=definition,
+    )
+    record = TaskRoutingRecord.objects.filter(
+        metadata_json__whiteboard_id=str(whiteboard.id)
+    ).first()
     assert record is not None
     DepartmentMembership.objects.create(
         organization=org,
@@ -260,7 +315,10 @@ def test_department_membership_without_company_access_cannot_see_phase_routing()
         status="active",
     )
 
-    assert list(list_department_inbox(user=department_user, department_id=record.to_department_id)) == []
+    assert (
+        list(list_department_inbox(user=department_user, department_id=record.to_department_id))
+        == []
+    )
 
 
 def test_viewer_contract_omits_internal_gate_and_routing_details() -> None:
@@ -273,10 +331,16 @@ def test_viewer_contract_omits_internal_gate_and_routing_details() -> None:
     whiteboard = _whiteboard(company, owner)
     definition = atlas_content_production_policy()
     phase_id = str(definition["phase_id"])
-    start_phase_for_whiteboard(user=owner, whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    start_phase_for_whiteboard(
+        user=owner, whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
 
-    viewer_contract = get_phase_contract(user=viewer, whiteboard=whiteboard, phase_id=phase_id, definition=definition)
-    operator_contract = get_phase_contract(user=owner, whiteboard=whiteboard, phase_id=phase_id, definition=definition)
+    viewer_contract = get_phase_contract(
+        user=viewer, whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
+    operator_contract = get_phase_contract(
+        user=owner, whiteboard=whiteboard, phase_id=phase_id, definition=definition
+    )
 
     assert "criteria" not in viewer_contract["gate"]
     assert "department_id" not in viewer_contract["workstreams"][0]
@@ -295,14 +359,25 @@ def test_phase_state_is_scoped_to_one_whiteboard() -> None:
     first_whiteboard = _whiteboard(company, owner)
     second_whiteboard = _whiteboard(company, owner)
 
-    start_phase_for_whiteboard(user=owner, whiteboard=first_whiteboard, phase_id=phase_id, definition=definition)
-    start_phase_for_whiteboard(user=owner, whiteboard=second_whiteboard, phase_id=phase_id, definition=definition)
-    first_contract = get_phase_contract(user=owner, whiteboard=first_whiteboard, phase_id=phase_id, definition=definition)
-    second_contract = get_phase_contract(user=owner, whiteboard=second_whiteboard, phase_id=phase_id, definition=definition)
+    start_phase_for_whiteboard(
+        user=owner, whiteboard=first_whiteboard, phase_id=phase_id, definition=definition
+    )
+    start_phase_for_whiteboard(
+        user=owner, whiteboard=second_whiteboard, phase_id=phase_id, definition=definition
+    )
+    first_contract = get_phase_contract(
+        user=owner, whiteboard=first_whiteboard, phase_id=phase_id, definition=definition
+    )
+    second_contract = get_phase_contract(
+        user=owner, whiteboard=second_whiteboard, phase_id=phase_id, definition=definition
+    )
 
     first_asset_ids = {item["asset_id"] for item in first_contract["workstreams"]}
     second_asset_ids = {item["asset_id"] for item in second_contract["workstreams"]}
     assert first_asset_ids
     assert second_asset_ids
     assert first_asset_ids.isdisjoint(second_asset_ids)
-    assert all(str(first_whiteboard.id) in key for key in Asset.objects.filter(id__in=first_asset_ids).values_list("source_key", flat=True))
+    assert all(
+        str(first_whiteboard.id) in key
+        for key in Asset.objects.filter(id__in=first_asset_ids).values_list("source_key", flat=True)
+    )

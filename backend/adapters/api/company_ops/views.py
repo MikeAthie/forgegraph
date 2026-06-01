@@ -117,6 +117,8 @@ class CompanySignalsView(APIView):
                 company=company,
                 actor=cast(User, request.user),
                 signal_type=str(serializer.validated_data["signal_type"]),
+                signal_kind=str(serializer.validated_data.get("signal_kind") or ""),
+                domain_context=str(serializer.validated_data.get("domain_context") or ""),
                 title=str(serializer.validated_data["title"]),
                 summary=str(serializer.validated_data.get("summary") or ""),
                 source=str(serializer.validated_data.get("source") or "manual"),
@@ -500,6 +502,8 @@ class CompanyOperationsLaunchView(APIView):
                 company=company,
                 actor=cast(User, request.user),
                 operation_type=str(serializer.validated_data["operation_type"]),
+                operation_family=str(serializer.validated_data.get("operation_family") or ""),
+                domain_context=str(serializer.validated_data.get("domain_context") or ""),
                 source_signal=source_signal,
                 context_note=str(serializer.validated_data.get("context_note") or ""),
                 run_type=str(serializer.validated_data.get("run_type") or "rehearsal"),
@@ -591,7 +595,7 @@ def _company_from_body(request: Request, company_id: Any, *, minimum_role: str) 
         return _not_found("Company was not found or you do not have access to it.")
     if not has_company_access(user, company, minimum_role=minimum_role):
         return _forbidden("You do not have permission to use company operations.")
-    return cast(Graph, company)
+    return company
 
 
 def _signal_for_user(

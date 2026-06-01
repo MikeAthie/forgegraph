@@ -1,8 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"net/http"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/forgegraph/engine/adapter/store"
 )
 
 func TestNormalizeRunStateModeDefaultsToControlPlaneHTTP(t *testing.T) {
@@ -109,4 +115,218 @@ func TestResolveEngineInstanceIDPrefersConfiguredEngineHost(t *testing.T) {
 	if got := resolveEngineInstanceID(cfg); got != "engine:50051" {
 		t.Fatalf("resolveEngineInstanceID() = %s, want engine:50051", got)
 	}
+}
+
+func TestReadinessRuntimeIntentRedisDirectFailureBlocksReadiness(t *testing.T) {
+	cfg := &Config{
+		RedisAddr:    "redis:6379",
+		RunStateMode: runStateModeControlPlaneHTTP,
+	}
+	redisStatus := store.HealthStatus{Healthy: false, Error: "dial tcp redis:6379: connect refused"}
+
+	if got := readinessHTTPStatus(cfg, true, redisStatus); got != http.StatusServiceUnavailable {
+		t.Fatalf("readinessHTTPStatus() = %d, want %d", got, http.StatusServiceUnavailable)
+	}
+	payload := readinessPayload(cfg, true, redisStatus)
+	if got := payload["status"]; got != "not_ready" {
+		t.Fatalf("payload status = %v, want not_ready", got)
+	}
+	if got := payload["redis_configured"]; got != true {
+		t.Fatalf("payload redis_configured = %v, want true", got)
+	}
+	if got := payload["redis_mode"]; got != "direct" {
+		t.Fatalf("payload redis_mode = %v, want direct", got)
+	}
+	if got := payload["redis_error"]; got != redisStatus.Error {
+		t.Fatalf("payload redis_error = %v, want %s", got, redisStatus.Error)
+	}
+}
+
+func TestReadinessRuntimeIntentRedisDirectHealthyIsReady(t *testing.T) {
+	cfg := &Config{
+		RedisAddr:    "redis:6379",
+		RunStateMode: runStateModeControlPlaneHTTP,
+	}
+	redisStatus := store.HealthStatus{Healthy: true}
+
+	if got := readinessHTTPStatus(cfg, true, redisStatus); got != http.StatusOK {
+		t.Fatalf("readinessHTTPStatus() = %d, want %d", got, http.StatusOK)
+	}
+	payload := readinessPayload(cfg, true, redisStatus)
+	if got := payload["status"]; got != "ready" {
+		t.Fatalf("payload status = %v, want ready", got)
+	}
+	if got := payload["runtime_intent_redis_mode"]; got != "direct" {
+		t.Fatalf("payload runtime_intent_redis_mode = %v, want direct", got)
+	}
+}
+
+func TestReadinessRuntimeIntentRedisSentinelHealthyIsReady(t *testing.T) {
+	cfg := &Config{
+		RedisSentinelAddrs:      "sentinel-a:26379, sentinel-b:26379",
+		RedisSentinelMasterName: "mymaster",
+		RunStateMode:            runStateModeControlPlaneHTTP,
+	}
+	redisStatus := store.HealthStatus{Healthy: true}
+
+	if got := readinessHTTPStatus(cfg, true, redisStatus); got != http.StatusOK {
+		t.Fatalf("readinessHTTPStatus() = %d, want %d", got, http.StatusOK)
+	}
+	payload := readinessPayload(cfg, true, redisStatus)
+	if got := payload["redis_configured"]; got != true {
+		t.Fatalf("payload redis_configured = %v, want true", got)
+	}
+	if got := payload["redis_mode"]; got != "sentinel" {
+		t.Fatalf("payload redis_mode = %v, want sentinel", got)
+	}
+}
+
+func TestReadinessWithoutRuntimeIntentRedisAllowsLocalHealth(t *testing.T) {
+	cfg := &Config{RunStateMode: runStateModeInMemory}
+	redisStatus := defaultRuntimeIntentRedisHealth(cfg)
+
+	if got := readinessHTTPStatus(cfg, true, redisStatus); got != http.StatusOK {
+		t.Fatalf("readinessHTTPStatus() = %d, want %d", got, http.StatusOK)
+	}
+	payload := readinessPayload(cfg, true, redisStatus)
+	if got := payload["redis_configured"]; got != false {
+		t.Fatalf("payload redis_configured = %v, want false", got)
+	}
+	if got := payload["redis_mode"]; got != "none" {
+		t.Fatalf("payload redis_mode = %v, want none", got)
+	}
+	if got := payload["redis_healthy"]; got != true {
+		t.Fatalf("payload redis_healthy = %v, want true", got)
+	}
+}
+
+func TestRuntimeRedisHealthPayloadDescribesRuntimeIntentTransport(t *testing.T) {
+	checkedAt := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
+	cfg := &Config{RedisAddr: "redis:6379"}
+	redisStatus := store.HealthStatus{
+		Healthy:   false,
+		LatencyMs: 17,
+		CheckedAt: checkedAt,
+		Error:     "redis down",
+	}
+
+	payload := runtimeRedisHealthPayload(cfg, redisStatus)
+	if got := payload["transport"]; got != "runtime_intents" {
+		t.Fatalf("payload transport = %v, want runtime_intents", got)
+	}
+	if got := payload["configured"]; got != true {
+		t.Fatalf("payload configured = %v, want true", got)
+	}
+	if got := payload["mode"]; got != "direct" {
+		t.Fatalf("payload mode = %v, want direct", got)
+	}
+	if got := payload["latency_ms"]; got != int64(17) {
+		t.Fatalf("payload latency_ms = %v, want 17", got)
+	}
+	if got := payload["checked_at"]; got != checkedAt {
+		t.Fatalf("payload checked_at = %v, want %v", got, checkedAt)
+	}
+	if got := payload["error"]; got != "redis down" {
+		t.Fatalf("payload error = %v, want redis down", got)
+	}
+}
+
+func TestRedisHealthCheckerFailureBlocksReadiness(t *testing.T) {
+	checker := store.NewRedisHealthChecker(fakeRedisPinger{err: errors.New("redis down")})
+	cfg := &Config{RedisAddr: "redis:6379"}
+
+	status := checker.Check(context.Background())
+	if status.Healthy {
+		t.Fatal("expected redis health to be unhealthy")
+	}
+	if status.Error != "redis down" {
+		t.Fatalf("redis health error = %q, want redis down", status.Error)
+	}
+	if got := readinessHTTPStatus(cfg, true, status); got != http.StatusServiceUnavailable {
+		t.Fatalf("readinessHTTPStatus() = %d, want %d", got, http.StatusServiceUnavailable)
+	}
+}
+
+func TestShutdownEngineRuntimeStopsResources(t *testing.T) {
+	grpcServer := &fakeGRPCServer{}
+	emitter := &fakeEventEmitter{}
+	worker := &fakeWorker{}
+	redisClient := &fakeCloser{}
+	cancelled := false
+
+	err := shutdownEngineRuntime(context.Background(), engineRuntimeResources{
+		cancel:              func() { cancelled = true },
+		grpcServer:          grpcServer,
+		eventEmitter:        emitter,
+		summarizationWorker: worker,
+		redisClient:         redisClient,
+	})
+	if err != nil {
+		t.Fatalf("shutdownEngineRuntime() error = %v", err)
+	}
+	if !cancelled {
+		t.Fatal("expected root context cancel to be called")
+	}
+	if !grpcServer.gracefulStopped {
+		t.Fatal("expected gRPC server to be gracefully stopped")
+	}
+	if grpcServer.stopped {
+		t.Fatal("did not expect forced gRPC stop during graceful shutdown")
+	}
+	if !worker.stopped {
+		t.Fatal("expected summarization worker to stop")
+	}
+	if !emitter.closed {
+		t.Fatal("expected event emitter to close")
+	}
+	if !redisClient.closed {
+		t.Fatal("expected runtime intent redis client to close")
+	}
+}
+
+type fakeRedisPinger struct {
+	err error
+}
+
+func (p fakeRedisPinger) Ping(context.Context) error {
+	return p.err
+}
+
+type fakeGRPCServer struct {
+	gracefulStopped bool
+	stopped         bool
+}
+
+func (s *fakeGRPCServer) GracefulStop() {
+	s.gracefulStopped = true
+}
+
+func (s *fakeGRPCServer) Stop() {
+	s.stopped = true
+}
+
+type fakeEventEmitter struct {
+	closed bool
+}
+
+func (e *fakeEventEmitter) Close(context.Context) error {
+	e.closed = true
+	return nil
+}
+
+type fakeWorker struct {
+	stopped bool
+}
+
+func (w *fakeWorker) Stop() {
+	w.stopped = true
+}
+
+type fakeCloser struct {
+	closed bool
+}
+
+func (c *fakeCloser) Close() error {
+	c.closed = true
+	return nil
 }

@@ -34,6 +34,7 @@ from tests.fixtures.performance_policies import (
     atlas_launch_performance_policy,
     non_marketing_performance_policy,
 )
+from tests.helpers.organizations import required_company_organization
 
 pytestmark = pytest.mark.django_db
 
@@ -47,7 +48,10 @@ def _user(org: Organization, email: str, role: str = "member") -> User:
 
 
 def _company(org: Organization, owner: User, *, name: str = "Legacy Eyewear") -> Graph:
-    company = cast(Graph, Graph.objects.create(owner=owner, organization=org, name=name, description="Test company"))
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=owner, organization=org, name=name, description="Test company"),
+    )
     CompanyAccessPolicy.objects.create(
         organization=org,
         company=company,
@@ -67,9 +71,11 @@ def _assign(org: Organization, company: Graph, user: User, role: str = "member")
     )
 
 
-def _whiteboard(company: Graph, owner: User, *, status: str = WorkWhiteboard.STATUS_IN_APPROVAL) -> WorkWhiteboard:
+def _whiteboard(
+    company: Graph, owner: User, *, status: str = WorkWhiteboard.STATUS_IN_APPROVAL
+) -> WorkWhiteboard:
     return WorkWhiteboard.objects.create(
-        organization=company.organization,
+        organization=required_company_organization(company),
         company=company,
         status=status,
         request_type="service_request",
@@ -82,6 +88,21 @@ def _whiteboard(company: Graph, owner: User, *, status: str = WorkWhiteboard.STA
 
 
 def _deployment_projection(whiteboard: WorkWhiteboard, *, status: str = "partial") -> None:
+    email_channel = {
+        "id": "email",
+        "status": "executed",
+        "tool_id": "email.send_dry_run",
+        "allow_sandbox_evidence": True,
+        "receipt": {
+            "result": {
+                "provider": "fake",
+                "mode": "dry_run",
+                "evidence_mode": "sandbox",
+                "status": "dry_run",
+                "recipient_count": 1,
+            }
+        },
+    }
     StateProjection.objects.update_or_create(
         organization=whiteboard.organization,
         company=whiteboard.company,
@@ -90,7 +111,12 @@ def _deployment_projection(whiteboard: WorkWhiteboard, *, status: str = "partial
         defaults={
             "display_label": "Whiteboard deployment",
             "source_refs_json": [{"whiteboard_id": str(whiteboard.id)}],
-            "json_state": {"whiteboard_id": str(whiteboard.id), "status": status},
+            "json_state": {
+                "whiteboard_id": str(whiteboard.id),
+                "status": status,
+                "channels": [email_channel],
+                "policy": {"channels": [email_channel]},
+            },
             "markdown_summary": "Deployment evidence for performance tests.",
             "generated_by": "system",
         },
@@ -129,7 +155,7 @@ def _install_synthetic_policy(company: Graph, policy: dict[str, object]) -> None
         status="active",
     )
     CompanyOperatingModelInstallation.objects.create(
-        organization=company.organization,
+        organization=required_company_organization(company),
         company=company,
         pack_release=release,
         pack_id=release.pack_id,
@@ -146,7 +172,7 @@ def test_atlas_policy_collects_available_source_and_blocks_missing_connectors() 
     company = _company(org, owner)
     _assign(org, company, owner, "member")
     policy = atlas_launch_performance_policy()
-    _install_policy_pack(company=company, user=owner, policy=policy, connectors=["email_service_connector"])
+    _install_policy_pack(company=company, user=owner, policy=policy, connectors=["email_connector"])
     whiteboard = _whiteboard(company, owner)
     _deployment_projection(whiteboard, status="partial")
 
@@ -160,11 +186,20 @@ def test_atlas_policy_collects_available_source_and_blocks_missing_connectors() 
     assert sources["email"]["metrics"]["execution_completeness"] == 86
     assert sources["whatsapp"]["status"] == "blocked"
     assert sources["whatsapp"]["blocked_reason_code"] == "missing_metric_connector"
-    assert ToolExecution.objects.filter(tool_name="dmp.email_draft_send_schedule").count() == 1
-    assert MetricSnapshot.objects.filter(company=company, metric_sources_json__whiteboard_id=str(whiteboard.id)).count() == 1
-    assert CompanySignal.objects.filter(company=company, metadata_json__reason_code="missing_metric_connector").exists()
-    assert TaskRoutingRecord.objects.filter(company=company, metadata_json__blocked_reason_code="missing_metric_connector").exists()
-    assert not ToolExecution.objects.exclude(tool_name="dmp.email_draft_send_schedule").exists()
+    assert ToolExecution.objects.filter(tool_name="email.send_dry_run").count() == 1
+    assert (
+        MetricSnapshot.objects.filter(
+            company=company, metric_sources_json__whiteboard_id=str(whiteboard.id)
+        ).count()
+        == 1
+    )
+    assert CompanySignal.objects.filter(
+        company=company, metadata_json__reason_code="missing_metric_connector"
+    ).exists()
+    assert TaskRoutingRecord.objects.filter(
+        company=company, metadata_json__blocked_reason_code="missing_metric_connector"
+    ).exists()
+    assert not ToolExecution.objects.exclude(tool_name="email.send_dry_run").exists()
 
 
 def test_report_evaluation_and_routing_are_created_from_policy() -> None:
@@ -173,7 +208,7 @@ def test_report_evaluation_and_routing_are_created_from_policy() -> None:
     company = _company(org, owner)
     _assign(org, company, owner, "member")
     policy = atlas_launch_performance_policy()
-    _install_policy_pack(company=company, user=owner, policy=policy, connectors=["email_service_connector"])
+    _install_policy_pack(company=company, user=owner, policy=policy, connectors=["email_connector"])
     whiteboard = _whiteboard(company, owner)
     _deployment_projection(whiteboard, status="prepared")
 
@@ -211,7 +246,7 @@ def test_duplicate_start_is_idempotent() -> None:
         company=company,
         user=owner,
         policy=atlas_launch_performance_policy(),
-        connectors=["email_service_connector"],
+        connectors=["email_connector"],
     )
     whiteboard = _whiteboard(company, owner)
     _deployment_projection(whiteboard, status="executed")
@@ -219,8 +254,11 @@ def test_duplicate_start_is_idempotent() -> None:
     first = start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
     second = start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
 
-    assert first["current_state"]["metric_snapshot_id"] == second["current_state"]["metric_snapshot_id"]
-    assert ToolExecution.objects.filter(tool_name="dmp.email_draft_send_schedule").count() == 1
+    assert (
+        first["current_state"]["metric_snapshot_id"]
+        == second["current_state"]["metric_snapshot_id"]
+    )
+    assert ToolExecution.objects.filter(tool_name="email.send_dry_run").count() == 1
     assert MetricSnapshot.objects.filter(company=company).count() == 1
 
 
@@ -270,8 +308,151 @@ def test_status_gate_blocks_without_required_status_or_deployment_evidence() -> 
         start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
 
 
+def test_failed_email_deployment_evidence_does_not_start_review() -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "performance-failed-email@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    _install_policy_pack(company=company, user=owner, policy=atlas_launch_performance_policy())
+    whiteboard = _whiteboard(company, owner, status=WorkWhiteboard.STATUS_IN_APPROVAL)
+    StateProjection.objects.update_or_create(
+        organization=whiteboard.organization,
+        company=whiteboard.company,
+        program=None,
+        projection_type=f"whiteboard_deployment:{whiteboard.id}",
+        defaults={
+            "display_label": "Whiteboard deployment",
+            "source_refs_json": [{"whiteboard_id": str(whiteboard.id)}],
+            "json_state": {
+                "whiteboard_id": str(whiteboard.id),
+                "status": "partial",
+                "channels": [
+                    {
+                        "id": "email",
+                        "status": "blocked",
+                        "tool_id": "email.send_dry_run",
+                        "receipt": {"result": {"status": "failed", "evidence_mode": "sandbox"}},
+                    }
+                ],
+            },
+            "markdown_summary": "Failed deployment evidence for performance tests.",
+            "generated_by": "system",
+        },
+    )
+
+    with pytest.raises(PerformanceOrchestrationError, match="status"):
+        start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
+
+
+def test_web_automation_deployment_evidence_starts_review_only_when_policy_allows() -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "performance-web-automation@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    policy = atlas_launch_performance_policy()
+    policy["allow_web_automation_deployment_evidence"] = True
+    _install_policy_pack(company=company, user=owner, policy=policy, connectors=["email_connector"])
+    whiteboard = _whiteboard(company, owner, status=WorkWhiteboard.STATUS_IN_APPROVAL)
+    _web_automation_deployment_projection(whiteboard, allowed=True)
+
+    contract = start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
+
+    assert contract["current_state"]["metric_snapshot_id"]
+    assert MetricSnapshot.objects.filter(company=company).exists()
+
+
+def test_web_automation_deployment_evidence_does_not_start_review_without_policy_permission() -> (
+    None
+):
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "performance-web-automation-blocked@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    policy = atlas_launch_performance_policy()
+    policy["allow_web_automation_deployment_evidence"] = False
+    _install_policy_pack(company=company, user=owner, policy=policy, connectors=["email_connector"])
+    whiteboard = _whiteboard(company, owner, status=WorkWhiteboard.STATUS_IN_APPROVAL)
+    _web_automation_deployment_projection(whiteboard, allowed=False)
+
+    with pytest.raises(PerformanceOrchestrationError, match="status"):
+        start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
+
+
+def test_provider_publish_social_evidence_starts_review_on_success() -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "performance-social-provider@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    policy = atlas_launch_performance_policy()
+    _install_policy_pack(company=company, user=owner, policy=policy, connectors=["email_connector"])
+    whiteboard = _whiteboard(company, owner, status=WorkWhiteboard.STATUS_IN_APPROVAL)
+    _social_deployment_projection(
+        whiteboard, evidence_mode="provider_publish", status="accepted", allowed=False
+    )
+
+    contract = start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
+
+    assert contract["current_state"]["metric_snapshot_id"]
+    assert MetricSnapshot.objects.filter(company=company).exists()
+
+
+def test_manual_publish_social_evidence_starts_review_only_when_policy_allows() -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "performance-social-manual@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    policy = atlas_launch_performance_policy()
+    policy["allow_manual_publish_deployment_evidence"] = True
+    _install_policy_pack(company=company, user=owner, policy=policy, connectors=["email_connector"])
+    whiteboard = _whiteboard(company, owner, status=WorkWhiteboard.STATUS_IN_APPROVAL)
+    _social_deployment_projection(
+        whiteboard, evidence_mode="manual_publish", status="recorded", allowed=True
+    )
+
+    contract = start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
+
+    assert contract["current_state"]["metric_snapshot_id"]
+
+    blocked_company = _company(org, owner, name="Manual Social Blocked")
+    _assign(org, blocked_company, owner, "member")
+    blocked_policy = atlas_launch_performance_policy()
+    blocked_policy["allow_manual_publish_deployment_evidence"] = False
+    _install_policy_pack(
+        company=blocked_company, user=owner, policy=blocked_policy, connectors=["email_connector"]
+    )
+    blocked_whiteboard = _whiteboard(
+        blocked_company, owner, status=WorkWhiteboard.STATUS_IN_APPROVAL
+    )
+    _social_deployment_projection(
+        blocked_whiteboard, evidence_mode="manual_publish", status="recorded", allowed=False
+    )
+
+    with pytest.raises(PerformanceOrchestrationError, match="status"):
+        start_performance_review_for_whiteboard(user=owner, whiteboard=blocked_whiteboard)
+
+
+def test_failed_social_deployment_evidence_does_not_start_review() -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "performance-social-failed@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    _install_policy_pack(company=company, user=owner, policy=atlas_launch_performance_policy())
+    whiteboard = _whiteboard(company, owner, status=WorkWhiteboard.STATUS_IN_APPROVAL)
+    _social_deployment_projection(
+        whiteboard, evidence_mode="provider_publish", status="failed", allowed=True
+    )
+
+    with pytest.raises(PerformanceOrchestrationError, match="status"):
+        start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
+
+
 def test_core_performance_service_has_no_policy_metric_literals() -> None:
-    service_path = Path(__file__).resolve().parents[3] / "application" / "services" / "performance_orchestration.py"
+    service_path = (
+        Path(__file__).resolve().parents[3]
+        / "application"
+        / "services"
+        / "performance_orchestration.py"
+    )
     service_text = service_path.read_text(encoding="utf-8")
 
     for forbidden in (
@@ -288,3 +469,91 @@ def test_core_performance_service_has_no_policy_metric_literals() -> None:
         "optimization_confidence",
     ):
         assert forbidden not in service_text
+
+
+def _web_automation_deployment_projection(whiteboard: WorkWhiteboard, *, allowed: bool) -> None:
+    channel = {
+        "id": "client_message",
+        "status": "executed",
+        "tool_id": "whatsapp.web_automation_send",
+        "allow_web_automation_evidence": allowed,
+        "receipt": {
+            "result": {
+                "provider": "open_wa_web",
+                "mode": "real_send",
+                "evidence_mode": "web_automation",
+                "status": "accepted",
+                "recipient_count": 1,
+                "recipient_hashes": ["sha256:abc"],
+                "session_required": True,
+                "session_status": "ready",
+            }
+        },
+    }
+    StateProjection.objects.update_or_create(
+        organization=whiteboard.organization,
+        company=whiteboard.company,
+        program=None,
+        projection_type=f"whiteboard_deployment:{whiteboard.id}",
+        defaults={
+            "display_label": "Whiteboard deployment",
+            "source_refs_json": [{"whiteboard_id": str(whiteboard.id)}],
+            "json_state": {
+                "whiteboard_id": str(whiteboard.id),
+                "status": "partial",
+                "channels": [channel],
+                "policy": {"channels": [channel]},
+            },
+            "markdown_summary": "Web automation deployment evidence for performance tests.",
+            "generated_by": "system",
+        },
+    )
+
+
+def _social_deployment_projection(
+    whiteboard: WorkWhiteboard,
+    *,
+    evidence_mode: str,
+    status: str,
+    allowed: bool,
+) -> None:
+    channel = {
+        "id": "community_notice",
+        "status": "executed",
+        "tool_id": "social.provider_publish"
+        if evidence_mode == "provider_publish"
+        else "social.manual_publish_record",
+        "allow_manual_publish_evidence": allowed,
+        "receipt": {
+            "result": {
+                "provider": "fake",
+                "platform": "configured_platform",
+                "mode": "provider_publish"
+                if evidence_mode == "provider_publish"
+                else "manual_publish_record",
+                "evidence_mode": evidence_mode,
+                "status": status,
+                "asset_count": 1,
+                "caption_hash": "sha256:abc",
+                "account_id_hash": "sha256:def",
+            }
+        },
+    }
+    StateProjection.objects.update_or_create(
+        organization=whiteboard.organization,
+        company=whiteboard.company,
+        program=None,
+        projection_type=f"whiteboard_deployment:{whiteboard.id}",
+        defaults={
+            "display_label": "Whiteboard deployment",
+            "source_refs_json": [{"whiteboard_id": str(whiteboard.id)}],
+            "json_state": {
+                "whiteboard_id": str(whiteboard.id),
+                "status": "partial",
+                "channels": [channel],
+                "policy": {"channels": [channel]},
+            },
+            "markdown_summary": "Social deployment evidence for performance tests.",
+            "generated_by": "system",
+        },
+    )

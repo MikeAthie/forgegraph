@@ -104,7 +104,11 @@ async function resolveChatCompletionsUrl(): Promise<string> {
         }),
       );
 
-      return probeResults.find((url): url is string => Boolean(url)) ?? candidates[0] ?? `${LOCAL_LLM_BASE_URL}/chat/completions`;
+      return (
+        probeResults.find((url): url is string => Boolean(url)) ??
+        candidates[0] ??
+        `${LOCAL_LLM_BASE_URL}/chat/completions`
+      );
     })();
   }
 

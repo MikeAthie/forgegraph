@@ -115,12 +115,30 @@ function useOperationDetailController({ routeParam }: OperationDetailViewProps) 
     },
     [],
   );
-  const setOperation = useCallback((value: SetStateAction<OperationVM | null>) => setDetailField("operation", value), [setDetailField]);
-  const setSelectedTaskId = useCallback((value: SetStateAction<string | null>) => setDetailField("selectedTaskId", value), [setDetailField]);
-  const setLoading = useCallback((value: SetStateAction<boolean>) => setDetailField("loading", value), [setDetailField]);
-  const setError = useCallback((value: SetStateAction<string | null>) => setDetailField("error", value), [setDetailField]);
-  const setShowAllTasks = useCallback((value: SetStateAction<boolean>) => setDetailField("showAllTasks", value), [setDetailField]);
-  const setActionLoading = useCallback((value: SetStateAction<"stop" | "retry" | null>) => setDetailField("actionLoading", value), [setDetailField]);
+  const setOperation = useCallback(
+    (value: SetStateAction<OperationVM | null>) => setDetailField("operation", value),
+    [setDetailField],
+  );
+  const setSelectedTaskId = useCallback(
+    (value: SetStateAction<string | null>) => setDetailField("selectedTaskId", value),
+    [setDetailField],
+  );
+  const setLoading = useCallback(
+    (value: SetStateAction<boolean>) => setDetailField("loading", value),
+    [setDetailField],
+  );
+  const setError = useCallback(
+    (value: SetStateAction<string | null>) => setDetailField("error", value),
+    [setDetailField],
+  );
+  const setShowAllTasks = useCallback(
+    (value: SetStateAction<boolean>) => setDetailField("showAllTasks", value),
+    [setDetailField],
+  );
+  const setActionLoading = useCallback(
+    (value: SetStateAction<"stop" | "retry" | null>) => setDetailField("actionLoading", value),
+    [setDetailField],
+  );
   const shouldPollCurrentOperation = shouldPollOperationStatus(operation);
 
   const loadOperation = useCallback(
@@ -206,7 +224,9 @@ function useOperationDetailController({ routeParam }: OperationDetailViewProps) 
     const decisionTasks = operation.tasks.filter(
       (task) => task.requiresApproval || task.status === "paused" || task.status === "waiting_for_decision",
     );
-    const failedTasks = operation.tasks.filter((task) => ["failed", "dead_lettered", "cancelled"].includes(task.status));
+    const failedTasks = operation.tasks.filter((task) =>
+      ["failed", "dead_lettered", "cancelled"].includes(task.status),
+    );
     const retryTasks = operation.tasks.filter((task) => task.status === "retry_scheduled");
     const highlightIds = new Set([
       ...bottleneckIds,
@@ -241,7 +261,8 @@ function useOperationDetailController({ routeParam }: OperationDetailViewProps) 
   const canStopOperation = operation ? ["queued", "running"].includes(operation.status) : false;
   const isWaitingForApproval = operation?.status === "paused" || Boolean(decisionTask);
   const canRetryOperation = Boolean(operation) && !canStopOperation && !isWaitingForApproval;
-  const retryButtonLabel = actionLoading === "retry" ? "Retrying" : operation?.status === "completed" ? "Start again" : "Retry operation";
+  const retryButtonLabel =
+    actionLoading === "retry" ? "Retrying" : operation?.status === "completed" ? "Start again" : "Retry operation";
   const actionTitle =
     failedTask || operation?.failure
       ? "Failure needs review"
@@ -305,12 +326,15 @@ function useOperationDetailController({ routeParam }: OperationDetailViewProps) 
     }
   }, [actionLoading, operation, push, setActionLoading]);
 
-  const handleInspectTask = useCallback((taskId: string) => {
-    setSelectedTaskId(taskId);
-    if (typeof document !== "undefined") {
-      document.getElementById("department-activity")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [setSelectedTaskId]);
+  const handleInspectTask = useCallback(
+    (taskId: string) => {
+      setSelectedTaskId(taskId);
+      if (typeof document !== "undefined") {
+        document.getElementById("department-activity")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    },
+    [setSelectedTaskId],
+  );
 
   return {
     operation,
@@ -387,12 +411,18 @@ function OperationActionBanner({ controller }: { controller: OperationDetailCont
           <h3 className="mt-3 text-2xl font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>
             {controller.actionTitle}
           </h3>
-          <p className="mt-2 max-w-3xl text-sm leading-7 text-white/68 dark:text-zinc-600">{controller.actionDescription}</p>
+          <p className="mt-2 max-w-3xl text-sm leading-7 text-white/68 dark:text-zinc-600">
+            {controller.actionDescription}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           {failedTask ? (
-            <Button type="button" className={primaryActionButtonClass} onClick={() => controller.handleInspectTask(failedTask.id)}>
+            <Button
+              type="button"
+              className={primaryActionButtonClass}
+              onClick={() => controller.handleInspectTask(failedTask.id)}
+            >
               Inspect failure
               <ArrowRight className="size-4" />
             </Button>
@@ -451,10 +481,18 @@ function OperationSummaryPanel({ controller }: { controller: OperationDetailCont
       <div className="grid gap-4 xl:grid-cols-4">
         <OperationMetricCard label="Total duration" value={formatDuration(operation.durationMs)} />
         <OperationMetricCard label="Estimated cost" value={formatCurrency(controller.totalCost)} />
-        <OperationMetricCard label="Attention point" value={failedTask ? failedTask.departmentName : "No failure detected"} compact />
+        <OperationMetricCard
+          label="Attention point"
+          value={failedTask ? failedTask.departmentName : "No failure detected"}
+          compact
+        />
         <OperationMetricCard
           label="Bottleneck"
-          value={bottleneckTask ? `${bottleneckTask.departmentName} · ${formatDuration(bottleneckTask.durationMs)}` : "No bottleneck flagged"}
+          value={
+            bottleneckTask
+              ? `${bottleneckTask.departmentName} · ${formatDuration(bottleneckTask.durationMs)}`
+              : "No bottleneck flagged"
+          }
           compact
         />
       </div>
@@ -466,7 +504,13 @@ function OperationMetricCard({ label, value, compact }: { label: string; value: 
   return (
     <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
       <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{label}</p>
-      <p className={compact ? "mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50" : "mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50"}>
+      <p
+        className={
+          compact
+            ? "mt-2 text-sm font-semibold text-zinc-950 dark:text-zinc-50"
+            : "mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50"
+        }
+      >
         {value}
       </p>
     </div>
@@ -487,7 +531,8 @@ function AttentionAndPosturePanels({ controller }: { controller: OperationDetail
 }
 
 function AttentionPointsPanel({ controller }: { controller: OperationDetailController }) {
-  const hasAttention = controller.failedTask || controller.decisionTask || controller.retryTask || controller.bottleneckTask;
+  const hasAttention =
+    controller.failedTask || controller.decisionTask || controller.retryTask || controller.bottleneckTask;
 
   return (
     <Panel title="Attention points" description="The department activity that matters most right now.">
@@ -514,7 +559,9 @@ function FailureAttentionCard({ task }: { task: TaskVM }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">Needs attention</p>
-          <p className="mt-2 text-sm leading-7">{task.departmentName} needs attention. Inspect this activity before retrying the operation.</p>
+          <p className="mt-2 text-sm leading-7">
+            {task.departmentName} needs attention. Inspect this activity before retrying the operation.
+          </p>
         </div>
         <AlertTriangle className="size-4 shrink-0" />
       </div>
@@ -526,7 +573,9 @@ function DecisionAttentionCard({ task }: { task: TaskVM }) {
   return (
     <div className="rounded-[1.2rem] border border-amber-800/12 bg-amber-50 p-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
       <p className="text-sm font-semibold">Decision boundary</p>
-      <p className="mt-2 text-sm leading-7">{task.departmentName} is waiting on a human decision or approval boundary.</p>
+      <p className="mt-2 text-sm leading-7">
+        {task.departmentName} is waiting on a human decision or approval boundary.
+      </p>
     </div>
   );
 }
@@ -535,7 +584,9 @@ function RetryAttentionCard({ task }: { task: TaskVM }) {
   return (
     <div className="rounded-[1.2rem] border border-amber-800/12 bg-amber-50 p-4 text-amber-950 dark:border-amber-200/15 dark:bg-amber-500/10 dark:text-amber-100">
       <p className="text-sm font-semibold">Retry scheduled</p>
-      <p className="mt-2 text-sm leading-7">{task.latestRetry?.retry_reason || `${task.departmentName} has a bounded backend retry recorded.`}</p>
+      <p className="mt-2 text-sm leading-7">
+        {task.latestRetry?.retry_reason || `${task.departmentName} has a bounded backend retry recorded.`}
+      </p>
     </div>
   );
 }
@@ -547,7 +598,8 @@ function BottleneckAttentionCard({ task }: { task: TaskVM }) {
         <div>
           <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">Bottleneck</p>
           <p className="mt-2 text-sm leading-7 text-zinc-700 dark:text-zinc-200">
-            {task.departmentName} consumed {formatDuration(task.durationMs)} and is materially slower than the rest of the operation.
+            {task.departmentName} consumed {formatDuration(task.durationMs)} and is materially slower than the rest of
+            the operation.
           </p>
         </div>
         <Clock3 className="size-4 shrink-0 text-zinc-500 dark:text-zinc-400" />
@@ -566,10 +618,16 @@ function OperationPosturePanel({ controller }: { controller: OperationDetailCont
       <KeyValueGrid
         columns={2}
         items={[
-          { label: "Current status", value: <StatusBadge status={controller.operation.status} label={controller.operation.status} /> },
+          {
+            label: "Current status",
+            value: <StatusBadge status={controller.operation.status} label={controller.operation.status} />,
+          },
           { label: "Decision boundaries", value: controller.activityState.decisionTasks.length },
           { label: "Flagged bottlenecks", value: controller.activityState.bottleneckTasks.length },
-          { label: "Routine tasks hidden", value: controller.showAllTasks ? 0 : controller.activityState.hiddenRoutineCount },
+          {
+            label: "Routine tasks hidden",
+            value: controller.showAllTasks ? 0 : controller.activityState.hiddenRoutineCount,
+          },
         ]}
       />
     </Panel>
@@ -605,7 +663,10 @@ function DepartmentActivityPanel({ controller }: { controller: OperationDetailCo
             ))}
           </div>
         ) : (
-          <EmptyBlock title="No activity available" description="This operation has not emitted any department activity yet." />
+          <EmptyBlock
+            title="No activity available"
+            description="This operation has not emitted any department activity yet."
+          />
         )}
       </Panel>
     </div>
@@ -618,7 +679,12 @@ function DepartmentActivityToggle({ controller }: { controller: OperationDetailC
   }
 
   return (
-    <Button type="button" variant="outline" className="rounded-full" onClick={() => controller.setShowAllTasks((current) => !current)}>
+    <Button
+      type="button"
+      variant="outline"
+      className="rounded-full"
+      onClick={() => controller.setShowAllTasks((current) => !current)}
+    >
       {controller.showAllTasks ? (
         <>
           Collapse routine activity
@@ -697,7 +763,9 @@ function DepartmentActivityNarrative({
         {task.latestRetry ? <StatusBadge status="retry_scheduled" label="retry" /> : null}
       </div>
       <p className="mt-3 text-sm leading-7 text-zinc-600 dark:text-zinc-300">{getTaskNarrative(task)}</p>
-      {task.toolName ? <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Tool {task.toolName} · Completed</p> : null}
+      {task.toolName ? (
+        <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Tool {task.toolName} · Completed</p>
+      ) : null}
     </div>
   );
 }
@@ -764,7 +832,10 @@ function DeliverablePanel({ operation }: { operation: OperationVM }) {
           </p>
         </div>
       ) : (
-        <EmptyBlock title="Deliverable not ready" description="The deliverable will appear after the company finishes this operation." />
+        <EmptyBlock
+          title="Deliverable not ready"
+          description="The deliverable will appear after the company finishes this operation."
+        />
       )}
     </Panel>
   );

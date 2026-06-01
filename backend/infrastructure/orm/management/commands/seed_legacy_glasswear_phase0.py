@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from typing import Any
+from typing import Any, cast
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
@@ -459,11 +459,14 @@ class Command(BaseCommand):
             return latest
 
         next_version = (latest.version + 1) if latest else 1
-        version = GraphVersion.objects.create(
-            graph=graph,
-            version=next_version,
-            graph_json=graph_json,
-            external_idempotency_key=EXTERNAL_IDEMPOTENCY_KEY if latest is None else "",
+        version = cast(
+            GraphVersion,
+            GraphVersion.objects.create(
+                graph=graph,
+                version=next_version,
+                graph_json=graph_json,
+                external_idempotency_key=EXTERNAL_IDEMPOTENCY_KEY if latest is None else "",
+            ),
         )
         graph.save()
         warnings.append(f"Created Legacy Glasswear graph version {version.version}.")

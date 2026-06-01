@@ -157,10 +157,7 @@ function departmentsReducer(state: DepartmentsState, action: DepartmentsAction):
 export default function DepartmentsPage() {
   const router = useRouter();
   const { replace } = router;
-  const [{ activities, loading, error }, dispatchDepartments] = useReducer(
-    departmentsReducer,
-    initialDepartmentsState,
-  );
+  const [{ activities, loading, error }, dispatchDepartments] = useReducer(departmentsReducer, initialDepartmentsState);
 
   const loadDepartments = useCallback(async () => {
     dispatchDepartments({ type: "load-start" });

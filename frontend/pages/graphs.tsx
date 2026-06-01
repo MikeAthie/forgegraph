@@ -118,21 +118,60 @@ function useGraphsPageController() {
     },
     [],
   );
-  const setGraphs = useCallback((value: SetStateAction<GraphListItem[]>) => setPageField("graphs", value), [setPageField]);
+  const setGraphs = useCallback(
+    (value: SetStateAction<GraphListItem[]>) => setPageField("graphs", value),
+    [setPageField],
+  );
   const setLoading = useCallback((value: SetStateAction<boolean>) => setPageField("loading", value), [setPageField]);
   const setError = useCallback((value: SetStateAction<string | null>) => setPageField("error", value), [setPageField]);
-  const setIsCreateOpen = useCallback((value: SetStateAction<boolean>) => setPageField("isCreateOpen", value), [setPageField]);
-  const setCreateForm = useCallback((value: SetStateAction<GraphFormState>) => setPageField("createForm", value), [setPageField]);
-  const setIsCreating = useCallback((value: SetStateAction<boolean>) => setPageField("isCreating", value), [setPageField]);
-  const setCreateError = useCallback((value: SetStateAction<string | null>) => setPageField("createError", value), [setPageField]);
-  const setEditingGraph = useCallback((value: SetStateAction<GraphListItem | null>) => setPageField("editingGraph", value), [setPageField]);
-  const setEditForm = useCallback((value: SetStateAction<GraphFormState>) => setPageField("editForm", value), [setPageField]);
-  const setIsSavingEdit = useCallback((value: SetStateAction<boolean>) => setPageField("isSavingEdit", value), [setPageField]);
-  const setEditError = useCallback((value: SetStateAction<string | null>) => setPageField("editError", value), [setPageField]);
-  const setVersionsGraph = useCallback((value: SetStateAction<GraphListItem | null>) => setPageField("versionsGraph", value), [setPageField]);
-  const setVersions = useCallback((value: SetStateAction<GraphVersionSummary[]>) => setPageField("versions", value), [setPageField]);
-  const setVersionsLoading = useCallback((value: SetStateAction<boolean>) => setPageField("versionsLoading", value), [setPageField]);
-  const setVersionsError = useCallback((value: SetStateAction<string | null>) => setPageField("versionsError", value), [setPageField]);
+  const setIsCreateOpen = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("isCreateOpen", value),
+    [setPageField],
+  );
+  const setCreateForm = useCallback(
+    (value: SetStateAction<GraphFormState>) => setPageField("createForm", value),
+    [setPageField],
+  );
+  const setIsCreating = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("isCreating", value),
+    [setPageField],
+  );
+  const setCreateError = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("createError", value),
+    [setPageField],
+  );
+  const setEditingGraph = useCallback(
+    (value: SetStateAction<GraphListItem | null>) => setPageField("editingGraph", value),
+    [setPageField],
+  );
+  const setEditForm = useCallback(
+    (value: SetStateAction<GraphFormState>) => setPageField("editForm", value),
+    [setPageField],
+  );
+  const setIsSavingEdit = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("isSavingEdit", value),
+    [setPageField],
+  );
+  const setEditError = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("editError", value),
+    [setPageField],
+  );
+  const setVersionsGraph = useCallback(
+    (value: SetStateAction<GraphListItem | null>) => setPageField("versionsGraph", value),
+    [setPageField],
+  );
+  const setVersions = useCallback(
+    (value: SetStateAction<GraphVersionSummary[]>) => setPageField("versions", value),
+    [setPageField],
+  );
+  const setVersionsLoading = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("versionsLoading", value),
+    [setPageField],
+  );
+  const setVersionsError = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("versionsError", value),
+    [setPageField],
+  );
 
   const refreshGraphs = useCallback(async () => {
     setLoading(true);
@@ -452,7 +491,10 @@ function GraphCard({
     <Card className="group rounded-[1.5rem] border-zinc-900/8 bg-white/75 shadow-none transition-colors hover:bg-[var(--panel-muted)] dark:border-white/8 dark:bg-white/4">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <Link href={`/workflows/${graph.id}`} className="transition-colors hover:text-zinc-700 dark:hover:text-zinc-200">
+          <Link
+            href={`/workflows/${graph.id}`}
+            className="transition-colors hover:text-zinc-700 dark:hover:text-zinc-200"
+          >
             <CardTitle className="text-lg">{graph.name}</CardTitle>
           </Link>
           {graph.latest_version != null ? (
@@ -640,13 +682,7 @@ function GraphVersionsDialog({
   );
 }
 
-function GraphVersionsContent({
-  versions,
-  loading,
-}: {
-  versions: GraphVersionSummary[];
-  loading: boolean;
-}) {
+function GraphVersionsContent({ versions, loading }: { versions: GraphVersionSummary[]; loading: boolean }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -677,9 +713,7 @@ function GraphVersionsContent({
                 <Badge variant="outline">v{version.version}</Badge>
               </td>
               <td className="px-4 py-2 text-sm text-muted-foreground">{formatDateTime(version.created_at)}</td>
-              <td className="px-4 py-2 text-sm text-muted-foreground font-mono">
-                {version.checksum.slice(0, 10)}
-              </td>
+              <td className="px-4 py-2 text-sm text-muted-foreground font-mono">{version.checksum.slice(0, 10)}</td>
             </tr>
           ))}
         </tbody>

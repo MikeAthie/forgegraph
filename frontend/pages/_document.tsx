@@ -14,7 +14,6 @@ export default function Document() {
         {/* Theme */}
         <meta name="theme-color" content="#0f172a" />
         <meta name="color-scheme" content="light dark" />
-
       </Head>
       <body className="antialiased">
         <Main />

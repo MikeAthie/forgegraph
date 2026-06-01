@@ -255,7 +255,17 @@ function useCredentialsPageController() {
   const { user } = useAuth();
   const canManageCredentials = user?.organization_role === "owner" || user?.organization_role === "admin";
   const [
-    { credentials, oauthProviders, loading, isRefreshing, error, isDialogOpen, isSubmitting, oauthStartingProvider, formState },
+    {
+      credentials,
+      oauthProviders,
+      loading,
+      isRefreshing,
+      error,
+      isDialogOpen,
+      isSubmitting,
+      oauthStartingProvider,
+      formState,
+    },
     dispatchCredentials,
   ] = useReducer(credentialsPageReducer, initialCredentialsPageState);
   const providerPrefillAppliedRef = useRef(false);
@@ -469,7 +479,8 @@ function useCredentialsPageController() {
     handleStartOAuth,
     handleCopyText,
     setDialogOpen: (open: boolean) => dispatchCredentials({ type: "dialog", open }),
-    updateFormField: (field: keyof CredentialCreateInput, value: string) => dispatchCredentials({ type: "form-field", field, value }),
+    updateFormField: (field: keyof CredentialCreateInput, value: string) =>
+      dispatchCredentials({ type: "form-field", field, value }),
   };
 }
 
@@ -514,7 +525,9 @@ function AddCredentialDialog({ controller }: { controller: CredentialsPageContro
           <FormField label="Provider" htmlFor="provider">
             <Select
               value={controller.formState.provider}
-              onValueChange={(value) => controller.updateFormField("provider", value as CredentialCreateInput["provider"])}
+              onValueChange={(value) =>
+                controller.updateFormField("provider", value as CredentialCreateInput["provider"])
+              }
             >
               <SelectTrigger id="provider">
                 <SelectValue placeholder="Select provider" />
@@ -541,7 +554,11 @@ function AddCredentialDialog({ controller }: { controller: CredentialsPageContro
             />
           </FormField>
 
-          <FormField label="API key" htmlFor="api_key" description="Stored securely. You will only see the last 4 characters later.">
+          <FormField
+            label="API key"
+            htmlFor="api_key"
+            description="Stored securely. You will only see the last 4 characters later."
+          >
             <Input
               id="api_key"
               name="api_key"
@@ -591,7 +608,8 @@ function OAuthIntegrationsCard({ controller }: { controller: CredentialsPageCont
       <CardHeader>
         <CardTitle>OAuth integrations</CardTitle>
         <CardDescription>
-          OAuth apps are configured at service level via environment variables. From this page, you only connect and reconnect accounts.
+          OAuth apps are configured at service level via environment variables. From this page, you only connect and
+          reconnect accounts.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -617,7 +635,9 @@ function OAuthChecklist({ controller }: { controller: CredentialsPageController 
           </p>
         </div>
         <Badge variant={oauthChecklist.remainingConnections === 0 ? "default" : "outline"}>
-          {oauthChecklist.remainingConnections === 0 ? "All connected" : `${oauthChecklist.remainingConnections} remaining`}
+          {oauthChecklist.remainingConnections === 0
+            ? "All connected"
+            : `${oauthChecklist.remainingConnections} remaining`}
         </Badge>
       </div>
       <Separator className="my-3" />
@@ -645,7 +665,13 @@ function OAuthChecklist({ controller }: { controller: CredentialsPageController 
   );
 }
 
-function OAuthProviderRow({ provider, controller }: { provider: OAuthIntegrationProvider; controller: CredentialsPageController }) {
+function OAuthProviderRow({
+  provider,
+  controller,
+}: {
+  provider: OAuthIntegrationProvider;
+  controller: CredentialsPageController;
+}) {
   const status = controller.oauthProvidersByName.get(provider);
   const label = getProviderLabel(provider);
   const serviceConfigured = Boolean(status?.configured);
@@ -663,18 +689,29 @@ function OAuthProviderRow({ provider, controller }: { provider: OAuthIntegration
           </div>
           <p className="text-xs text-muted-foreground">
             {guidance.scopeHint}{" "}
-            <a href={guidance.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+            <a
+              href={guidance.docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
               OAuth docs
               <ExternalLink className="size-3" />
             </a>
           </p>
-          <OAuthProviderStatusMessage status={status} serviceConfigured={serviceConfigured} connectionState={connectionState} />
+          <OAuthProviderStatusMessage
+            status={status}
+            serviceConfigured={serviceConfigured}
+            connectionState={connectionState}
+          />
         </div>
         <div className="flex flex-col items-end gap-2">
           <Button
             size="sm"
             onClick={() => void controller.handleStartOAuth(provider)}
-            disabled={controller.oauthStartingProvider === provider || !serviceConfigured || !controller.canManageCredentials}
+            disabled={
+              controller.oauthStartingProvider === provider || !serviceConfigured || !controller.canManageCredentials
+            }
           >
             {controller.oauthStartingProvider === provider ? (
               <>
@@ -725,10 +762,16 @@ function OAuthProviderStatusMessage({
     return <p className="text-xs text-amber-700 dark:text-amber-400">{formatOAuthServiceMessage(status)}</p>;
   }
   if (connectionState === "ready") {
-    return <p className="text-xs text-muted-foreground">Account connected. Click Connect account again to rotate or reconnect.</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        Account connected. Click Connect account again to rotate or reconnect.
+      </p>
+    );
   }
   if (connectionState === "needs_reconnect") {
-    return <p className="text-xs text-amber-700 dark:text-amber-400">OAuth credential exists but requires reconnection.</p>;
+    return (
+      <p className="text-xs text-amber-700 dark:text-amber-400">OAuth credential exists but requires reconnection.</p>
+    );
   }
   return <p className="text-xs text-muted-foreground">Service ready. Connect an account to use this provider.</p>;
 }
@@ -743,7 +786,9 @@ function CredentialAlerts({ controller }: { controller: CredentialsPageControlle
       ) : null}
       {!controller.canManageCredentials ? (
         <Alert>
-          <AlertDescription>Only organization admins can create or delete credentials. You can still view existing keys.</AlertDescription>
+          <AlertDescription>
+            Only organization admins can create or delete credentials. You can still view existing keys.
+          </AlertDescription>
         </Alert>
       ) : null}
     </>
@@ -789,7 +834,8 @@ function CredentialsListSection({ controller }: { controller: CredentialsPageCon
 function CredentialCard({ credential, controller }: { credential: Credential; controller: CredentialsPageController }) {
   const oauthProvider = isOAuthProvider(credential.provider) ? credential.provider : null;
   const isOAuthCredential = credential.is_oauth_connection;
-  const isActiveOAuthCredential = oauthProvider !== null && controller.latestOauthCredentialByProvider.get(oauthProvider)?.id === credential.id;
+  const isActiveOAuthCredential =
+    oauthProvider !== null && controller.latestOauthCredentialByProvider.get(oauthProvider)?.id === credential.id;
 
   return (
     <Card>
@@ -813,8 +859,14 @@ function CredentialCard({ credential, controller }: { credential: Credential; co
         )}
       </CardHeader>
       <CardContent className="space-y-2">
-        <CredentialBadges credential={credential} oauthProvider={oauthProvider} isActiveOAuthCredential={isActiveOAuthCredential} />
-        {credential.health_message ? <div className="text-xs text-muted-foreground">{credential.health_message}</div> : null}
+        <CredentialBadges
+          credential={credential}
+          oauthProvider={oauthProvider}
+          isActiveOAuthCredential={isActiveOAuthCredential}
+        />
+        {credential.health_message ? (
+          <div className="text-xs text-muted-foreground">{credential.health_message}</div>
+        ) : null}
         {credential.requires_reauth && controller.canManageCredentials && oauthProvider && isOAuthCredential ? (
           <Button
             size="sm"
@@ -858,11 +910,17 @@ function CredentialBadges({
     <>
       {oauthProvider && !isOAuthCredential ? <Badge variant="outline">API key only (not OAuth)</Badge> : null}
       {oauthProvider && isOAuthCredential && isActiveOAuthCredential ? (
-        <Badge variant="outline" className="text-emerald-600">Active OAuth credential</Badge>
+        <Badge variant="outline" className="text-emerald-600">
+          Active OAuth credential
+        </Badge>
       ) : null}
-      {oauthProvider && isOAuthCredential && !isActiveOAuthCredential ? <Badge variant="outline">Older OAuth credential</Badge> : null}
+      {oauthProvider && isOAuthCredential && !isActiveOAuthCredential ? (
+        <Badge variant="outline">Older OAuth credential</Badge>
+      ) : null}
       {credential.health_status !== "healthy" ? (
-        <Badge variant="outline">{credential.health_status === "expired" ? "OAuth expired" : "OAuth expiring soon"}</Badge>
+        <Badge variant="outline">
+          {credential.health_status === "expired" ? "OAuth expired" : "OAuth expiring soon"}
+        </Badge>
       ) : null}
     </>
   );

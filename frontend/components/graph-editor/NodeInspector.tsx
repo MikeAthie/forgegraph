@@ -171,7 +171,8 @@ function useNodeInspectorMetadata({
     metadataDescription,
     savingMetadata,
     showGraphText,
-    setMetadataName: (nextMetadataName: string) => dispatchInspectorState({ patch: { metadataName: nextMetadataName } }),
+    setMetadataName: (nextMetadataName: string) =>
+      dispatchInspectorState({ patch: { metadataName: nextMetadataName } }),
     setMetadataDescription: (nextMetadataDescription: string) =>
       dispatchInspectorState({ patch: { metadataDescription: nextMetadataDescription } }),
     saveMetadata,
@@ -537,7 +538,11 @@ function NodeStructureSettings({
         onToggle={() => onUpdateNode(selectedNode.id, { disabled: !selectedNode.data.disabled })}
       />
 
-      <CollapsibleSection title="Structural Role" initialOpen={false} badge={isTrigger || isEnd ? "configured" : undefined}>
+      <CollapsibleSection
+        title="Structural Role"
+        initialOpen={false}
+        badge={isTrigger || isEnd ? "configured" : undefined}
+      >
         <InspectorSwitch
           id="components-graph-editor-nodeinspector-node-trigger"
           label="Trigger (START)"
@@ -551,7 +556,8 @@ function NodeStructureSettings({
           onToggle={() => onUpdateNode(selectedNode.id, { isEnd: !isEnd })}
         />
         <p className="text-xs text-muted-foreground">
-          Triggers create an entry edge from START -&gt; this step. End steps create an exit edge from this step -&gt; END.
+          Triggers create an entry edge from START -&gt; this step. End steps create an exit edge from this step -&gt;
+          END.
         </p>
       </CollapsibleSection>
     </>
@@ -591,7 +597,13 @@ function NodeConfigEditors({
       {nodeType === NODE_TYPES.TRANSFORM ? <TransformNodeConfig config={config} onChange={updateConfig} /> : null}
       {nodeType === NODE_TYPES.OUTPUT ? <OutputNodeConfig config={config} onChange={updateConfig} /> : null}
       {nodeType === NODE_TYPES.BRANCH ? (
-        <BranchNodeConfig config={config} onChange={updateConfig} edges={edges} nodeId={selectedNode.id} nodes={nodes} />
+        <BranchNodeConfig
+          config={config}
+          onChange={updateConfig}
+          edges={edges}
+          nodeId={selectedNode.id}
+          nodes={nodes}
+        />
       ) : null}
       {nodeType === NODE_TYPES.MERGE ? <MergeNodeConfig config={config} onChange={updateConfig} /> : null}
       {nodeType === NODE_TYPES.MEMORY ? <MemoryNodeConfig config={config} onChange={updateConfig} /> : null}

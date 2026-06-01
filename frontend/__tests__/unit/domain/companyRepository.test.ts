@@ -1,6 +1,6 @@
 import { companyRepository } from "@/domain/repositories/companyRepository";
 import { buildCompanyProfile } from "@/lib/company-workspace";
-import { companyBlueprintsApi, graphsApi } from "@/lib/api";
+import { companiesApi, companyBlueprintsApi, graphsApi } from "@/lib/api";
 
 jest.mock("@/lib/api", () => ({
   approvalsApi: {
@@ -8,6 +8,14 @@ jest.mock("@/lib/api", () => ({
   },
   companyBlueprintsApi: {
     createCompany: jest.fn(),
+  },
+  companiesApi: {
+    create: jest.fn(),
+    createOperatingModelVersion: jest.fn(),
+    get: jest.fn(),
+    getLatestOperatingModelVersion: jest.fn(),
+    list: jest.fn(),
+    update: jest.fn(),
   },
   credentialsApi: {
     create: jest.fn(),
@@ -76,20 +84,25 @@ describe("companyRepository.create", () => {
     expect(graphsApi.create).not.toHaveBeenCalled();
   });
 
-  it("keeps the generic graph creation path when no operating model pack is selected", async () => {
-    jest.mocked(graphsApi.create).mockResolvedValue({
+  it("creates generic companies through the company alias API when no operating model pack is selected", async () => {
+    jest.mocked(companiesApi.create).mockResolvedValue({
       id: "company-2",
+      company_id: "company-2",
+      workflow_definition_id: "company-2",
+      storage_model: "Graph",
       name: "Generic Company",
       description: "Operate generically.",
       created_at: "2026-05-12T00:00:00Z",
       updated_at: "2026-05-12T00:00:00Z",
-      version_count: 0,
-      latest_version: null,
+      setup_version_count: 0,
+      latest_setup_version: null,
     });
-    jest.mocked(graphsApi.createVersion).mockResolvedValue({
+    jest.mocked(companiesApi.createOperatingModelVersion).mockResolvedValue({
       id: "version-2",
+      company_id: "company-2",
+      workflow_definition_id: "company-2",
       version: 1,
-      graph_json: { nodes: [], edges: [], metadata: {} },
+      model_json: { nodes: [], edges: [], metadata: {} },
       checksum: "checksum",
       created_at: "2026-05-12T00:00:00Z",
     });
@@ -106,10 +119,18 @@ describe("companyRepository.create", () => {
     });
 
     expect(result).toEqual({ companyId: "company-2", firstOperation: null });
-    expect(graphsApi.create).toHaveBeenCalledWith({
+    expect(companiesApi.create).toHaveBeenCalledWith({
       name: "Generic Company",
       description: "Operate generically.",
     });
+    expect(companiesApi.createOperatingModelVersion).toHaveBeenCalledWith("company-2", {
+      model_json: expect.objectContaining({
+        nodes: expect.any(Array),
+        edges: expect.any(Array),
+      }),
+    });
     expect(companyBlueprintsApi.createCompany).not.toHaveBeenCalled();
+    expect(graphsApi.create).not.toHaveBeenCalled();
+    expect(graphsApi.createVersion).not.toHaveBeenCalled();
   });
 });

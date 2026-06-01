@@ -5,6 +5,7 @@ from django.urls import path
 from adapters.api.communications.views import (
     CommunicationAttachmentCreateView,
     CommunicationMessageListCreateView,
+    CommunicationMessageRouteRequestView,
     CommunicationThreadDetailView,
     CommunicationThreadListCreateView,
 )
@@ -29,5 +30,10 @@ urlpatterns = [
         "communication/messages/<uuid:message_id>/attachments",
         CommunicationAttachmentCreateView.as_view(),
         name="communication-message-attachments",
+    ),
+    path(
+        "communication/messages/<uuid:message_id>/route-request",
+        CommunicationMessageRouteRequestView.as_view(),
+        name="communication-message-route-request",
     ),
 ]

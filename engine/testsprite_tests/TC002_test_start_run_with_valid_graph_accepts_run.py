@@ -1,4 +1,10 @@
+import pytest
+
 from _helpers import get_ready
+
+pytestmark = pytest.mark.skip(
+    reason="Historical TestSprite smoke artifact; use engine Go/gRPC production gates."
+)
 
 
 def test_start_run_with_valid_graph_accepts_run():
@@ -8,6 +14,3 @@ def test_start_run_with_valid_graph_accepts_run():
     assert payload["grpc_ready"] is True
     assert "run_state_mode" in payload
     assert "control_plane_configured" in payload
-
-
-test_start_run_with_valid_graph_accepts_run()

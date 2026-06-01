@@ -56,6 +56,10 @@ slo_targets:
     runbook: docs/ops/runbooks/no_progress_despite_backlog.md
 
 dashboard_panels:
+  - id: communication_kafka_outbox_backlog
+    title: Communication Kafka outbox backlog
+  - id: communication_kafka_consumer_failures
+    title: Communication Kafka consumer failures
   - id: runtime_intent_backlog
     title: Runtime intent backlog
   - id: runtime_intent_lag
@@ -92,6 +96,14 @@ dashboard_panels:
     title: Audit event rate
 
 alert_rules:
+  - id: communication_kafka_backlog_growing
+    severity: warning
+    window_seconds: 300
+    runbook: docs/ops/runbooks/communication_kafka_backlog_growing.md
+  - id: communication_kafka_consumer_failures
+    severity: warning
+    window_seconds: 300
+    runbook: docs/ops/runbooks/communication_kafka_consumer_failures.md
   - id: intent_backlog_growing
     severity: warning
     window_seconds: 300

@@ -216,12 +216,10 @@ describe("GraphEditor", () => {
   });
 
   const getCanvasNodeIds = () =>
-    screen
-      .getAllByTestId(/node-/)
-      .flatMap((element) => {
-        const nodeId = element.getAttribute("data-testid")?.replace(/^node-/, "") ?? "";
-        return nodeId ? [nodeId] : [];
-      });
+    screen.getAllByTestId(/node-/).flatMap((element) => {
+      const nodeId = element.getAttribute("data-testid")?.replace(/^node-/, "") ?? "";
+      return nodeId ? [nodeId] : [];
+    });
 
   it("should quick-add an edge when adding a node with a selection", async () => {
     const user = userEvent.setup();

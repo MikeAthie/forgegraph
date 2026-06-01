@@ -24,11 +24,13 @@ from infrastructure.orm.models import (
     CompanyAssignment,
     DomainEvent,
     DomainEventOutbox,
+    EventDeadLetterRecord,
     Graph,
     Organization,
     OrganizationMembership,
     User,
 )
+from tests.helpers.idempotency import assert_queryset_count
 
 pytestmark = pytest.mark.django_db
 
@@ -66,8 +68,9 @@ class FakeMessage:
 
 
 class FakeConsumer:
-    def __init__(self, messages: list[FakeMessage]) -> None:
+    def __init__(self, messages: list[FakeMessage], *, fail_commit: bool = False) -> None:
         self.messages = messages
+        self.fail_commit = fail_commit
         self.committed = 0
 
     def subscribe(self, topics: list[str]) -> None:
@@ -79,12 +82,26 @@ class FakeConsumer:
             return None
         return self.messages.pop(0)
 
-    def commit(self, message: FakeMessage | None = None, *, asynchronous: bool = False) -> None:
+    def commit(self, message: object | None = None, *, asynchronous: bool = False) -> Any:
         _ = message, asynchronous
+        if self.fail_commit:
+            raise RuntimeError("commit unavailable")
         self.committed += 1
 
     def close(self) -> None:
         return
+
+
+class FakeKafkaError:
+    def __init__(self, message: str, code: Any = None) -> None:
+        self.message = message
+        self._code = code
+
+    def code(self) -> Any:
+        return self._code
+
+    def __str__(self) -> str:
+        return self.message
 
 
 def test_consume_command_exits_when_kafka_disabled() -> None:
@@ -153,6 +170,24 @@ def test_malformed_event_does_not_crash_consume_loop() -> None:
     assert receipt.status == "failed"
     assert receipt.offset == 14
     assert "not-json" not in receipt.error_message
+    dead_letter = EventDeadLetterRecord.objects.get(source="communication_kafka_consumer")
+    assert dead_letter.reason == "invalid_json"
+    assert "not-json" not in str(dead_letter.payload)
+
+
+def test_missing_required_metadata_records_dead_letter() -> None:
+    _operator, _company, _message, payload = _message_payload()
+    payload.pop("message_id")
+
+    result = handle_communication_kafka_event(payload, consumer_group="consumer-a")
+
+    assert result.failed is True
+    assert result.receipt is not None
+    assert result.receipt.status == "failed"
+    assert "missing_required_metadata:message_id" in result.receipt.error_message
+    dead_letter = EventDeadLetterRecord.objects.get(source="communication_kafka_consumer")
+    assert dead_letter.event_id == payload["event_id"]
+    assert dead_letter.reason == result.receipt.error_message
 
 
 def test_consumer_receipt_drops_body_and_private_fields() -> None:
@@ -223,6 +258,77 @@ def test_valid_event_from_polling_consumer_is_committed_once() -> None:
     receipt = CommunicationEventReceipt.objects.get(consumer_group="consumer-a")
     assert receipt.partition == 2
     assert receipt.offset == 12
+
+
+def test_commit_failure_is_reported_without_losing_receipt() -> None:
+    _operator, _company, _message, payload = _message_payload()
+    consumer = FakeConsumer(
+        [FakeMessage(json.dumps(payload).encode("utf-8"), partition=2, offset=12)],
+        fail_commit=True,
+    )
+
+    result = consume_communication_kafka_events(
+        consumer=consumer,
+        consumer_group="consumer-a",
+        limit=1,
+        poll_timeout_seconds=0.1,
+    )
+
+    assert result.handled == 1
+    assert result.commit_failed == 1
+    assert consumer.committed == 0
+    assert CommunicationEventReceipt.objects.filter(consumer_group="consumer-a").count() == 1
+
+    retry_consumer = FakeConsumer(
+        [FakeMessage(json.dumps(payload).encode("utf-8"), partition=2, offset=12)]
+    )
+    retry = consume_communication_kafka_events(
+        consumer=retry_consumer,
+        consumer_group="consumer-a",
+        limit=1,
+        poll_timeout_seconds=0.1,
+    )
+
+    assert retry.duplicates == 1
+    assert retry_consumer.committed == 1
+    assert_queryset_count(
+        CommunicationEventReceipt.objects.filter(consumer_group="consumer-a"),
+        1,
+        label="communication kafka receipt after commit-loss retry",
+    )
+
+
+def test_partition_eof_is_ignored_without_commit() -> None:
+    consumer = FakeConsumer(
+        [FakeMessage(None, error=FakeKafkaError("partition eof", code="_PARTITION_EOF"))]
+    )
+
+    result = consume_communication_kafka_events(
+        consumer=consumer,
+        consumer_group="consumer-a",
+        limit=1,
+        poll_timeout_seconds=0.1,
+    )
+
+    assert result.ignored == 1
+    assert consumer.committed == 0
+    assert CommunicationEventReceipt.objects.count() == 0
+
+
+def test_transport_error_records_dead_letter_without_commit() -> None:
+    consumer = FakeConsumer([FakeMessage(None, error=FakeKafkaError("broker unavailable"))])
+
+    result = consume_communication_kafka_events(
+        consumer=consumer,
+        consumer_group="consumer-a",
+        limit=1,
+        poll_timeout_seconds=0.1,
+    )
+
+    assert result.failed == 1
+    assert consumer.committed == 0
+    dead_letter = EventDeadLetterRecord.objects.get(source="communication_kafka_consumer")
+    assert dead_letter.reason == "kafka_transport_error"
 
 
 def _message_payload() -> tuple[User, Graph, CommunicationMessage, dict[str, Any]]:

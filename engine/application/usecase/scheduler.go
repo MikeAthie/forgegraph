@@ -495,7 +495,7 @@ func (s *Scheduler) StartRun(
 				attemptID:       resumeState.attemptID,
 			}
 		} else if !errors.Is(err, domain.ErrCheckpointNotFound) && !errors.Is(err, domain.ErrRunNotFound) {
-			log.Printf("Ignoring invalid resume snapshot for run %s and starting clean: %v", runID, err)
+			return fmt.Errorf("failed to load backend-owned resume snapshot for run %s: %w", runID, err)
 		}
 	}
 

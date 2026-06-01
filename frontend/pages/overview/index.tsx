@@ -267,7 +267,9 @@ function useOverviewController() {
           overview.activeDepartments.filter((department) => department.status === "attention").length > 0
             ? `${overview.activeDepartments.filter((department) => department.status === "attention").length} department${overview.activeDepartments.filter((department) => department.status === "attention").length === 1 ? "" : "s"} flagged for review.`
             : "No department is currently in an attention state.",
-        status: overview.activeDepartments.some((department) => department.status === "attention") ? "paused" : "active",
+        status: overview.activeDepartments.some((department) => department.status === "attention")
+          ? "paused"
+          : "active",
       },
       {
         id: "approvals",
@@ -299,7 +301,8 @@ function useOverviewController() {
       ...overview.activeDepartments.slice(0, 2).map((department) => ({
         id: `department-${department.id}`,
         title: `${department.name} is ${department.status === "attention" ? "awaiting review" : "actively supervising work"}`,
-        detail: departmentTaskMap.get(department.id) ?? "No projected task summary is currently attached to this department.",
+        detail:
+          departmentTaskMap.get(department.id) ?? "No projected task summary is currently attached to this department.",
         time: formatDateTime(department.lastSeenAt),
         tone: department.status === "attention" ? ("amber" as const) : ("emerald" as const),
       })),
@@ -329,7 +332,8 @@ function useOverviewController() {
 
   const projectionCardMetadata: CardMetadata = {
     source: overview?.projection?.source ?? "backend_projection",
-    lastUpdatedAt: overview?.projection?.last_updated_at ?? overview?.projection?.watermark ?? overview?.generatedAt ?? null,
+    lastUpdatedAt:
+      overview?.projection?.last_updated_at ?? overview?.projection?.watermark ?? overview?.generatedAt ?? null,
     freshnessMs: overview?.projection?.freshness_ms ?? overview?.projection?.projection_lag_ms ?? null,
     status: overview?.projection?.status ?? "fresh",
     stale: Boolean(overview?.projection?.stale ?? overview?.projection?.status === "stale"),
@@ -395,7 +399,10 @@ function useOverviewController() {
           href: "#system-health",
           ariaLabel: "Jump to freshness",
           eyebrow: "Freshness",
-          value: typeof overview.projection?.lag_seconds === "number" ? formatDuration(overview.projection.lag_seconds * 1000) : "Pending",
+          value:
+            typeof overview.projection?.lag_seconds === "number"
+              ? formatDuration(overview.projection.lag_seconds * 1000)
+              : "Pending",
           section: projectionCardMetadata,
           tone: overviewCardTone(projectionCardMetadata),
           icon: <Waypoints className="size-4" />,
@@ -417,7 +424,13 @@ function useOverviewController() {
 
 type OverviewController = ReturnType<typeof useOverviewController>;
 
-function OverviewInspector({ overview, derived }: { overview: OrganizationOverviewVM | null; derived: OverviewDerivedState | null }) {
+function OverviewInspector({
+  overview,
+  derived,
+}: {
+  overview: OrganizationOverviewVM | null;
+  derived: OverviewDerivedState | null;
+}) {
   if (!overview || !derived) {
     return null;
   }
@@ -433,17 +446,30 @@ function OverviewInspector({ overview, derived }: { overview: OrganizationOvervi
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span>Attention required</span>
-                <StatusBadge status={derived.attentionItems.length > 0 ? "failed" : "active"} label={derived.attentionItems.length > 0 ? `${derived.attentionItems.length} open` : "Clear"} />
+                <StatusBadge
+                  status={derived.attentionItems.length > 0 ? "failed" : "active"}
+                  label={derived.attentionItems.length > 0 ? `${derived.attentionItems.length} open` : "Clear"}
+                />
               </div>
-              <div className="flex items-center justify-between"><span>Blocked tasks</span><span>{derived.blockedTasks.length}</span></div>
-              <div className="flex items-center justify-between"><span>Pending approvals</span><span>{overview.summary.pendingApprovalCount}</span></div>
+              <div className="flex items-center justify-between">
+                <span>Blocked tasks</span>
+                <span>{derived.blockedTasks.length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Pending approvals</span>
+                <span>{overview.summary.pendingApprovalCount}</span>
+              </div>
             </div>
           ),
         },
         {
           title: "Recent memory",
           content: overview.memory.recentTopics.length ? (
-            <div className="flex flex-wrap gap-2">{overview.memory.recentTopics.map((topic) => <StatusBadge key={topic} status="pending" label={topic} />)}</div>
+            <div className="flex flex-wrap gap-2">
+              {overview.memory.recentTopics.map((topic) => (
+                <StatusBadge key={topic} status="pending" label={topic} />
+              ))}
+            </div>
           ) : (
             "No recent memory topics were projected into the current window."
           ),
@@ -452,10 +478,21 @@ function OverviewInspector({ overview, derived }: { overview: OrganizationOvervi
           title: "Economic posture",
           content: (
             <div className="space-y-2">
-              <div className="flex items-center justify-between"><span>Tracked cost</span><span>{financialMetricLabel(overview.metricProvenance.totalCostUsd)}</span></div>
-              <div className="flex items-center justify-between"><span>Revenue</span><span>{notInstrumentedLabel}</span></div>
-              <div className="flex items-center justify-between"><span>Profit</span><span>{notInstrumentedLabel}</span></div>
-              <p className="pt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{metricProvenanceLine(overview.metricProvenance.totalCostUsd)}</p>
+              <div className="flex items-center justify-between">
+                <span>Tracked cost</span>
+                <span>{financialMetricLabel(overview.metricProvenance.totalCostUsd)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Revenue</span>
+                <span>{notInstrumentedLabel}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Profit</span>
+                <span>{notInstrumentedLabel}</span>
+              </div>
+              <p className="pt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
+              </p>
             </div>
           ),
         },
@@ -468,11 +505,22 @@ function CommandOpsPanel({ controller }: { controller: OverviewController }) {
   const { overview } = controller;
 
   return (
-    <Panel title="Command Ops" description="Summary first, inspection second, logs last. This page should tell an operator what is happening and where to act in under ten seconds." action={overview?.generatedAt ? <CommandOpsBadges controller={controller} /> : null}>
+    <Panel
+      title="Command Ops"
+      description="Summary first, inspection second, logs last. This page should tell an operator what is happening and where to act in under ten seconds."
+      action={overview?.generatedAt ? <CommandOpsBadges controller={controller} /> : null}
+    >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {controller.companyOsCards.map((card) => (
           <Link key={card.eyebrow} href={card.href} className={metricLinkClass} aria-label={card.ariaLabel}>
-            <MetricCard className={metricCardLinkClass} eyebrow={card.eyebrow} value={card.value} delta={overviewCardDetail(card.section)} tone={card.tone} icon={card.icon} />
+            <MetricCard
+              className={metricCardLinkClass}
+              eyebrow={card.eyebrow}
+              value={card.value}
+              delta={overviewCardDetail(card.section)}
+              tone={card.tone}
+              icon={card.icon}
+            />
           </Link>
         ))}
       </div>
@@ -492,7 +540,10 @@ function CommandOpsBadges({ controller }: { controller: OverviewController }) {
       <StatusBadge status={overview.projection?.status ?? "stale"} label={projectionStatusLabel(overview.projection)} />
       {stateFeed.status === "unavailable" ? <StatusBadge status="stale" label="Live feed unavailable" /> : null}
       {overview.operations.deadLetterCount > 0 ? (
-        <StatusBadge status="degraded" label={`${overview.operations.deadLetterCount} recovery item${overview.operations.deadLetterCount === 1 ? "" : "s"}`} />
+        <StatusBadge
+          status="degraded"
+          label={`${overview.operations.deadLetterCount} recovery item${overview.operations.deadLetterCount === 1 ? "" : "s"}`}
+        />
       ) : null}
     </div>
   );
@@ -512,12 +563,20 @@ function OverviewLoadedContent({ controller }: { controller: OverviewController 
       <AttentionSystemGrid overview={controller.overview} derived={controller.derived} />
       <DepartmentTaskGrid overview={controller.overview} derived={controller.derived} />
       <ApprovalUsageGrid overview={controller.overview} />
-      <Panel title="What is happening" description="Short operational narrative for the visible window."><TimelineList items={controller.derived.activity} /></Panel>
+      <Panel title="What is happening" description="Short operational narrative for the visible window.">
+        <TimelineList items={controller.derived.activity} />
+      </Panel>
     </>
   );
 }
 
-function AttentionSystemGrid({ overview, derived }: { overview: OrganizationOverviewVM; derived: OverviewDerivedState }) {
+function AttentionSystemGrid({
+  overview,
+  derived,
+}: {
+  overview: OrganizationOverviewVM;
+  derived: OverviewDerivedState;
+}) {
   return (
     <div className="grid gap-6 2xl:grid-cols-[1.18fr_0.82fr]">
       <AttentionPanel items={derived.attentionItems} />
@@ -529,8 +588,28 @@ function AttentionSystemGrid({ overview, derived }: { overview: OrganizationOver
 function AttentionPanel({ items }: { items: AttentionItem[] }) {
   return (
     <div id="attention-required" className="scroll-mt-36">
-      <Panel title="Attention required" description="Critical and near-critical work that should pull operator focus first." action={<StatusBadge status={items.length ? "failed" : "active"} label={items.length ? `${items.length} open` : "Clear"} />}>
-        {items.length ? <div className="space-y-3">{items.map((item) => <AttentionRow key={item.id} item={item} />)}</div> : <EmptyBlock title="Nothing urgent is waiting" description="No failed operations, blocked tasks, or approval bottlenecks are currently dominating the system." />}
+      <Panel
+        title="Attention required"
+        description="Critical and near-critical work that should pull operator focus first."
+        action={
+          <StatusBadge
+            status={items.length ? "failed" : "active"}
+            label={items.length ? `${items.length} open` : "Clear"}
+          />
+        }
+      >
+        {items.length ? (
+          <div className="space-y-3">
+            {items.map((item) => (
+              <AttentionRow key={item.id} item={item} />
+            ))}
+          </div>
+        ) : (
+          <EmptyBlock
+            title="Nothing urgent is waiting"
+            description="No failed operations, blocked tasks, or approval bottlenecks are currently dominating the system."
+          />
+        )}
       </Panel>
     </div>
   );
@@ -553,7 +632,12 @@ function AttentionRow({ item }: { item: AttentionItem }) {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <StatusBadge status={item.tone === "rose" ? "failed" : "paused"} label={item.owner} />
-          <Button asChild size="sm" className="rounded-full"><Link href={item.href}>{item.action}<ArrowRight className="size-4" /></Link></Button>
+          <Button asChild size="sm" className="rounded-full">
+            <Link href={item.href}>
+              {item.action}
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
         </div>
       </div>
     </div>
@@ -563,8 +647,15 @@ function AttentionRow({ item }: { item: AttentionItem }) {
 function SystemHealthPanel({ items }: { items: OverviewDerivedState["systemHealth"] }) {
   return (
     <div id="system-health" className="scroll-mt-36">
-      <Panel title="System health" description="Fast readout of the operating posture across control, humans, and economics.">
-        <div className="space-y-3">{items.map((item) => <SystemHealthRow key={item.id} item={item} />)}</div>
+      <Panel
+        title="System health"
+        description="Fast readout of the operating posture across control, humans, and economics."
+      >
+        <div className="space-y-3">
+          {items.map((item) => (
+            <SystemHealthRow key={item.id} item={item} />
+          ))}
+        </div>
       </Panel>
     </div>
   );
@@ -574,14 +665,28 @@ function SystemHealthRow({ item }: { item: OverviewDerivedState["systemHealth"][
   return (
     <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
       <div className="flex items-center justify-between gap-3">
-        <div><p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{item.label}</p><p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.detail}</p></div>
-        <div className="text-right"><p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{item.value}</p><div className="mt-2"><StatusBadge status={item.status} /></div></div>
+        <div>
+          <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{item.label}</p>
+          <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.detail}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{item.value}</p>
+          <div className="mt-2">
+            <StatusBadge status={item.status} />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function DepartmentTaskGrid({ overview, derived }: { overview: OrganizationOverviewVM; derived: OverviewDerivedState }) {
+function DepartmentTaskGrid({
+  overview,
+  derived,
+}: {
+  overview: OrganizationOverviewVM;
+  derived: OverviewDerivedState;
+}) {
   return (
     <div className="grid gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
       <ActiveDepartmentsPanel overview={overview} derived={derived} />
@@ -590,25 +695,71 @@ function DepartmentTaskGrid({ overview, derived }: { overview: OrganizationOverv
   );
 }
 
-function ActiveDepartmentsPanel({ overview, derived }: { overview: OrganizationOverviewVM; derived: OverviewDerivedState }) {
+function ActiveDepartmentsPanel({
+  overview,
+  derived,
+}: {
+  overview: OrganizationOverviewVM;
+  derived: OverviewDerivedState;
+}) {
   return (
     <div id="active-departments" className="scroll-mt-36">
-      <Panel title="Active departments" description="Which departments are currently doing work, what they are focused on, and how much cost they are carrying." action={<Button asChild variant="outline" className="rounded-full"><Link href="/departments">Open departments<ArrowRight className="size-4" /></Link></Button>}>
+      <Panel
+        title="Active departments"
+        description="Which departments are currently doing work, what they are focused on, and how much cost they are carrying."
+        action={
+          <Button asChild variant="outline" className="rounded-full">
+            <Link href="/departments">
+              Open departments
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        }
+      >
         {overview.activeDepartments.length ? (
-          <div className="space-y-3">{overview.activeDepartments.slice(0, 6).map((department) => <DepartmentRow key={department.id} department={department} summary={derived.departmentTaskMap.get(department.id) ?? "Awaiting the next available task."} />)}</div>
+          <div className="space-y-3">
+            {overview.activeDepartments.slice(0, 6).map((department) => (
+              <DepartmentRow
+                key={department.id}
+                department={department}
+                summary={derived.departmentTaskMap.get(department.id) ?? "Awaiting the next available task."}
+              />
+            ))}
+          </div>
         ) : (
-          <EmptyBlock title="No active departments" description="Departments will appear here once the system sees active work or attention states." />
+          <EmptyBlock
+            title="No active departments"
+            description="Departments will appear here once the system sees active work or attention states."
+          />
         )}
       </Panel>
     </div>
   );
 }
 
-function DepartmentRow({ department, summary }: { department: OrganizationOverviewVM["activeDepartments"][number]; summary: string }) {
+function DepartmentRow({
+  department,
+  summary,
+}: {
+  department: OrganizationOverviewVM["activeDepartments"][number];
+  summary: string;
+}) {
   return (
-    <Link href={`/departments?department=${department.id}`} className="flex items-start justify-between gap-4 rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 transition-colors hover:bg-zinc-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-zinc-950">
-      <div className="min-w-0"><div className="flex items-center gap-3"><p className="truncate text-sm font-semibold">{department.name}</p><StatusBadge status={department.status} /></div><p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{summary}</p></div>
-      <div className="shrink-0 text-right"><p className="text-xs uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">Cost</p><p className="mt-2 text-sm font-semibold">{formatCurrency(department.totalCostUsd)}</p></div>
+    <Link
+      href={`/departments?department=${department.id}`}
+      className="flex items-start justify-between gap-4 rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 transition-colors hover:bg-zinc-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-zinc-950"
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-3">
+          <p className="truncate text-sm font-semibold">{department.name}</p>
+          <StatusBadge status={department.status} />
+        </div>
+        <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{summary}</p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">Cost</p>
+        <p className="mt-2 text-sm font-semibold">{formatCurrency(department.totalCostUsd)}</p>
+      </div>
     </Link>
   );
 }
@@ -616,8 +767,30 @@ function DepartmentRow({ department, summary }: { department: OrganizationOvervi
 function BlockedTasksPanel({ tasks }: { tasks: OverviewDerivedState["blockedTasks"] }) {
   return (
     <div id="blocked-tasks" className="scroll-mt-36">
-      <Panel title="Department activity needing help" description="Work that is currently stalled by approval, failure, or missing operator action." action={<Button asChild variant="outline" className="rounded-full"><Link href="/tasks">Open activity<ArrowRight className="size-4" /></Link></Button>}>
-        {tasks.length ? <div className="space-y-3">{tasks.map((task) => <BlockedTaskRow key={task.id} task={task} />)}</div> : <EmptyBlock title="No blocked tasks" description="Waiting and failed task items are clear in the current window." />}
+      <Panel
+        title="Department activity needing help"
+        description="Work that is currently stalled by approval, failure, or missing operator action."
+        action={
+          <Button asChild variant="outline" className="rounded-full">
+            <Link href="/tasks">
+              Open activity
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        }
+      >
+        {tasks.length ? (
+          <div className="space-y-3">
+            {tasks.map((task) => (
+              <BlockedTaskRow key={task.id} task={task} />
+            ))}
+          </div>
+        ) : (
+          <EmptyBlock
+            title="No blocked tasks"
+            description="Waiting and failed task items are clear in the current window."
+          />
+        )}
       </Panel>
     </div>
   );
@@ -625,10 +798,22 @@ function BlockedTasksPanel({ tasks }: { tasks: OverviewDerivedState["blockedTask
 
 function BlockedTaskRow({ task }: { task: OverviewDerivedState["blockedTasks"][number] }) {
   return (
-    <Link href={task.operationId ? `/runs/${task.operationId}` : "/tasks"} className="block rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 transition-colors hover:bg-zinc-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-zinc-950">
+    <Link
+      href={task.operationId ? `/runs/${task.operationId}` : "/tasks"}
+      className="block rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 transition-colors hover:bg-zinc-950 hover:text-white dark:border-white/8 dark:hover:bg-white dark:hover:text-zinc-950"
+    >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0"><div className="flex items-center gap-3"><p className="truncate text-sm font-semibold">{task.title}</p><StatusBadge status={task.status} /></div><p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{task.summary}</p></div>
-        <div className="shrink-0 text-right text-xs text-zinc-500 dark:text-zinc-400"><p>{task.priority} priority</p><p className="mt-2">{formatDateTime(task.updatedAt)}</p></div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <p className="truncate text-sm font-semibold">{task.title}</p>
+            <StatusBadge status={task.status} />
+          </div>
+          <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{task.summary}</p>
+        </div>
+        <div className="shrink-0 text-right text-xs text-zinc-500 dark:text-zinc-400">
+          <p>{task.priority} priority</p>
+          <p className="mt-2">{formatDateTime(task.updatedAt)}</p>
+        </div>
       </div>
     </Link>
   );
@@ -646,9 +831,24 @@ function ApprovalUsageGrid({ overview }: { overview: OrganizationOverviewVM }) {
 function PendingApprovalsPanel({ overview }: { overview: OrganizationOverviewVM }) {
   return (
     <div id="pending-approvals" className="scroll-mt-36">
-      <Panel title="Pending approvals" description="Approval items that should be resolvable without opening raw logs." action={<Button asChild variant="outline" className="rounded-full"><Link href="/approvals">Open approvals<ArrowRight className="size-4" /></Link></Button>}>
+      <Panel
+        title="Pending approvals"
+        description="Approval items that should be resolvable without opening raw logs."
+        action={
+          <Button asChild variant="outline" className="rounded-full">
+            <Link href="/approvals">
+              Open approvals
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        }
+      >
         {overview.pendingApprovals.length ? (
-          <div className="space-y-3">{overview.pendingApprovals.slice(0, 5).map((approval) => <ApprovalRow key={approval.id} approval={approval} />)}</div>
+          <div className="space-y-3">
+            {overview.pendingApprovals.slice(0, 5).map((approval) => (
+              <ApprovalRow key={approval.id} approval={approval} />
+            ))}
+          </div>
         ) : (
           <EmptyBlock title="No pending approvals" description="The human-in-the-loop queue is currently clear." />
         )}
@@ -661,8 +861,16 @@ function ApprovalRow({ approval }: { approval: OrganizationOverviewVM["pendingAp
   return (
     <div className="rounded-[1.25rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0"><div className="flex items-center gap-3"><p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{approval.label}</p><StatusBadge status={approval.status} /></div><p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{approval.promptMessage}</p></div>
-        <Button asChild size="sm" className="rounded-full"><Link href="/approvals">Decide</Link></Button>
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{approval.label}</p>
+            <StatusBadge status={approval.status} />
+          </div>
+          <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{approval.promptMessage}</p>
+        </div>
+        <Button asChild size="sm" className="rounded-full">
+          <Link href="/approvals">Decide</Link>
+        </Button>
       </div>
     </div>
   );
@@ -671,21 +879,52 @@ function ApprovalRow({ approval }: { approval: OrganizationOverviewVM["pendingAp
 function UsageBudgetPanel({ overview }: { overview: OrganizationOverviewVM }) {
   return (
     <div id="usage-budget" className="scroll-mt-36">
-      <Panel title="Usage and budget" description="Backend-owned spend and metric provenance for the current operating window.">
+      <Panel
+        title="Usage and budget"
+        description="Backend-owned spend and metric provenance for the current operating window."
+      >
         <div className="grid gap-3 md:grid-cols-3">
-          <CostMetricCard label="Tracked cost" value={financialMetricLabel(overview.metricProvenance.totalCostUsd)} detail={metricProvenanceLine(overview.metricProvenance.totalCostUsd)} />
-          <CostMetricCard label="Revenue" value={notInstrumentedLabel} detail={metricProvenanceLine(overview.metricProvenance.revenue)} />
-          <CostMetricCard label="Profit" value={notInstrumentedLabel} detail={metricProvenanceLine(overview.metricProvenance.profit)} />
+          <CostMetricCard
+            label="Tracked cost"
+            value={financialMetricLabel(overview.metricProvenance.totalCostUsd)}
+            detail={metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
+          />
+          <CostMetricCard
+            label="Revenue"
+            value={notInstrumentedLabel}
+            detail={metricProvenanceLine(overview.metricProvenance.revenue)}
+          />
+          <CostMetricCard
+            label="Profit"
+            value={notInstrumentedLabel}
+            detail={metricProvenanceLine(overview.metricProvenance.profit)}
+          />
         </div>
         <div className="mt-4 space-y-4">
           {overview.costByType.map((row) => (
             <div key={row.type} className="space-y-2">
-              <div className="flex items-center justify-between gap-3 text-sm"><span className="font-medium text-zinc-900 capitalize dark:text-zinc-100">{row.type.replace(/_/g, " ")}</span><span className="text-zinc-600 dark:text-zinc-300">{formatCurrency(row.totalCostUsd)}</span></div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-zinc-900 capitalize dark:text-zinc-100">
+                  {row.type.replace(/_/g, " ")}
+                </span>
+                <span className="text-zinc-600 dark:text-zinc-300">{formatCurrency(row.totalCostUsd)}</span>
+              </div>
               <TrendBar value={row.totalCostUsd} total={Math.max(overview.summary.totalCostUsd, 1)} tone="rose" />
             </div>
           ))}
         </div>
-        <div className="mt-4"><KeyValueGrid columns={2} items={[{ label: "Cost source types", value: formatCompactNumber(overview.costByType.length) }, { label: "Operating window", value: `${formatCompactNumber(overview.summary.operationCount24h)} operations in 24h` }]} /></div>
+        <div className="mt-4">
+          <KeyValueGrid
+            columns={2}
+            items={[
+              { label: "Cost source types", value: formatCompactNumber(overview.costByType.length) },
+              {
+                label: "Operating window",
+                value: `${formatCompactNumber(overview.summary.operationCount24h)} operations in 24h`,
+              },
+            ]}
+          />
+        </div>
       </Panel>
     </div>
   );
@@ -709,7 +948,11 @@ export default function OverviewPage() {
       <DashboardLayout inspector={<OverviewInspector overview={controller.overview} derived={controller.derived} />}>
         <div className="space-y-6">
           <CommandOpsPanel controller={controller} />
-          {controller.error ? <Alert variant="destructive"><AlertDescription>{controller.error}</AlertDescription></Alert> : null}
+          {controller.error ? (
+            <Alert variant="destructive">
+              <AlertDescription>{controller.error}</AlertDescription>
+            </Alert>
+          ) : null}
           <OverviewLoadedContent controller={controller} />
         </div>
       </DashboardLayout>

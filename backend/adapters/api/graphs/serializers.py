@@ -69,6 +69,7 @@ class GraphListSerializer(serializers.Serializer[Any]):
     """Serializer for graph list output."""
 
     id = serializers.UUIDField(read_only=True)
+    semantic_aliases = serializers.DictField(read_only=True)
     organization_id = serializers.UUIDField(read_only=True, allow_null=True)
     name = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True)
@@ -82,6 +83,7 @@ class GraphDetailSerializer(serializers.Serializer[Any]):
     """Serializer for graph detail output."""
 
     id = serializers.UUIDField(read_only=True)
+    semantic_aliases = serializers.DictField(read_only=True)
     owner_id = serializers.UUIDField(read_only=True)
     organization_id = serializers.UUIDField(read_only=True, allow_null=True)
     name = serializers.CharField(read_only=True)

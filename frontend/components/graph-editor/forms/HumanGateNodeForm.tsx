@@ -51,12 +51,10 @@ export function HumanGateNodeForm({ config, onChange }: NodeFormProps) {
 
   const handleEmailsChange = useCallback(
     (value: string) => {
-      const emails = value
-        .split(",")
-        .flatMap((email) => {
-          const trimmed = email.trim();
-          return trimmed ? [trimmed] : [];
-        });
+      const emails = value.split(",").flatMap((email) => {
+        const trimmed = email.trim();
+        return trimmed ? [trimmed] : [];
+      });
       handleChange("notify_emails", emails);
     },
     [handleChange],

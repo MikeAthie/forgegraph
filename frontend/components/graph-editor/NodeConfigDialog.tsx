@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useReducer,
-  useRef,
-  type SetStateAction,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, type SetStateAction } from "react";
 import {
   Dialog,
   DialogContent,
@@ -91,10 +84,7 @@ type NodeConfigDialogAction = {
   patch: Partial<NodeConfigDialogState> | ((state: NodeConfigDialogState) => Partial<NodeConfigDialogState>);
 };
 
-function nodeConfigDialogReducer(
-  state: NodeConfigDialogState,
-  action: NodeConfigDialogAction,
-): NodeConfigDialogState {
+function nodeConfigDialogReducer(state: NodeConfigDialogState, action: NodeConfigDialogAction): NodeConfigDialogState {
   const patch = typeof action.patch === "function" ? action.patch(state) : action.patch;
   return { ...state, ...patch };
 }

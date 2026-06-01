@@ -99,7 +99,11 @@ function PromptDetailPanel({
           <Button variant="outline" className="rounded-full" disabled={actionLoading} onClick={onDuplicate}>
             Duplicate
           </Button>
-          <Button className="rounded-full" disabled={actionLoading || selectedPrompt?.visibility === "public"} onClick={onShare}>
+          <Button
+            className="rounded-full"
+            disabled={actionLoading || selectedPrompt?.visibility === "public"}
+            onClick={onShare}
+          >
             Share
           </Button>
         </div>
@@ -113,17 +117,13 @@ function PromptDetailPanel({
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-                Description
-              </p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Description</p>
               <p className="mt-2 text-sm leading-7 text-zinc-700 dark:text-zinc-200">
                 {selectedPrompt.description || "No description provided."}
               </p>
             </div>
             <div className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-                Visibility
-              </p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Visibility</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <StatusBadge
                   status={selectedPrompt.visibility === "public" ? "active" : "pending"}

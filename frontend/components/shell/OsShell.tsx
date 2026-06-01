@@ -312,21 +312,39 @@ function useOsShellController() {
     creatingOrganization,
     createOrganizationError,
   } = shellState;
-  const setShellField = useCallback(
-    <K extends keyof OsShellState>(key: K, value: SetStateAction<OsShellState[K]>) => {
-      dispatchShellState({
-        patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<OsShellState>,
-      });
-    },
-    [],
+  const setShellField = useCallback(<K extends keyof OsShellState>(key: K, value: SetStateAction<OsShellState[K]>) => {
+    dispatchShellState({
+      patch: (current) => ({ [key]: resolveStateAction(value, current[key]) }) as Partial<OsShellState>,
+    });
+  }, []);
+  const setOrganizations = useCallback(
+    (value: SetStateAction<OrganizationListItem[]>) => setShellField("organizations", value),
+    [setShellField],
   );
-  const setOrganizations = useCallback((value: SetStateAction<OrganizationListItem[]>) => setShellField("organizations", value), [setShellField]);
-  const setOrganizationActionId = useCallback((value: SetStateAction<string | null>) => setShellField("organizationActionId", value), [setShellField]);
-  const setOrganizationError = useCallback((value: SetStateAction<string | null>) => setShellField("organizationError", value), [setShellField]);
-  const setCreateOrganizationOpen = useCallback((value: SetStateAction<boolean>) => setShellField("createOrganizationOpen", value), [setShellField]);
-  const setNewOrganizationName = useCallback((value: SetStateAction<string>) => setShellField("newOrganizationName", value), [setShellField]);
-  const setCreatingOrganization = useCallback((value: SetStateAction<boolean>) => setShellField("creatingOrganization", value), [setShellField]);
-  const setCreateOrganizationError = useCallback((value: SetStateAction<string | null>) => setShellField("createOrganizationError", value), [setShellField]);
+  const setOrganizationActionId = useCallback(
+    (value: SetStateAction<string | null>) => setShellField("organizationActionId", value),
+    [setShellField],
+  );
+  const setOrganizationError = useCallback(
+    (value: SetStateAction<string | null>) => setShellField("organizationError", value),
+    [setShellField],
+  );
+  const setCreateOrganizationOpen = useCallback(
+    (value: SetStateAction<boolean>) => setShellField("createOrganizationOpen", value),
+    [setShellField],
+  );
+  const setNewOrganizationName = useCallback(
+    (value: SetStateAction<string>) => setShellField("newOrganizationName", value),
+    [setShellField],
+  );
+  const setCreatingOrganization = useCallback(
+    (value: SetStateAction<boolean>) => setShellField("creatingOrganization", value),
+    [setShellField],
+  );
+  const setCreateOrganizationError = useCallback(
+    (value: SetStateAction<string | null>) => setShellField("createOrganizationError", value),
+    [setShellField],
+  );
   const createOrganizationNameInputRef = useRef<HTMLInputElement>(null);
   const meta = useMemo(() => pageMeta(router.pathname), [router.pathname]);
   const organizationId = user?.default_organization_id ?? null;
@@ -441,7 +459,14 @@ function useOsShellController() {
         setOrganizationActionId(null);
       }
     },
-    [organizationActionId, refreshOrganizationContext, setOrganizationActionId, setOrganizationError, setOrganizations, user?.default_organization_id],
+    [
+      organizationActionId,
+      refreshOrganizationContext,
+      setOrganizationActionId,
+      setOrganizationError,
+      setOrganizations,
+      user?.default_organization_id,
+    ],
   );
 
   const resetCreateOrganization = useCallback(() => {
@@ -479,7 +504,16 @@ function useOsShellController() {
         setCreatingOrganization(false);
       }
     },
-    [newOrganizationName, refreshOrganizationContext, resetCreateOrganization, setCreateOrganizationError, setCreateOrganizationOpen, setCreatingOrganization, setOrganizationError, setOrganizations],
+    [
+      newOrganizationName,
+      refreshOrganizationContext,
+      resetCreateOrganization,
+      setCreateOrganizationError,
+      setCreateOrganizationOpen,
+      setCreatingOrganization,
+      setOrganizationError,
+      setOrganizations,
+    ],
   );
 
   const items = navItems.flatMap((item) =>
@@ -528,8 +562,18 @@ type OsShellController = ReturnType<typeof useOsShellController>;
 
 function ShellBrandLink() {
   return (
-    <Link href="/companies" className="glass-panel flex items-center gap-3 rounded-[1.25rem] border border-sidebar-border px-3.5 py-3">
-      <Image src="/icon0.svg" alt="" width={40} height={40} priority className="size-10 shrink-0 rounded-xl object-cover shadow-sm" />
+    <Link
+      href="/companies"
+      className="glass-panel flex items-center gap-3 rounded-[1.25rem] border border-sidebar-border px-3.5 py-3"
+    >
+      <Image
+        src="/icon0.svg"
+        alt=""
+        width={40}
+        height={40}
+        priority
+        className="size-10 shrink-0 rounded-xl object-cover shadow-sm"
+      />
       <div className="min-w-0">
         <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">ForgeGraph</p>
         <p className="truncate text-base font-semibold text-sidebar-foreground">AI Company OS</p>
@@ -544,7 +588,8 @@ function OrganizationMenuItems({ controller }: { controller: OsShellController }
       {controller.organizations.length > 0 ? (
         controller.organizations.map((organization) => {
           const selected =
-            organization.id === controller.user?.default_organization_id || organization.id === controller.currentOrganization?.id;
+            organization.id === controller.user?.default_organization_id ||
+            organization.id === controller.currentOrganization?.id;
           const switching = controller.organizationActionId === organization.id;
           return (
             <DropdownMenuItem
@@ -553,7 +598,11 @@ function OrganizationMenuItems({ controller }: { controller: OsShellController }
               onSelect={() => void controller.handleSwitchOrganization(organization.id)}
             >
               <span className="flex min-w-0 flex-1 items-center gap-2">
-                {switching ? <Loader2 className="size-4 animate-spin" /> : <Check className={cn("size-4", selected ? "opacity-100" : "opacity-0")} />}
+                {switching ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Check className={cn("size-4", selected ? "opacity-100" : "opacity-0")} />
+                )}
                 <span className="truncate">{organization.name}</span>
               </span>
             </DropdownMenuItem>
@@ -591,7 +640,11 @@ function SidebarOrganizationCard({ controller }: { controller: OsShellController
             className="mt-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-sidebar-border bg-white/80 px-3 py-2.5 text-left text-sm dark:bg-white/5"
           >
             <span className="truncate font-medium">{controller.organizationLabel}</span>
-            {controller.organizationsLoading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <ChevronsUpDown className="size-4 text-muted-foreground" />}
+            {controller.organizationsLoading ? (
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            ) : (
+              <ChevronsUpDown className="size-4 text-muted-foreground" />
+            )}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
@@ -602,7 +655,9 @@ function SidebarOrganizationCard({ controller }: { controller: OsShellController
       <p className="mt-2 text-[13px] leading-5 text-muted-foreground">
         Companies, operations, knowledge, and usage stay separated by organization.
       </p>
-      {controller.organizationError ? <p className="mt-2 text-xs text-destructive">{controller.organizationError}</p> : null}
+      {controller.organizationError ? (
+        <p className="mt-2 text-xs text-destructive">{controller.organizationError}</p>
+      ) : null}
     </div>
   );
 }
@@ -620,7 +675,13 @@ function SidebarNav({ controller }: { controller: OsShellController }) {
               if (item.section !== section) {
                 return [];
               }
-              return [<SidebarNavLink key={item.href} item={item} active={isActivePath(controller.router.pathname, item.href)} />];
+              return [
+                <SidebarNavLink
+                  key={item.href}
+                  item={item}
+                  active={isActivePath(controller.router.pathname, item.href)}
+                />,
+              ];
             })}
           </nav>
         </div>
@@ -693,7 +754,9 @@ function CreateOrganizationDialog({ controller }: { controller: OsShellControlle
         <form onSubmit={controller.handleCreateOrganization} className="space-y-5">
           <DialogHeader>
             <DialogTitle>Add Organization</DialogTitle>
-            <DialogDescription>Create a separate operating space for companies, operations, knowledge, and usage.</DialogDescription>
+            <DialogDescription>
+              Create a separate operating space for companies, operations, knowledge, and usage.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <label htmlFor="new-organization-name" className="text-sm font-medium text-foreground">
@@ -718,11 +781,20 @@ function CreateOrganizationDialog({ controller }: { controller: OsShellControlle
             ) : null}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => controller.setCreateOrganizationOpen(false)} disabled={controller.creatingOrganization}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => controller.setCreateOrganizationOpen(false)}
+              disabled={controller.creatingOrganization}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={controller.creatingOrganization}>
-              {controller.creatingOrganization ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              {controller.creatingOrganization ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Plus className="size-4" />
+              )}
               Add organization
             </Button>
           </DialogFooter>
@@ -747,7 +819,11 @@ function HeaderOrganizationMenu({ controller }: { controller: OsShellController 
         >
           <Building2 className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{controller.organizationLabel}</span>
-          {controller.organizationsLoading ? <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" /> : <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />}
+          {controller.organizationsLoading ? (
+            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+          ) : (
+            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+          )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
@@ -756,7 +832,9 @@ function HeaderOrganizationMenu({ controller }: { controller: OsShellController 
         {controller.organizationError ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled className="text-destructive">{controller.organizationError}</DropdownMenuItem>
+            <DropdownMenuItem disabled className="text-destructive">
+              {controller.organizationError}
+            </DropdownMenuItem>
           </>
         ) : null}
       </DropdownMenuContent>
@@ -869,7 +947,9 @@ function AppHeader({ controller }: { controller: OsShellController }) {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">ForgeGraph</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-[2rem]">{controller.meta.title}</h1>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-[2rem]">
+              {controller.meta.title}
+            </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{controller.meta.description}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -910,7 +990,9 @@ export default function OsShell({ children, mainClassName }: OsShellProps) {
       <div className="flex min-h-screen">
         <AppSidebar controller={controller} />
         <CreateOrganizationDialog controller={controller} />
-        <MainShellArea controller={controller} mainClassName={mainClassName}>{children}</MainShellArea>
+        <MainShellArea controller={controller} mainClassName={mainClassName}>
+          {children}
+        </MainShellArea>
       </div>
     </div>
   );

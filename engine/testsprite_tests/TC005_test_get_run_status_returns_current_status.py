@@ -1,4 +1,10 @@
+import pytest
+
 from _helpers import get_ready
+
+pytestmark = pytest.mark.skip(
+    reason="Historical TestSprite smoke artifact; use engine Go/gRPC production gates."
+)
 
 
 def test_get_run_status_returns_current_status():
@@ -7,6 +13,3 @@ def test_get_run_status_returns_current_status():
     payload = response.json()
     assert payload["status"] == "ready"
     assert isinstance(payload["run_state_mode"], str)
-
-
-test_get_run_status_returns_current_status()

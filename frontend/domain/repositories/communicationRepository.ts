@@ -2,6 +2,7 @@ import {
   communicationApi,
   type CommunicationMessageDTO,
   type CommunicationMessageInput,
+  type CommunicationRouteRequestResponse,
   type CommunicationThreadDTO,
   type CommunicationThreadInput,
 } from "@/lib/api";
@@ -30,12 +31,16 @@ export const communicationRepository = {
       ),
     }),
 
-  listMessages: (threadId: string): Promise<CommunicationMessageDTO[]> =>
-    communicationApi.listMessages(threadId),
+  listMessages: (threadId: string): Promise<CommunicationMessageDTO[]> => communicationApi.listMessages(threadId),
 
   createMessage: (threadId: string, input: CommunicationMessageInput): Promise<CommunicationMessageDTO> =>
     communicationApi.createMessage(threadId, input, {
       idempotencyKey: newClientCommandId("communication.message.create"),
+    }),
+
+  routeRequest: (messageId: string): Promise<CommunicationRouteRequestResponse> =>
+    communicationApi.routeRequest(messageId, {
+      idempotencyKey: stableClientCommandId("communication.message.route_request", messageId),
     }),
 };
 

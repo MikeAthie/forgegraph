@@ -275,10 +275,12 @@ export function getRecentPaletteItems(
   limit = 6,
 ): PaletteCatalogItem[] {
   const itemById = new Map(items.map((item) => [item.id, item]));
-  return recentIds.flatMap((id) => {
-    const item = itemById.get(id);
-    return item?.enabled ? [item] : [];
-  }).slice(0, limit);
+  return recentIds
+    .flatMap((id) => {
+      const item = itemById.get(id);
+      return item?.enabled ? [item] : [];
+    })
+    .slice(0, limit);
 }
 
 export function updateRecentPaletteIds(currentIds: string[], selectedId: string, limit = 8): string[] {

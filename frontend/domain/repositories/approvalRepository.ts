@@ -1,6 +1,7 @@
-import { approvalsApi, type ResumeRunResponse } from "@/lib/api";
+import { approvalsApi, type ApprovalResolveResponse, type ResumeRunResponse } from "@/lib/api";
 import { toApprovalVM, type ApprovalVM } from "@/domain/translation";
 import { operationRepository } from "./operationRepository";
+import { stableClientCommandId } from "@/lib/idempotency";
 
 export const approvalRepository = {
   list: async (status?: string): Promise<ApprovalVM[]> => {
@@ -13,8 +14,22 @@ export const approvalRepository = {
     return toApprovalVM(approval);
   },
 
-  decide: async (approval: ApprovalVM, approved: boolean, feedback?: string): Promise<ResumeRunResponse> =>
-    operationRepository.resumeAfterApproval(approval.operationId, approval.departmentId, approved, feedback),
+  decide: async (
+    approval: ApprovalVM,
+    approved: boolean,
+    feedback?: string,
+  ): Promise<ResumeRunResponse | ApprovalResolveResponse> => {
+    if (approval.resolutionMode === "direct") {
+      return approvalsApi.resolve(
+        approval.id,
+        { approved, notes: feedback },
+        {
+          idempotencyKey: stableClientCommandId("approval.resolve", approval.id, approved ? "approved" : "rejected"),
+        },
+      );
+    }
+    return operationRepository.resumeAfterApproval(approval.operationId, approval.departmentId, approved, feedback);
+  },
 };
 
 type ApprovalRepository = typeof approvalRepository;

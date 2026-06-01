@@ -259,7 +259,9 @@ function budgetInputsFrom(budget: LLMBudgetStatus): Pick<LLMAnalyticsState, "bud
   return {
     budgetLimit: budget.budget?.monthly_limit_usd != null ? String(budget.budget.monthly_limit_usd) : "",
     budgetThreshold:
-      budget.budget?.warning_threshold_pct != null ? String(Math.round(budget.budget.warning_threshold_pct * 100)) : "80",
+      budget.budget?.warning_threshold_pct != null
+        ? String(Math.round(budget.budget.warning_threshold_pct * 100))
+        : "80",
   };
 }
 

@@ -151,7 +151,9 @@ function AuditFiltersCard({
     <Card className="border-border/60 bg-card/60 backdrop-blur-sm">
       <CardHeader>
         <CardTitle className="text-base">Filters</CardTitle>
-        <CardDescription>Filter by actor, action, resource, or date range before drilling into metadata.</CardDescription>
+        <CardDescription>
+          Filter by actor, action, resource, or date range before drilling into metadata.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

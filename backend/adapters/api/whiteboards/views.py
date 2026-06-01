@@ -15,6 +15,9 @@ from rest_framework.views import APIView
 from adapters.api.responses import error_response, success_response
 from adapters.api.whiteboards.serializers import (
     StrategySynthesisSerializer,
+    WhiteboardBoardCardCreateSerializer,
+    WhiteboardBoardCardPatchSerializer,
+    WhiteboardBoardEvidenceSerializer,
     WhiteboardDeploymentExecuteSerializer,
     WhiteboardDeploymentPrepareSerializer,
     WhiteboardPatchSerializer,
@@ -22,6 +25,7 @@ from adapters.api.whiteboards.serializers import (
     WhiteboardPerformanceReportSerializer,
     WhiteboardPerformanceStartSerializer,
     WhiteboardPhaseEvaluationSerializer,
+    WhiteboardPhaseWorkstreamCompleteSerializer,
     WhiteboardQuerySerializer,
 )
 from application.services.company_access import has_company_access
@@ -31,6 +35,7 @@ from application.services.deployment_orchestration import (
     prepare_deployment_for_whiteboard,
     request_tool_execution_for_channel,
 )
+from application.services.idempotency import annotate_response
 from application.services.performance_orchestration import (
     PerformanceOrchestrationError,
     create_performance_report,
@@ -42,21 +47,34 @@ from application.services.rbac import has_min_role
 from application.services.strategy_orchestration import (
     StrategyOrchestrationError,
     advance_whiteboard_to_content_if_ready,
+    evaluate_planning_gate,
     evaluate_strategy_gate,
+    planning_state_payload,
+    start_planning_for_whiteboard,
     start_strategy_for_whiteboard,
+    synthesize_planning,
     strategy_state_payload,
     synthesize_strategy,
+)
+from application.services.whiteboard_boards import (
+    WhiteboardBoardError,
+    attach_card_evidence,
+    build_whiteboard_board_snapshot,
+    create_whiteboard_card,
+    update_whiteboard_card,
 )
 from application.services.work_whiteboards import (
     WorkWhiteboardError,
     get_whiteboard_for_user,
     list_whiteboards_for_user,
+    mark_whiteboard_ready_for_planning,
     mark_whiteboard_ready_for_strategy,
     update_whiteboard_field,
     whiteboard_payload,
 )
 from application.services.workstream_gates import (
     WorkstreamGateError,
+    complete_workstream,
     evaluate_gate,
     get_phase_contract,
     start_phase_for_whiteboard,
@@ -113,11 +131,142 @@ class WhiteboardDetailView(APIView):
                 fields=dict(serializer.validated_data),
             )
         except WorkWhiteboardError as exc:
-            status_code = http_status.HTTP_403_FORBIDDEN if exc.code == "permission_denied" else http_status.HTTP_400_BAD_REQUEST
+            status_code = (
+                http_status.HTTP_403_FORBIDDEN
+                if exc.code == "permission_denied"
+                else http_status.HTTP_400_BAD_REQUEST
+            )
             return error_response(exc.code.upper(), exc.message, status=status_code)
         except ValidationError as exc:
             return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
         return success_response({"whiteboard": whiteboard_payload(updated, user=user)})
+
+
+class WhiteboardBoardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        return success_response({"board": build_whiteboard_board_snapshot(whiteboard, user=user)})
+
+
+class WhiteboardBoardCardsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        serializer = WhiteboardBoardCardCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        data = dict(serializer.validated_data)
+        idempotency_key = _idempotency_key(request, data)
+        try:
+            card = create_whiteboard_card(
+                user=user,
+                whiteboard=whiteboard,
+                department_id=data["department_id"],
+                title=str(data.get("title") or ""),
+                reason=str(data.get("reason") or ""),
+                status=str(data.get("status") or "queued"),
+                priority=str(data.get("priority") or "normal"),
+                due_at=data.get("due_at"),
+                assigned_user_id=data.get("assigned_user_id"),
+                customer_visible=bool(data.get("customer_visible", False)),
+                links=dict(data.get("links") or {}),
+                idempotency_key=idempotency_key,
+            )
+        except WhiteboardBoardError as exc:
+            return _board_error(exc)
+        except ValidationError as exc:
+            return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
+        whiteboard.refresh_from_db()
+        response = success_response(
+            {"board": build_whiteboard_board_snapshot(whiteboard, user=user)},
+            status=http_status.HTTP_201_CREATED,
+        )
+        return _annotate_board_idempotency(response, card, idempotency_key)
+
+
+class WhiteboardBoardCardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request, whiteboard_id: UUID, card_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        serializer = WhiteboardBoardCardPatchSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        data = dict(serializer.validated_data)
+        idempotency_key = _idempotency_key(request, data)
+        kwargs: dict[str, Any] = {
+            "user": user,
+            "whiteboard": whiteboard,
+            "card_id": card_id,
+            "idempotency_key": idempotency_key,
+            "expected_updated_at": str(data.get("expected_updated_at") or ""),
+        }
+        for field_name in (
+            "status",
+            "department_id",
+            "assigned_user_id",
+            "priority",
+            "due_at",
+            "blocker_reason",
+            "title",
+            "customer_visible",
+        ):
+            if field_name in data:
+                kwargs[field_name] = data[field_name]
+        try:
+            card = update_whiteboard_card(**kwargs)
+        except WhiteboardBoardError as exc:
+            return _board_error(exc)
+        except ValidationError as exc:
+            return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
+        whiteboard.refresh_from_db()
+        response = success_response({"board": build_whiteboard_board_snapshot(whiteboard, user=user)})
+        return _annotate_board_idempotency(response, card, idempotency_key)
+
+
+class WhiteboardBoardCardEvidenceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, whiteboard_id: UUID, card_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        serializer = WhiteboardBoardEvidenceSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        data = dict(serializer.validated_data)
+        idempotency_key = _idempotency_key(request, data)
+        try:
+            card = attach_card_evidence(
+                user=user,
+                whiteboard=whiteboard,
+                card_id=card_id,
+                evidence_type=str(data.get("evidence_type") or "note"),
+                target_id=data.get("target_id"),
+                summary=str(data.get("summary") or ""),
+                metadata=dict(data.get("metadata") or {}),
+                idempotency_key=idempotency_key,
+            )
+        except WhiteboardBoardError as exc:
+            return _board_error(exc)
+        except ValidationError as exc:
+            return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
+        whiteboard.refresh_from_db()
+        response = success_response({"board": build_whiteboard_board_snapshot(whiteboard, user=user)})
+        return _annotate_board_idempotency(response, card, idempotency_key)
 
 
 class WhiteboardReadyForStrategyView(APIView):
@@ -131,7 +280,11 @@ class WhiteboardReadyForStrategyView(APIView):
         try:
             routing_record = mark_whiteboard_ready_for_strategy(user=user, whiteboard=whiteboard)
         except WorkWhiteboardError as exc:
-            status_code = http_status.HTTP_403_FORBIDDEN if exc.code == "permission_denied" else http_status.HTTP_400_BAD_REQUEST
+            status_code = (
+                http_status.HTTP_403_FORBIDDEN
+                if exc.code == "permission_denied"
+                else http_status.HTTP_400_BAD_REQUEST
+            )
             return error_response(exc.code.upper(), exc.message, status=status_code)
         except ValidationError as exc:
             return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
@@ -139,6 +292,105 @@ class WhiteboardReadyForStrategyView(APIView):
             {
                 "whiteboard": whiteboard_payload(whiteboard, user=user),
                 "routing_record_id": str(routing_record.id),
+            }
+        )
+
+
+class WhiteboardReadyForPlanningView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        try:
+            routing_record = mark_whiteboard_ready_for_planning(user=user, whiteboard=whiteboard)
+        except WorkWhiteboardError as exc:
+            status_code = (
+                http_status.HTTP_403_FORBIDDEN
+                if exc.code == "permission_denied"
+                else http_status.HTTP_400_BAD_REQUEST
+            )
+            return error_response(exc.code.upper(), exc.message, status=status_code)
+        except ValidationError as exc:
+            return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
+        return success_response(
+            {
+                "whiteboard": whiteboard_payload(whiteboard, user=user),
+                "routing_record_id": str(routing_record.id),
+            }
+        )
+
+
+class WhiteboardPlanningStartView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        if not _can_view_strategy(user, whiteboard):
+            return _forbidden("You do not have permission to view planning work.")
+        try:
+            planning = start_planning_for_whiteboard(user=user, whiteboard=whiteboard)
+        except StrategyOrchestrationError as exc:
+            return _strategy_error(exc)
+        return success_response(
+            {
+                "planning": planning,
+                "strategy": planning,
+                "whiteboard": whiteboard_payload(whiteboard, user=user),
+            }
+        )
+
+
+class WhiteboardPlanningDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        if not _can_view_strategy(user, whiteboard):
+            return _forbidden("You do not have permission to view planning work.")
+        planning = planning_state_payload(whiteboard)
+        return success_response({"planning": planning, "strategy": planning})
+
+
+class WhiteboardPlanningSynthesizeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        if not _can_view_strategy(user, whiteboard):
+            return _forbidden("You do not have permission to manage planning work.")
+        serializer = StrategySynthesisSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        try:
+            synthesize_planning(user=user, whiteboard=whiteboard)
+            evaluation = evaluate_planning_gate(
+                user=user,
+                whiteboard=whiteboard,
+                scores=dict(serializer.validated_data.get("scores") or {}),
+            )
+            advance_whiteboard_to_content_if_ready(user=user, whiteboard=whiteboard)
+        except StrategyOrchestrationError as exc:
+            return _strategy_error(exc)
+        whiteboard.refresh_from_db()
+        planning = planning_state_payload(whiteboard)
+        planning["evaluation_id"] = str(evaluation.id)
+        return success_response(
+            {
+                "planning": planning,
+                "strategy": planning,
+                "whiteboard": whiteboard_payload(whiteboard, user=user),
             }
         )
 
@@ -230,7 +482,9 @@ class WhiteboardPhaseStartView(APIView):
         if whiteboard is None:
             return _not_found("Work whiteboard was not found.")
         try:
-            contract = start_phase_for_whiteboard(user=user, whiteboard=whiteboard, phase_id=phase_id)
+            contract = start_phase_for_whiteboard(
+                user=user, whiteboard=whiteboard, phase_id=phase_id
+            )
         except WorkstreamGateError as exc:
             return _phase_error(exc)
         whiteboard.refresh_from_db()
@@ -258,6 +512,44 @@ class WhiteboardPhaseSynthesizeView(APIView):
         whiteboard.refresh_from_db()
         return success_response(
             {
+                "whiteboard_phase_contract": contract,
+                "whiteboard": whiteboard_payload(whiteboard, user=user),
+            }
+        )
+
+
+class WhiteboardPhaseWorkstreamCompleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(
+        self,
+        request: Request,
+        whiteboard_id: UUID,
+        phase_id: str,
+        workstream_id: str,
+    ) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        serializer = WhiteboardPhaseWorkstreamCompleteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        try:
+            workstream = complete_workstream(
+                user=user,
+                whiteboard=whiteboard,
+                phase_id=phase_id,
+                workstream_id=workstream_id,
+                result=dict(serializer.validated_data.get("result") or {}),
+            )
+            contract = get_phase_contract(user=user, whiteboard=whiteboard, phase_id=phase_id)
+        except WorkstreamGateError as exc:
+            return _phase_error(exc)
+        whiteboard.refresh_from_db()
+        return success_response(
+            {
+                "workstream": workstream,
                 "whiteboard_phase_contract": contract,
                 "whiteboard": whiteboard_payload(whiteboard, user=user),
             }
@@ -500,6 +792,50 @@ def _not_found(message: str) -> Response:
 
 def _forbidden(message: str) -> Response:
     return error_response("FORBIDDEN", message, status=http_status.HTTP_403_FORBIDDEN)
+
+
+def _idempotency_key(request: Request, data: dict[str, Any]) -> str:
+    return str(
+        request.headers.get("Idempotency-Key")
+        or request.META.get("HTTP_IDEMPOTENCY_KEY")
+        or data.get("idempotency_key")
+        or ""
+    )
+
+
+def _board_error(exc: WhiteboardBoardError) -> Response:
+    status_code: int = http_status.HTTP_400_BAD_REQUEST
+    if exc.code == "permission_denied":
+        status_code = http_status.HTTP_403_FORBIDDEN
+    elif exc.code in {"card_not_found", "department_not_found"}:
+        status_code = http_status.HTTP_404_NOT_FOUND
+    elif exc.code in {"stale_card_version", "idempotency_conflict"}:
+        status_code = http_status.HTTP_409_CONFLICT
+    return error_response(
+        exc.code.upper(),
+        exc.message,
+        status=status_code,
+        details=exc.details,
+    )
+
+
+def _annotate_board_idempotency(
+    response: Response,
+    card: Any,
+    idempotency_key: str,
+) -> Response:
+    if not idempotency_key:
+        return response
+    status_value = str(getattr(card, "_whiteboard_board_idempotency_status", "applied"))
+    if status_value not in {"applied", "already_applied", "rejected", "retry_required"}:
+        status_value = "applied"
+    return annotate_response(
+        response,
+        status=cast(Any, status_value),
+        idempotency_key=idempotency_key,
+        resource_type="task_routing_record",
+        resource_id=str(getattr(card, "id", "")),
+    )
 
 
 def _can_view_strategy(user: User, whiteboard: Any) -> bool:

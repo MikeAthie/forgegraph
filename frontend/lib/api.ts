@@ -123,6 +123,13 @@ const API_PATHS = {
     versionDetail: (graphId: string, versionId: string) => `/api/graphs/${graphId}/versions/${versionId}`,
     memoryConfig: (graphId: string) => `/api/graphs/${graphId}/memory-config`,
   },
+  companies: {
+    listCreate: "/api/companies/",
+    detail: (companyId: string) => `/api/companies/${companyId}`,
+    operatingModelVersions: (companyId: string) => `/api/companies/${companyId}/operating-model-versions`,
+    latestOperatingModelVersion: (companyId: string) =>
+      `/api/companies/${companyId}/operating-model-versions/latest`,
+  },
   prompts: {
     listCreate: "/api/prompts/",
     detail: (promptId: string) => `/api/prompts/${promptId}`,
@@ -148,14 +155,20 @@ const API_PATHS = {
     thread: (threadId: string) => `/api/communication/threads/${threadId}`,
     messages: (threadId: string) => `/api/communication/threads/${threadId}/messages`,
     attachments: (messageId: string) => `/api/communication/messages/${messageId}/attachments`,
+    routeRequest: (messageId: string) => `/api/communication/messages/${messageId}/route-request`,
   },
   whiteboards: {
     list: "/api/whiteboards",
     detail: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}`,
+    board: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/board`,
+    boardCards: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/board/cards`,
+    boardCard: (whiteboardId: string, cardId: string) => `/api/whiteboards/${whiteboardId}/board/cards/${cardId}`,
+    boardCardEvidence: (whiteboardId: string, cardId: string) =>
+      `/api/whiteboards/${whiteboardId}/board/cards/${cardId}/evidence`,
+    readyForPlanning: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/ready-for-planning`,
     readyForStrategy: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/ready-for-strategy`,
     phase: (whiteboardId: string, phaseId: string) => `/api/whiteboards/${whiteboardId}/phases/${phaseId}`,
-    startPhase: (whiteboardId: string, phaseId: string) =>
-      `/api/whiteboards/${whiteboardId}/phases/${phaseId}/start`,
+    startPhase: (whiteboardId: string, phaseId: string) => `/api/whiteboards/${whiteboardId}/phases/${phaseId}/start`,
     synthesizePhase: (whiteboardId: string, phaseId: string) =>
       `/api/whiteboards/${whiteboardId}/phases/${phaseId}/synthesize`,
     evaluatePhase: (whiteboardId: string, phaseId: string) =>
@@ -168,6 +181,9 @@ const API_PATHS = {
     startPerformance: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/performance/start`,
     reportPerformance: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/performance/report`,
     evaluatePerformance: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/performance/evaluate`,
+    startPlanning: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/start-planning`,
+    planning: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/planning`,
+    synthesizePlanning: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/planning/synthesize`,
     startStrategy: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/start-strategy`,
     strategy: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/strategy`,
     synthesizeStrategy: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/strategy/synthesize`,
@@ -299,6 +315,7 @@ const API_PATHS = {
     list: "/api/approvals/",
     count: "/api/approvals/count",
     detail: (approvalId: string) => `/api/approvals/${approvalId}`,
+    resolve: (approvalId: string) => `/api/approvals/${approvalId}/resolve`,
   },
   archive: {
     assets: "/api/archive/assets",
@@ -683,6 +700,7 @@ export const authApi = {
 
 export interface GraphListItem {
   id: string;
+  semantic_aliases?: Record<string, string>;
   organization_id?: string | null;
   name: string;
   description: string;
@@ -954,6 +972,7 @@ export type SreReadinessSummary = {
 
 export interface GraphDetail {
   id: string;
+  semantic_aliases?: Record<string, string>;
   owner_id: string;
   organization_id?: string | null;
   name: string;
@@ -994,6 +1013,44 @@ export type GraphCreateInput = {
 export type GraphUpdateInput = {
   name?: string;
   description?: string;
+};
+
+export interface CompanyDTO {
+  id: string;
+  company_id: string;
+  workflow_definition_id: string;
+  storage_model: "Graph" | string;
+  organization_id?: string | null;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  setup_version_count: number;
+  latest_setup_version: number | null;
+}
+
+export interface CompanyOperatingModelVersionDTO {
+  id: string;
+  company_id: string;
+  workflow_definition_id: string;
+  version: number;
+  model_json: GraphJson;
+  checksum: string;
+  created_at: string;
+}
+
+export type CompanyCreateInput = {
+  name: string;
+  description?: string;
+};
+
+export type CompanyUpdateInput = {
+  name?: string;
+  description?: string;
+};
+
+export type CompanyOperatingModelVersionCreateInput = {
+  model_json: GraphJson;
 };
 
 export const graphsApi = {
@@ -1059,6 +1116,53 @@ export const graphsApi = {
   updateMemoryConfig: async (graphId: string, input: Partial<MemoryConfig>): Promise<MemoryConfig> => {
     const response = await api.patch<ApiSuccessResponse<MemoryConfig>>(API_PATHS.graphs.memoryConfig(graphId), input);
     return response.data.data;
+  },
+};
+
+export const companiesApi = {
+  list: async (): Promise<CompanyDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<CompanyDTO[]>>(API_PATHS.companies.listCreate);
+    return response.data.data;
+  },
+
+  create: async (input: CompanyCreateInput): Promise<CompanyDTO> => {
+    const response = await api.post<ApiSuccessResponse<CompanyDTO>>(API_PATHS.companies.listCreate, input);
+    return response.data.data;
+  },
+
+  get: async (companyId: string): Promise<CompanyDTO> => {
+    const response = await api.get<ApiSuccessResponse<CompanyDTO>>(API_PATHS.companies.detail(companyId));
+    return response.data.data;
+  },
+
+  update: async (companyId: string, input: CompanyUpdateInput): Promise<CompanyDTO> => {
+    const response = await api.patch<ApiSuccessResponse<CompanyDTO>>(API_PATHS.companies.detail(companyId), input);
+    return response.data.data;
+  },
+
+  createOperatingModelVersion: async (
+    companyId: string,
+    input: CompanyOperatingModelVersionCreateInput,
+  ): Promise<CompanyOperatingModelVersionDTO> => {
+    const response = await api.post<ApiSuccessResponse<CompanyOperatingModelVersionDTO>>(
+      API_PATHS.companies.operatingModelVersions(companyId),
+      input,
+    );
+    return response.data.data;
+  },
+
+  getLatestOperatingModelVersion: async (companyId: string): Promise<CompanyOperatingModelVersionDTO | null> => {
+    try {
+      const response = await api.get<ApiSuccessResponse<CompanyOperatingModelVersionDTO>>(
+        API_PATHS.companies.latestOperatingModelVersion(companyId),
+      );
+      return response.data.data;
+    } catch (error) {
+      if ((error as AxiosError)?.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
   },
 };
 
@@ -1349,6 +1453,13 @@ export type CompanySignal = {
   fulfillment_id: string | null;
   operation_id: string | null;
   signal_type: string;
+  signal_kind: string;
+  domain_context: string;
+  semantic_aliases?: {
+    signal_type: string;
+    signal_kind: string;
+    domain_context: string;
+  };
   status: string;
   source: string;
   external_key: string;
@@ -1508,6 +1619,13 @@ export type CompanyOpsOperation = {
   graph_version_id: string;
   status: string;
   operation_type: string;
+  operation_family: string;
+  domain_context: string;
+  semantic_aliases?: {
+    operation_type: string;
+    operation_family: string;
+    domain_context: string;
+  };
   operation_brief: string;
   context_pack_id: string;
   objective_contract_id: string | null;
@@ -1522,6 +1640,13 @@ export type CompanyOperationObjective = {
   operation_id: string;
   source_signal_id: string | null;
   run_type: string;
+  operation_family: string;
+  domain_context: string;
+  semantic_aliases?: {
+    operation_type: string;
+    operation_family: string;
+    domain_context: string;
+  };
   status: string;
   run_goal: string;
   hypothesis: string;
@@ -1556,6 +1681,8 @@ export type CompanyOpsOverview = {
   stock_state_summary?: StockStateSummary;
   recommended_operations: Array<{
     operation_type: string;
+    operation_family: string;
+    domain_context: string;
     label: string;
     reason: string;
   }>;
@@ -1747,6 +1874,8 @@ export const companyOpsApi = {
     input: {
       company_id: string;
       signal_type: string;
+      signal_kind?: string;
+      domain_context?: string;
       title: string;
       summary?: string;
       source?: string;
@@ -1823,6 +1952,8 @@ export const companyOpsApi = {
     input: {
       company_id: string;
       operation_type: string;
+      operation_family?: string;
+      domain_context?: string;
       source_signal_id?: string | null;
       context_note?: string;
       run_type?: string;
@@ -2854,11 +2985,24 @@ export interface ApprovalTask {
   payload?: {
     prompt_message?: string;
     required_fields?: string[];
+    [key: string]: unknown;
   };
   result?: Record<string, unknown> | null;
   created_at: string;
   resolved_at?: string | null;
+  resolution_mode?: "resume_run" | "direct" | string;
 }
+
+export type ApprovalResolveInput = {
+  approved?: boolean;
+  result?: Record<string, unknown>;
+  notes?: string;
+};
+
+export type ApprovalResolveResponse = {
+  approval: ApprovalTask;
+  duplicate?: boolean;
+};
 
 export interface AgentRegistryEntry {
   id: string;
@@ -2942,7 +3086,16 @@ export interface TaskRoutingRecordDTO {
   to_department_name: string;
   assigned_user_id: string | null;
   reason: string;
-  status: "queued" | "claimed" | "in_progress" | "blocked" | "completed" | "cancelled" | string;
+  status:
+    | "queued"
+    | "assigned"
+    | "claimed"
+    | "in_progress"
+    | "blocked"
+    | "ready_for_review"
+    | "completed"
+    | "cancelled"
+    | string;
   due_at: string | null;
   sla_breached_at: string | null;
   resolution: Record<string, unknown>;
@@ -3732,6 +3885,19 @@ export const approvalsApi = {
     const response = await api.get<ApiSuccessResponse<ApprovalTask>>(API_PATHS.approvals.detail(approvalId));
     return response.data.data;
   },
+
+  resolve: async (
+    approvalId: string,
+    input: ApprovalResolveInput,
+    options?: IdempotencyOptions,
+  ): Promise<ApprovalResolveResponse> => {
+    const response = await api.post<ApiSuccessResponse<ApprovalResolveResponse>>(
+      API_PATHS.approvals.resolve(approvalId),
+      input,
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
 };
 
 export const workflowsApi = {
@@ -3828,10 +3994,9 @@ export const routingApi = {
     company_id?: string;
     active?: boolean;
   }): Promise<RoutingPolicyDTO[]> => {
-    const response = await api.get<ApiSuccessResponse<{ policies: RoutingPolicyDTO[] }>>(
-      API_PATHS.routing.policies,
-      { params },
-    );
+    const response = await api.get<ApiSuccessResponse<{ policies: RoutingPolicyDTO[] }>>(API_PATHS.routing.policies, {
+      params,
+    });
     return response.data.data.policies;
   },
 };
@@ -5076,8 +5241,21 @@ export type CommunicationMessageDTO = {
   redacted_at: string | null;
   metadata: Record<string, unknown>;
   attachments: CommunicationAttachmentDTO[];
+  routed_whiteboard_id?: string | null;
+  routed_classification?: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CommunicationRouteRequestResponse = {
+  classification: {
+    id: string;
+    classification: string;
+    confidence: number;
+    rationale?: string;
+  };
+  whiteboard: WorkWhiteboardDTO;
+  routing_record_ids: string[];
 };
 
 export type CommunicationThreadInput = {
@@ -5189,12 +5367,20 @@ export type WorkWhiteboardStrategyGateDTO = {
 
 export type WorkWhiteboardStrategyDTO = {
   status: string;
+  work_status?: string;
   workstreams: WorkWhiteboardStrategyWorkstreamDTO[];
   all_workstreams_completed: boolean;
   synthesis: { asset_id: string; asset_version_id: string; created_at: string } | null;
   gate: WorkWhiteboardStrategyGateDTO | null;
   content_unblocked: boolean;
   content_routing_record_id: string | null;
+  planning_complete?: boolean;
+  next_routing_record_id?: string | null;
+};
+
+export type WorkWhiteboardPlanningDTO = WorkWhiteboardStrategyDTO & {
+  planning_complete: boolean;
+  next_routing_record_id: string | null;
 };
 
 export type WorkWhiteboardDeploymentChannelDTO = {
@@ -5290,20 +5476,27 @@ export type WorkWhiteboardDTO = {
   service_engagement_id: string | null;
   communication_thread_id: string | null;
   source_message_id: string | null;
+  work_status: string;
   status: string;
   request_type: string;
+  project_name: string;
   client_name: string;
   request_summary: string;
   objective: string;
   budget_limit: string;
   timeline: string;
   constraints: Record<string, unknown>;
+  stakeholder_context: Record<string, unknown>;
+  resource_context: Record<string, unknown>;
+  delivery_context: Record<string, unknown>;
   target_audience: Record<string, unknown>;
   brand_context: Record<string, unknown>;
   product_context: Record<string, unknown>;
   channel_context: Record<string, unknown>;
   known_facts: Record<string, unknown>;
+  work_missing_fields: string[];
   missing_fields: string[];
+  semantic_aliases?: Record<string, unknown>;
   completion_score: number;
   redis_snapshot_key?: string;
   assumptions?: unknown[];
@@ -5312,21 +5505,184 @@ export type WorkWhiteboardDTO = {
   phase_contracts?: WorkWhiteboardPhaseContractDTO[];
   deployment_contract?: WorkWhiteboardDeploymentContractDTO | null;
   performance_contract?: WorkWhiteboardPerformanceContractDTO | null;
+  planning?: WorkWhiteboardPlanningDTO;
   strategy?: WorkWhiteboardStrategyDTO;
   can_update: boolean;
   created_at: string;
   updated_at: string;
 };
 
+export type WorkWhiteboardBoardLinksDTO = {
+  communication_message_id?: string;
+  run_id?: string;
+  task_lifecycle_id?: string;
+  approval_task_id?: string;
+  decision_record_id?: string;
+  company_signal_id?: string;
+  tool_execution_id?: string;
+  asset_id?: string;
+  asset_version_id?: string;
+  report_run_id?: string;
+  evaluation_run_id?: string;
+  metric_snapshot_id?: string;
+  [key: string]: string | undefined;
+};
+
+export type WorkWhiteboardBoardEvidenceDTO = {
+  evidence_type: string;
+  target_id?: string;
+  summary?: string;
+  metadata?: Record<string, unknown>;
+  attached_by_id?: string;
+  attached_at?: string;
+};
+
+export type WorkWhiteboardBoardReviewKindDTO = "department" | "human_approval" | "automated_gate";
+
+export type WorkWhiteboardBoardReviewDTO = {
+  kind: WorkWhiteboardBoardReviewKindDTO;
+  label: string;
+  satisfied: boolean;
+  department_id?: string;
+  department_slug?: string;
+  department_name?: string;
+  approval_task_id?: string;
+  approval_status?: string;
+  decision_record_id?: string;
+  evaluation_run_id?: string;
+  evaluation_status?: string;
+  scorecard_id?: string;
+};
+
+export type WorkWhiteboardBoardCardDTO = {
+  id: string;
+  routing_record_id: string;
+  title: string;
+  reason?: string;
+  department_id: string;
+  department_slug: string;
+  department_name: string;
+  assigned_user_id: string | null;
+  status: "queued" | "assigned" | "in_progress" | "blocked" | "ready_for_review" | "completed" | "cancelled" | string;
+  priority: "low" | "normal" | "high" | "urgent" | string;
+  due_at: string | null;
+  sla_state: "ok" | "due_soon" | "breached" | string;
+  blocker_reason?: string;
+  links: WorkWhiteboardBoardLinksDTO;
+  review_kind?: WorkWhiteboardBoardReviewKindDTO | null;
+  review?: WorkWhiteboardBoardReviewDTO | null;
+  customer_visible: boolean;
+  evidence?: WorkWhiteboardBoardEvidenceDTO[];
+  allowed_actions: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkWhiteboardBoardLaneDTO = {
+  department_id: string;
+  department_slug: string;
+  department_name: string;
+  cards: WorkWhiteboardBoardCardDTO[];
+};
+
+export type WorkWhiteboardBoardDepartmentDTO = {
+  department_id: string;
+  department_slug: string;
+  department_name: string;
+  department_type: string;
+  active: boolean;
+  is_routing_department: boolean;
+};
+
+export type WorkWhiteboardBoardProjectDTO = {
+  title: string;
+  project_name?: string;
+  request_classification?: Record<string, unknown> | null;
+  ultimate_goal: string;
+  context_summary: string;
+  constraints_summary: string;
+  work_status?: string;
+  status: string;
+  legacy_status?: string;
+  semantic_aliases?: Record<string, unknown>;
+  completion_score: number;
+  risk_blocker_summary: string;
+  service_engagement_id?: string | null;
+  communication_thread_id?: string | null;
+  source_message_id?: string | null;
+  updated_at: string;
+};
+
+export type WorkWhiteboardBoardSnapshotDTO = {
+  whiteboard_id: string;
+  company_id: string;
+  company_name: string;
+  organization_id: string;
+  organization_name: string;
+  project: WorkWhiteboardBoardProjectDTO;
+  departments: WorkWhiteboardBoardDepartmentDTO[];
+  lanes: WorkWhiteboardBoardLaneDTO[];
+  cards: WorkWhiteboardBoardCardDTO[];
+  allowed_actions: {
+    can_modify_structure: boolean;
+    can_update_assigned_cards: boolean;
+    can_view_internal: boolean;
+  };
+  event_version: "whiteboard_board_v1" | string;
+};
+
+export type WorkWhiteboardBoardCardCreateInput = {
+  department_id: string;
+  title: string;
+  reason?: string;
+  status?: string;
+  priority?: string;
+  due_at?: string | null;
+  assigned_user_id?: string | null;
+  customer_visible?: boolean;
+  links?: WorkWhiteboardBoardLinksDTO;
+  idempotency_key?: string;
+};
+
+export type WorkWhiteboardBoardCardPatchInput = {
+  status?: string;
+  department_id?: string;
+  assigned_user_id?: string | null;
+  priority?: string;
+  due_at?: string | null;
+  blocker_reason?: string;
+  title?: string;
+  customer_visible?: boolean;
+  expected_updated_at?: string;
+  idempotency_key?: string;
+};
+
+export type WorkWhiteboardBoardEvidenceInput = {
+  evidence_type?: string;
+  target_id?: string | null;
+  summary?: string;
+  metadata?: Record<string, unknown>;
+  idempotency_key?: string;
+};
+
+export type WorkWhiteboardBoardResponse = {
+  board: WorkWhiteboardBoardSnapshotDTO;
+};
+
 export type WorkWhiteboardPatchInput = {
+  work_status?: string;
   status?: string;
   request_type?: string;
+  project_name?: string;
   client_name?: string;
   request_summary?: string;
   objective?: string;
   budget_limit?: string;
   timeline?: string;
   constraints?: Record<string, unknown>;
+  stakeholder_context?: Record<string, unknown>;
+  resource_context?: Record<string, unknown>;
+  delivery_context?: Record<string, unknown>;
   target_audience?: Record<string, unknown>;
   brand_context?: Record<string, unknown>;
   product_context?: Record<string, unknown>;
@@ -5342,6 +5698,14 @@ export type WorkWhiteboardStrategySynthesisInput = {
 
 export type WorkWhiteboardStrategyResponse = {
   strategy: WorkWhiteboardStrategyDTO;
+  whiteboard?: WorkWhiteboardDTO;
+};
+
+export type WorkWhiteboardPlanningSynthesisInput = WorkWhiteboardStrategySynthesisInput;
+
+export type WorkWhiteboardPlanningResponse = {
+  planning: WorkWhiteboardPlanningDTO;
+  strategy?: WorkWhiteboardStrategyDTO;
   whiteboard?: WorkWhiteboardDTO;
 };
 
@@ -5547,6 +5911,14 @@ export const communicationApi = {
     );
     return response.data.data.message;
   },
+  routeRequest: async (messageId: string, options?: IdempotencyOptions): Promise<CommunicationRouteRequestResponse> => {
+    const response = await api.post<ApiSuccessResponse<CommunicationRouteRequestResponse>>(
+      API_PATHS.communication.routeRequest(messageId),
+      {},
+      idempotencyConfig(options),
+    );
+    return response.data.data;
+  },
 };
 
 export const whiteboardsApi = {
@@ -5567,6 +5939,51 @@ export const whiteboardsApi = {
     const response = await api.patch<ApiSuccessResponse<{ whiteboard: WorkWhiteboardDTO }>>(
       API_PATHS.whiteboards.detail(whiteboardId),
       input,
+    );
+    return response.data.data.whiteboard;
+  },
+  getBoard: async (whiteboardId: string): Promise<WorkWhiteboardBoardSnapshotDTO> => {
+    const response = await api.get<ApiSuccessResponse<WorkWhiteboardBoardResponse>>(
+      API_PATHS.whiteboards.board(whiteboardId),
+    );
+    return response.data.data.board;
+  },
+  createBoardCard: async (
+    whiteboardId: string,
+    input: WorkWhiteboardBoardCardCreateInput,
+  ): Promise<WorkWhiteboardBoardSnapshotDTO> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardBoardResponse>>(
+      API_PATHS.whiteboards.boardCards(whiteboardId),
+      input,
+    );
+    return response.data.data.board;
+  },
+  patchBoardCard: async (
+    whiteboardId: string,
+    cardId: string,
+    input: WorkWhiteboardBoardCardPatchInput,
+  ): Promise<WorkWhiteboardBoardSnapshotDTO> => {
+    const response = await api.patch<ApiSuccessResponse<WorkWhiteboardBoardResponse>>(
+      API_PATHS.whiteboards.boardCard(whiteboardId, cardId),
+      input,
+    );
+    return response.data.data.board;
+  },
+  attachBoardCardEvidence: async (
+    whiteboardId: string,
+    cardId: string,
+    input: WorkWhiteboardBoardEvidenceInput,
+  ): Promise<WorkWhiteboardBoardSnapshotDTO> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardBoardResponse>>(
+      API_PATHS.whiteboards.boardCardEvidence(whiteboardId, cardId),
+      input,
+    );
+    return response.data.data.board;
+  },
+  readyForPlanning: async (whiteboardId: string): Promise<WorkWhiteboardDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ whiteboard: WorkWhiteboardDTO }>>(
+      API_PATHS.whiteboards.readyForPlanning(whiteboardId),
+      {},
     );
     return response.data.data.whiteboard;
   },
@@ -5661,6 +6078,29 @@ export const whiteboardsApi = {
   ): Promise<WorkWhiteboardPerformanceResponse> => {
     const response = await api.post<ApiSuccessResponse<WorkWhiteboardPerformanceResponse>>(
       API_PATHS.whiteboards.evaluatePerformance(whiteboardId),
+      input,
+    );
+    return response.data.data;
+  },
+  startPlanning: async (whiteboardId: string): Promise<WorkWhiteboardPlanningResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPlanningResponse>>(
+      API_PATHS.whiteboards.startPlanning(whiteboardId),
+      {},
+    );
+    return response.data.data;
+  },
+  getPlanning: async (whiteboardId: string): Promise<WorkWhiteboardPlanningDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ planning: WorkWhiteboardPlanningDTO }>>(
+      API_PATHS.whiteboards.planning(whiteboardId),
+    );
+    return response.data.data.planning;
+  },
+  synthesizePlanning: async (
+    whiteboardId: string,
+    input: WorkWhiteboardPlanningSynthesisInput,
+  ): Promise<WorkWhiteboardPlanningResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPlanningResponse>>(
+      API_PATHS.whiteboards.synthesizePlanning(whiteboardId),
       input,
     );
     return response.data.data;

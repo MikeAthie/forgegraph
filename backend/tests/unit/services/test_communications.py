@@ -33,6 +33,7 @@ from infrastructure.orm.models import (
     ToolExecution,
     User,
 )
+from tests.helpers.organizations import required_company_organization
 
 pytestmark = pytest.mark.django_db
 
@@ -83,7 +84,7 @@ def _run_for_company(user: User, company: Graph) -> Run:
     )
     return Run.objects.create(
         owner=user,
-        organization=company.organization,
+        organization=required_company_organization(company),
         graph_version=version,
         status="running",
         started_at=timezone.now(),
@@ -92,7 +93,7 @@ def _run_for_company(user: User, company: Graph) -> Run:
 
 def _agent_for_company(company: Graph, slug: str) -> AgentRegistryEntry:
     return AgentRegistryEntry.objects.create(
-        organization=company.organization,
+        organization=required_company_organization(company),
         slug=slug,
         display_name=f"{slug} agent",
         source_workflow=company,
@@ -193,10 +194,12 @@ def test_message_visibility_filters_customer_operator_and_other_client() -> None
     )
 
     customer_payloads = [
-        message_payload(message, user=customer) for message in thread.messages.order_by("created_at")
+        message_payload(message, user=customer)
+        for message in thread.messages.order_by("created_at")
     ]
     operator_payloads = [
-        message_payload(message, user=operator) for message in thread.messages.order_by("created_at")
+        message_payload(message, user=operator)
+        for message in thread.messages.order_by("created_at")
     ]
     visible_to_customer = [item for item in customer_payloads if item["visibility"] == "customer"]
 
@@ -386,9 +389,7 @@ def test_communication_outbox_rolls_back_with_message_transaction() -> None:
     assert not DomainEvent.objects.filter(
         idempotency_key=f"communication-message:{message_id}:created",
     ).exists()
-    assert not DomainEventOutbox.objects.filter(
-        payload_json__message_id=str(message_id)
-    ).exists()
+    assert not DomainEventOutbox.objects.filter(payload_json__message_id=str(message_id)).exists()
 
 
 def test_redact_message_preserves_row_and_hides_body() -> None:

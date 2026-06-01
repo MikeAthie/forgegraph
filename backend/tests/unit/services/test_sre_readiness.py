@@ -192,6 +192,10 @@ def test_sre_read_model_uses_backend_owned_slo_sources(db, user):
     assert objectives["approval_to_resume_p95"]["actual"] is not None
     assert objectives["task_projection_lag_p95"]["actual"] is not None
     assert objectives["silent_task_loss"]["actual"] == 0
+    assert panels["communication_kafka_outbox_backlog"]["value"] == 0
+    assert panels["communication_kafka_consumer_failures"]["value"] == 0
     assert panels["llm_queue_depth"]["value"] == 3
     assert panels["dead_letter_count"]["value"] >= 1
+    assert alerts["communication_kafka_backlog_growing"]["state"] == "ok"
+    assert alerts["communication_kafka_consumer_failures"]["state"] == "ok"
     assert alerts["dead_letter_spike"]["state"] == "active"

@@ -168,7 +168,8 @@ class CommunicationThread(models.Model):
     def clean(self) -> None:
         super().clean()
         errors: dict[str, str] = {}
-        if self.company_id and self.company.organization_id != self.organization_id:
+        company = self.company if self.company_id else None
+        if company is not None and company.organization_id != self.organization_id:
             errors["company"] = "Thread company must belong to the thread organization."
         for field_name in (
             "service_engagement",
@@ -436,7 +437,9 @@ class CommunicationAttachment(models.Model):
     def clean(self) -> None:
         super().clean()
         target_fields = _attachment_target_fields()
-        populated = [field_name for field_name in target_fields if getattr(self, f"{field_name}_id")]
+        populated = [
+            field_name for field_name in target_fields if getattr(self, f"{field_name}_id")
+        ]
         if len(populated) != 1:
             raise ValidationError("Communication attachments require exactly one linked object.")
         if not self.message_id:
@@ -445,7 +448,9 @@ class CommunicationAttachment(models.Model):
         linked = getattr(self, field_name)
         organization_id, company_id = _scope_for_object(linked)
         if organization_id and organization_id != self.message.organization_id:
-            raise ValidationError({field_name: "Attachment target belongs to a different organization."})
+            raise ValidationError(
+                {field_name: "Attachment target belongs to a different organization."}
+            )
         if self.message.company_id and company_id and company_id != self.message.company_id:
             raise ValidationError({field_name: "Attachment target belongs to a different company."})
 
@@ -557,20 +562,43 @@ def _scope_for_object(value: object) -> tuple[uuid.UUID | None, uuid.UUID | None
     if isinstance(value, AssetVersion):
         return value.asset.organization_id, value.asset.company_id
     if isinstance(value, ApprovalTask):
-        return _scope_for_run(value.run)
+        return _scope_for_approval_task(value)
     if isinstance(value, DecisionRecord):
-        if value.execution_id:
-            return _scope_for_run(value.execution)
-        if value.source_approval_task_id:
-            return _scope_for_run(value.source_approval_task.run)
-        if value.task_id and value.task.execution_id:
-            return _scope_for_run(value.task.execution)
-        return value.organization_id, None
+        return _scope_for_decision_record(value)
     if isinstance(value, ToolExecution):
         return _scope_for_run(value.run)
     if isinstance(value, Run):
         return _scope_for_run(value)
     return organization_id, company_id
+
+
+def _scope_for_approval_task(
+    approval_task: ApprovalTask,
+) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+    if approval_task.run is None:
+        return approval_task.organization_id, None
+    return _scope_for_run(approval_task.run)
+
+
+def _scope_for_decision_record(
+    decision: DecisionRecord,
+) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+    if decision.execution_id and decision.execution is not None:
+        return _scope_for_run(decision.execution)
+    if (
+        decision.source_approval_task_id
+        and decision.source_approval_task is not None
+        and decision.source_approval_task.run is not None
+    ):
+        return _scope_for_run(decision.source_approval_task.run)
+    if (
+        decision.task_id
+        and decision.task is not None
+        and decision.task.execution_id
+        and decision.task.execution is not None
+    ):
+        return _scope_for_run(decision.task.execution)
+    return decision.organization_id, None
 
 
 def _scope_for_run(run: Run) -> tuple[uuid.UUID | None, uuid.UUID | None]:

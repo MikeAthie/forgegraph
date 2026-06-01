@@ -34,6 +34,7 @@ urlpatterns = [
     path("", include("adapters.api.communications.urls")),
     path("", include("adapters.api.whiteboards.urls")),
     path("archive/", include("adapters.api.archive.urls")),
+    path("companies/", include("adapters.api.companies.urls")),
     path("", include("adapters.api.operating_models.urls")),
     path("", include("adapters.api.company_blueprints.urls")),
     path("company-ops/", include("adapters.api.company_ops.urls")),

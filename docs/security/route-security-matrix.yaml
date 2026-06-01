@@ -374,6 +374,32 @@ routes:
     oversized_request: skip
   rate_limit_scope: default
   request_size_limit: api_default
+- id: approvals-resolve
+  names:
+  - approval-resolve
+  paths:
+  - /api/approvals/<uuid:approval_id>/resolve
+  - /api/v1/approvals/<uuid:approval_id>/resolve
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected:
+    unauthenticated: 401
+    expired_token: 401
+    revoked_token: 401
+    wrong_org: 403_or_404
+    insufficient_role: 403_or_404
+    correct_role: 2xx_or_domain_error
+    malformed_payload: 400_or_domain_error
+    rate_limited: 429
+    oversized_request: 413_or_400
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: approval.resolved
 - id: approvals-count
   names:
   - approval-count
@@ -5438,6 +5464,23 @@ routes:
   rate_limit_scope: default
   request_size_limit: api_default
   sensitive_audit_action: communication.attachment.created
+- id: communication-message-route-request
+  names:
+  - communication-message-route-request
+  paths:
+  - /api/communication/messages/<uuid:message_id>/route-request
+  - /api/v1/communication/messages/<uuid:message_id>/route-request
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: request_classification.created
 - id: whiteboards-read
   names:
   - whiteboard-list
@@ -5487,6 +5530,73 @@ routes:
   rate_limit_scope: default
   request_size_limit: api_default
   sensitive_audit_action: work_whiteboard.updated
+- id: whiteboard-board
+  names:
+  - whiteboard-board
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/board
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/board
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: viewer
+  org_scope: tenant
+  company_scope: required
+  company_role: viewer
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: whiteboard-board-card-create
+  names:
+  - whiteboard-board-card-list
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/board/cards
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/board/cards
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: whiteboard_board.card_created
+- id: whiteboard-board-card-update
+  names:
+  - whiteboard-board-card-detail
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/board/cards/<uuid:card_id>
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/board/cards/<uuid:card_id>
+  methods:
+  - PATCH
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: whiteboard_board.card_updated
+- id: whiteboard-board-card-evidence
+  names:
+  - whiteboard-board-card-evidence
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/board/cards/<uuid:card_id>/evidence
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/board/cards/<uuid:card_id>/evidence
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: whiteboard_board.evidence_attached
 - id: whiteboard-deployment-detail
   names:
   - whiteboard-deployment-detail
@@ -5621,6 +5731,23 @@ routes:
   rate_limit_scope: default
   request_size_limit: api_default
   sensitive_audit_action: work_whiteboard.ready_for_strategy
+- id: whiteboard-ready-for-planning
+  names:
+  - whiteboard-ready-for-planning
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/ready-for-planning
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/ready-for-planning
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: work_whiteboard.ready_for_planning
 - id: whiteboard-phase-detail
   names:
   - whiteboard-phase-detail
@@ -5671,6 +5798,23 @@ routes:
   rate_limit_scope: default
   request_size_limit: api_default
   sensitive_audit_action: work_whiteboard.phase_synthesized
+- id: whiteboard-phase-workstream-complete
+  names:
+  - whiteboard-phase-workstream-complete
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>/workstreams/<str:workstream_id>/complete
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>/workstreams/<str:workstream_id>/complete
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: work_whiteboard.phase_workstream_completed
 - id: whiteboard-phase-evaluate
   names:
   - whiteboard-phase-evaluate
@@ -5705,12 +5849,45 @@ routes:
   rate_limit_scope: default
   request_size_limit: api_default
   sensitive_audit_action: work_whiteboard.strategy_started
+- id: whiteboard-start-planning
+  names:
+  - whiteboard-start-planning
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/start-planning
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/start-planning
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: work_whiteboard.planning_started
 - id: whiteboard-strategy-detail
   names:
   - whiteboard-strategy-detail
   paths:
   - /api/whiteboards/<uuid:whiteboard_id>/strategy
   - /api/v1/whiteboards/<uuid:whiteboard_id>/strategy
+  methods:
+  - GET
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_read_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+- id: whiteboard-planning-detail
+  names:
+  - whiteboard-planning-detail
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/planning
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/planning
   methods:
   - GET
   auth_surface: jwt
@@ -5738,6 +5915,23 @@ routes:
   rate_limit_scope: default
   request_size_limit: api_default
   sensitive_audit_action: work_whiteboard.strategy_synthesized
+- id: whiteboard-planning-synthesize
+  names:
+  - whiteboard-planning-synthesize
+  paths:
+  - /api/whiteboards/<uuid:whiteboard_id>/planning/synthesize
+  - /api/v1/whiteboards/<uuid:whiteboard_id>/planning/synthesize
+  methods:
+  - POST
+  auth_surface: jwt
+  required_role: member
+  org_scope: tenant
+  company_scope: required
+  company_role: member
+  expected: *company_ops_jwt_write_expected
+  rate_limit_scope: default
+  request_size_limit: api_default
+  sensitive_audit_action: work_whiteboard.planning_synthesized
 - id: operating-model-packs-pack-id
   names:
   - operating-model-pack-detail

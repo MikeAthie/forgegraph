@@ -3,6 +3,10 @@
 from django.urls import path
 
 from adapters.api.whiteboards.views import (
+    WhiteboardBoardCardEvidenceView,
+    WhiteboardBoardCardsView,
+    WhiteboardBoardCardView,
+    WhiteboardBoardView,
     WhiteboardDeploymentChannelExecuteView,
     WhiteboardDeploymentDetailView,
     WhiteboardDeploymentPrepareView,
@@ -16,6 +20,11 @@ from adapters.api.whiteboards.views import (
     WhiteboardPhaseEvaluateView,
     WhiteboardPhaseStartView,
     WhiteboardPhaseSynthesizeView,
+    WhiteboardPhaseWorkstreamCompleteView,
+    WhiteboardPlanningDetailView,
+    WhiteboardPlanningStartView,
+    WhiteboardPlanningSynthesizeView,
+    WhiteboardReadyForPlanningView,
     WhiteboardReadyForStrategyView,
     WhiteboardStrategyDetailView,
     WhiteboardStrategyStartView,
@@ -24,7 +33,29 @@ from adapters.api.whiteboards.views import (
 
 urlpatterns = [
     path("whiteboards", WhiteboardListView.as_view(), name="whiteboard-list"),
-    path("whiteboards/<uuid:whiteboard_id>", WhiteboardDetailView.as_view(), name="whiteboard-detail"),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/board",
+        WhiteboardBoardView.as_view(),
+        name="whiteboard-board",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/board/cards",
+        WhiteboardBoardCardsView.as_view(),
+        name="whiteboard-board-card-list",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/board/cards/<uuid:card_id>",
+        WhiteboardBoardCardView.as_view(),
+        name="whiteboard-board-card-detail",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/board/cards/<uuid:card_id>/evidence",
+        WhiteboardBoardCardEvidenceView.as_view(),
+        name="whiteboard-board-card-evidence",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>", WhiteboardDetailView.as_view(), name="whiteboard-detail"
+    ),
     path(
         "whiteboards/<uuid:whiteboard_id>/deployment",
         WhiteboardDeploymentDetailView.as_view(),
@@ -66,6 +97,11 @@ urlpatterns = [
         name="whiteboard-ready-for-strategy",
     ),
     path(
+        "whiteboards/<uuid:whiteboard_id>/ready-for-planning",
+        WhiteboardReadyForPlanningView.as_view(),
+        name="whiteboard-ready-for-planning",
+    ),
+    path(
         "whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>/start",
         WhiteboardPhaseStartView.as_view(),
         name="whiteboard-phase-start",
@@ -81,6 +117,11 @@ urlpatterns = [
         name="whiteboard-phase-synthesize",
     ),
     path(
+        "whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>/workstreams/<str:workstream_id>/complete",
+        WhiteboardPhaseWorkstreamCompleteView.as_view(),
+        name="whiteboard-phase-workstream-complete",
+    ),
+    path(
         "whiteboards/<uuid:whiteboard_id>/phases/<str:phase_id>/evaluate",
         WhiteboardPhaseEvaluateView.as_view(),
         name="whiteboard-phase-evaluate",
@@ -91,13 +132,28 @@ urlpatterns = [
         name="whiteboard-start-strategy",
     ),
     path(
+        "whiteboards/<uuid:whiteboard_id>/start-planning",
+        WhiteboardPlanningStartView.as_view(),
+        name="whiteboard-start-planning",
+    ),
+    path(
         "whiteboards/<uuid:whiteboard_id>/strategy",
         WhiteboardStrategyDetailView.as_view(),
         name="whiteboard-strategy-detail",
     ),
     path(
+        "whiteboards/<uuid:whiteboard_id>/planning",
+        WhiteboardPlanningDetailView.as_view(),
+        name="whiteboard-planning-detail",
+    ),
+    path(
         "whiteboards/<uuid:whiteboard_id>/strategy/synthesize",
         WhiteboardStrategySynthesizeView.as_view(),
         name="whiteboard-strategy-synthesize",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/planning/synthesize",
+        WhiteboardPlanningSynthesizeView.as_view(),
+        name="whiteboard-planning-synthesize",
     ),
 ]

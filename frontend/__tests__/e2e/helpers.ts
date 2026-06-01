@@ -48,6 +48,18 @@ export type GraphVersionResponse = {
   };
 };
 
+export type CompanyOperatingModelVersionResponse = {
+  data: {
+    id: string;
+    company_id: string;
+    workflow_definition_id: string;
+    version: number;
+    model_json: GraphVersionResponse["data"]["graph_json"];
+    checksum: string;
+    created_at: string;
+  };
+};
+
 export type RunDetailResponse = {
   status: string;
   error_message?: string | null;
@@ -430,6 +442,62 @@ export async function createCompanyViaApi(
   };
 }
 
+export async function createCompanyViaCompanyApi(
+  request: APIRequestContext,
+  accessToken: string,
+  options: CompanySeedOptions,
+): Promise<CompanySeedResult> {
+  const profile = buildCompanyProfile({
+    companyName: options.name,
+    companyType: options.companyType ?? "General Company",
+    objective: options.objective,
+    autonomyMode: options.autonomyMode ?? "assisted",
+    aiAccessMode: options.aiAccessMode ?? "managed",
+  });
+
+  const companyResponse = await request.post(`${API_BASE_URL}/api/companies/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      name: profile.companyName,
+      description: profile.objective,
+    },
+  });
+  expect(companyResponse.ok()).toBeTruthy();
+  const companyBody = (await companyResponse.json()) as { data: { company_id: string; id: string } };
+  const companyId = companyBody.data.company_id ?? companyBody.data.id;
+
+  const versionResponse = await request.post(`${API_BASE_URL}/api/companies/${companyId}/operating-model-versions`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: {
+      model_json: buildCompanyGraphJson(profile),
+    },
+  });
+  expect(versionResponse.ok()).toBeTruthy();
+  const versionBody = (await versionResponse.json()) as CompanyOperatingModelVersionResponse;
+
+  return {
+    companyId,
+    versionId: versionBody.data.id,
+  };
+}
+
+export async function fetchLatestCompanyOperatingModelVersion(
+  request: APIRequestContext,
+  accessToken: string,
+  companyId: string,
+): Promise<GraphVersionResponse["data"]> {
+  const response = await request.get(`${API_BASE_URL}/api/companies/${companyId}/operating-model-versions/latest`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as CompanyOperatingModelVersionResponse;
+  return {
+    id: body.data.id,
+    version: body.data.version,
+    graph_json: body.data.model_json,
+  };
+}
+
 export async function createHumanGateRunViaApi(
   request: APIRequestContext,
   accessToken: string,
@@ -684,7 +752,8 @@ export async function addObservationContextNode(
     () => expect(dialog).toBeVisible(),
     () => (label !== "Observation Context" ? dialog.locator("#node-label").fill(label) : Promise.resolve()),
     () => (options?.query ? dialog.locator("#query-value").fill(options.query) : Promise.resolve()),
-    () => (options?.limit ? dialog.locator("#observation-context-limit").fill(String(options.limit)) : Promise.resolve()),
+    () =>
+      options?.limit ? dialog.locator("#observation-context-limit").fill(String(options.limit)) : Promise.resolve(),
     () => dialog.getByRole("button", { name: /^add node$/i }).click(),
     () => expect(dialog).toBeHidden(),
     () => expect(getGraphNodeByLabel(page, label)).toBeVisible(),

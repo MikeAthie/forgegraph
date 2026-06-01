@@ -111,7 +111,12 @@ function HttpTestPanel({
           <p className="text-sm font-medium">Run test</p>
           <p className="text-xs text-muted-foreground">{providerHint}</p>
           {providerDocsUrl ? (
-            <a href={providerDocsUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline underline-offset-2">
+            <a
+              href={providerDocsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs underline underline-offset-2"
+            >
               Provider docs
             </a>
           ) : null}
@@ -199,7 +204,11 @@ function HttpCredentialSection({
           </select>
         </FormField>
 
-        <FormField label="Credential" htmlFor="credential-id" description="Optional stored secret for this integration.">
+        <FormField
+          label="Credential"
+          htmlFor="credential-id"
+          description="Optional stored secret for this integration."
+        >
           <select
             id="credential-id"
             value={selectedCredential?.id || ""}
@@ -225,7 +234,10 @@ function HttpCredentialSection({
           {!credentialsLoading && !credentialsError && filteredCredentials.length === 0 ? (
             <div className="mt-2 text-xs text-muted-foreground">
               No credentials found for this provider. Add one in the Credentials page.{" "}
-              <Link href={`/credentials?provider=${encodeURIComponent(provider)}`} className="underline underline-offset-2">
+              <Link
+                href={`/credentials?provider=${encodeURIComponent(provider)}`}
+                className="underline underline-offset-2"
+              >
                 Open credentials
               </Link>
             </div>

@@ -83,6 +83,41 @@ def _graph_for_user(graph_id: UUID, user: User, *, minimum_role: str = "viewer")
     )
 
 
+def _graph_semantic_aliases(graph: Graph) -> dict[str, str]:
+    return {
+        "storage_model": "Graph",
+        "company_scope_id": str(graph.id),
+        "workflow_definition_id": str(graph.id),
+        "workflow_definition_storage_note": "GraphVersion rows hold executable revisions.",
+    }
+
+
+def _company_scoped_relation_names(graph: Graph) -> list[str]:
+    workflow_definition_relations = {"versions", "memory_config"}
+    relation_names: list[str] = []
+    for relation in graph._meta.related_objects:
+        accessor_name = relation.get_accessor_name()
+        if not accessor_name or accessor_name in workflow_definition_relations:
+            continue
+        try:
+            related = getattr(graph, accessor_name)
+        except Exception:
+            continue
+        if hasattr(related, "exists"):
+            try:
+                if related.exists():
+                    relation_names.append(accessor_name)
+            except Exception:
+                continue
+            continue
+        try:
+            if related is not None:
+                relation_names.append(accessor_name)
+        except Exception:
+            continue
+    return sorted(set(relation_names))
+
+
 def _external_workflow_response_payload(
     *,
     graph: Graph,
@@ -142,6 +177,7 @@ class GraphListCreateView(APIView):
             result.append(
                 {
                     "id": graph.id,
+                    "semantic_aliases": _graph_semantic_aliases(graph),
                     "organization_id": graph.organization_id,
                     "name": graph.name,
                     "description": graph.description,
@@ -188,6 +224,7 @@ class GraphListCreateView(APIView):
         graph_data = GraphListSerializer(
             {
                 "id": graph.id,
+                "semantic_aliases": _graph_semantic_aliases(graph),
                 "organization_id": graph.organization_id,
                 "name": graph.name,
                 "description": graph.description,
@@ -227,6 +264,7 @@ class GraphDetailView(APIView):
         graph_data = GraphDetailSerializer(
             {
                 "id": graph.id,
+                "semantic_aliases": _graph_semantic_aliases(graph),
                 "owner_id": graph.owner_id,
                 "organization_id": graph.organization_id,
                 "name": graph.name,
@@ -273,6 +311,7 @@ class GraphDetailView(APIView):
         graph_data = GraphListSerializer(
             {
                 "id": graph.id,
+                "semantic_aliases": _graph_semantic_aliases(graph),
                 "organization_id": graph.organization_id,
                 "name": graph.name,
                 "description": graph.description,
@@ -286,7 +325,7 @@ class GraphDetailView(APIView):
         return success_response(graph_data)
 
     def delete(self, request: Request, graph_id: UUID) -> Response:
-        """Delete graph and all versions."""
+        """Delete workflow-definition storage only when no company state exists."""
         user = cast(User, request.user)
         graph = _graph_for_user(graph_id, user, minimum_role="member")
         if not graph:
@@ -294,6 +333,25 @@ class GraphDetailView(APIView):
                 code="NOT_FOUND",
                 message=f"Graph with id '{graph_id}' not found or you do not have access to it",
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        company_relations = _company_scoped_relation_names(graph)
+        if company_relations:
+            return error_response(
+                code="GRAPH_DELETE_BLOCKED_BY_COMPANY_SCOPE",
+                message=(
+                    "This Graph row is also the transitional company scope for durable "
+                    "company data. Delete or archive company-scoped resources through an "
+                    "explicit company lifecycle path before deleting workflow storage."
+                ),
+                status=status.HTTP_409_CONFLICT,
+                details=[
+                    {
+                        "field": "graph_id",
+                        "issue": "Graph has company-scoped related resources.",
+                        "related_resources": company_relations[:25],
+                    }
+                ],
             )
 
         graph.delete()

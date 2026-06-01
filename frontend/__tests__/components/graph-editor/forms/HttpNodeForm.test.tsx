@@ -133,7 +133,12 @@ describe("HttpNodeForm", () => {
       };
 
       return (
-        <HttpNodeForm config={config} onChange={recordConfigChange} errors={options.errors ?? {}} setErrors={mockSetErrors} />
+        <HttpNodeForm
+          config={config}
+          onChange={recordConfigChange}
+          errors={options.errors ?? {}}
+          setErrors={mockSetErrors}
+        />
       );
     };
 

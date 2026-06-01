@@ -260,19 +260,52 @@ function useAdminOperationsController() {
     },
     [],
   );
-  const setData = useCallback((value: SetStateAction<OperationsData | null>) => setPageField("data", value), [setPageField]);
+  const setData = useCallback(
+    (value: SetStateAction<OperationsData | null>) => setPageField("data", value),
+    [setPageField],
+  );
   const setLoading = useCallback((value: SetStateAction<boolean>) => setPageField("loading", value), [setPageField]);
   const setError = useCallback((value: SetStateAction<string | null>) => setPageField("error", value), [setPageField]);
-  const setCleanupPreview = useCallback((value: SetStateAction<RetentionCleanupPreview | null>) => setPageField("cleanupPreview", value), [setPageField]);
-  const setPreviewLoading = useCallback((value: SetStateAction<boolean>) => setPageField("previewLoading", value), [setPageField]);
-  const setExportingKey = useCallback((value: SetStateAction<string | null>) => setPageField("exportingKey", value), [setPageField]);
-  const setRecoveryData = useCallback((value: SetStateAction<RecoveryData | null>) => setPageField("recoveryData", value), [setPageField]);
-  const setRecoveryLoading = useCallback((value: SetStateAction<boolean>) => setPageField("recoveryLoading", value), [setPageField]);
-  const setOperatorError = useCallback((value: SetStateAction<string | null>) => setPageField("operatorError", value), [setPageField]);
-  const setRunLookupId = useCallback((value: SetStateAction<string>) => setPageField("runLookupId", value), [setPageField]);
-  const setInspectedRun = useCallback((value: SetStateAction<OperatorRunState | null>) => setPageField("inspectedRun", value), [setPageField]);
-  const setOperatorReason = useCallback((value: SetStateAction<string>) => setPageField("operatorReason", value), [setPageField]);
-  const setOperatorAction = useCallback((value: SetStateAction<string | null>) => setPageField("operatorAction", value), [setPageField]);
+  const setCleanupPreview = useCallback(
+    (value: SetStateAction<RetentionCleanupPreview | null>) => setPageField("cleanupPreview", value),
+    [setPageField],
+  );
+  const setPreviewLoading = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("previewLoading", value),
+    [setPageField],
+  );
+  const setExportingKey = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("exportingKey", value),
+    [setPageField],
+  );
+  const setRecoveryData = useCallback(
+    (value: SetStateAction<RecoveryData | null>) => setPageField("recoveryData", value),
+    [setPageField],
+  );
+  const setRecoveryLoading = useCallback(
+    (value: SetStateAction<boolean>) => setPageField("recoveryLoading", value),
+    [setPageField],
+  );
+  const setOperatorError = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("operatorError", value),
+    [setPageField],
+  );
+  const setRunLookupId = useCallback(
+    (value: SetStateAction<string>) => setPageField("runLookupId", value),
+    [setPageField],
+  );
+  const setInspectedRun = useCallback(
+    (value: SetStateAction<OperatorRunState | null>) => setPageField("inspectedRun", value),
+    [setPageField],
+  );
+  const setOperatorReason = useCallback(
+    (value: SetStateAction<string>) => setPageField("operatorReason", value),
+    [setPageField],
+  );
+  const setOperatorAction = useCallback(
+    (value: SetStateAction<string | null>) => setPageField("operatorAction", value),
+    [setPageField],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -340,20 +373,23 @@ function useAdminOperationsController() {
     }
   }, [setCleanupPreview, setError, setPreviewLoading]);
 
-  const handleExport = useCallback(async (action: ExportAction) => {
-    setExportingKey(action.key);
-    try {
-      const blob =
-        action.kind === "memory_report"
-          ? await analyticsApi.exportMemoryReport({ format: "json", period: "30d" })
-          : await retentionApi.exportData({ type: action.type!, limit: 250 });
-      downloadBlob(blob, `forgegraph-${action.key}-${new Date().toISOString().slice(0, 10)}.json`);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, `Failed to export ${action.label.toLowerCase()}.`));
-    } finally {
-      setExportingKey(null);
-    }
-  }, [setError, setExportingKey]);
+  const handleExport = useCallback(
+    async (action: ExportAction) => {
+      setExportingKey(action.key);
+      try {
+        const blob =
+          action.kind === "memory_report"
+            ? await analyticsApi.exportMemoryReport({ format: "json", period: "30d" })
+            : await retentionApi.exportData({ type: action.type!, limit: 250 });
+        downloadBlob(blob, `forgegraph-${action.key}-${new Date().toISOString().slice(0, 10)}.json`);
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, `Failed to export ${action.label.toLowerCase()}.`));
+      } finally {
+        setExportingKey(null);
+      }
+    },
+    [setError, setExportingKey],
+  );
 
   const handleInspectRun = useCallback(async () => {
     const runId = runLookupId.trim();
@@ -588,7 +624,9 @@ function AdminOperationsNoAccess() {
       <DashboardLayout>
         <div className="mx-auto max-w-3xl py-8">
           <Alert variant="destructive">
-            <AlertDescription>You do not have access to manage policies, retention, or support exports.</AlertDescription>
+            <AlertDescription>
+              You do not have access to manage policies, retention, or support exports.
+            </AlertDescription>
           </Alert>
         </div>
       </DashboardLayout>
@@ -718,10 +756,22 @@ function SreSummaryCard({ controller }: { controller: AdminOperationsController 
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-3 md:grid-cols-4">
-          <SummaryMetric label="Release tier" value={sre.release_tier} detail={`${Math.round(sre.window_seconds / 60)} minute window`} />
-          <SummaryMetric label="Breaching SLOs" value={controller.breachingSloCount} detail="Targets come from production-slos.yaml." />
+          <SummaryMetric
+            label="Release tier"
+            value={sre.release_tier}
+            detail={`${Math.round(sre.window_seconds / 60)} minute window`}
+          />
+          <SummaryMetric
+            label="Breaching SLOs"
+            value={controller.breachingSloCount}
+            detail="Targets come from production-slos.yaml."
+          />
           <SummaryMetric label="Active alerts" value={sre.alerts.active_total} detail="Repo-native alert evaluation." />
-          <SummaryMetric label="Missing signals" value={controller.missingSloCount} detail="Missing data is never treated as healthy." />
+          <SummaryMetric
+            label="Missing signals"
+            value={controller.missingSloCount}
+            detail="Missing data is never treated as healthy."
+          />
         </div>
         <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
           <SloObjectivesPanel controller={controller} />
@@ -757,14 +807,19 @@ function SloObjectivesPanel({ controller }: { controller: AdminOperationsControl
   );
 }
 
-function SloObjectiveCard({ objective }: { objective: NonNullable<AdminOperationsController["sreSummary"]>["objectives"][number] }) {
+function SloObjectiveCard({
+  objective,
+}: {
+  objective: NonNullable<AdminOperationsController["sreSummary"]>["objectives"][number];
+}) {
   return (
     <div className="rounded-lg border border-border/50 bg-card/70 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{objective.title}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {formatSreValue(objective.actual, objective.unit)} / target {formatSreValue(objective.target, objective.unit)}
+            {formatSreValue(objective.actual, objective.unit)} / target{" "}
+            {formatSreValue(objective.target, objective.unit)}
           </p>
         </div>
         <SloStatusBadge status={objective.status} />
@@ -838,7 +893,9 @@ function DashboardSignalsPanel({ controller }: { controller: AdminOperationsCont
           <div key={panel.id} className="rounded-lg border border-border/50 bg-card/70 p-3">
             <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{panel.title}</p>
             <p className="mt-2 text-sm font-semibold text-foreground">{formatSreValue(panel.value, panel.unit)}</p>
-            {panel.missing_data ? <p className="mt-1 text-xs text-amber-700 dark:text-amber-200">No data configured</p> : null}
+            {panel.missing_data ? (
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-200">No data configured</p>
+            ) : null}
           </div>
         ))}
       </div>
@@ -850,7 +907,9 @@ function RecoveryControlsCard({ controller }: { controller: AdminOperationsContr
   return (
     <Card className="border-border/60 bg-card/70 backdrop-blur-sm">
       <CardHeader>
-        <CardTitle role="heading" aria-level={2}>Recovery controls</CardTitle>
+        <CardTitle role="heading" aria-level={2}>
+          Recovery controls
+        </CardTitle>
         <CardDescription>
           Backend-owned state, retry backlog, dead letters, and live connection counts for stuck-company inspection.
         </CardDescription>
@@ -867,7 +926,10 @@ function RecoveryControlsCard({ controller }: { controller: AdminOperationsContr
 }
 
 function RecoveryMetricsGrid({ controller }: { controller: AdminOperationsController }) {
-  const retryCount = (controller.recoveryData?.orgLoad.retry_operations ?? []).reduce((sum, item) => sum + item.count, 0);
+  const retryCount = (controller.recoveryData?.orgLoad.retry_operations ?? []).reduce(
+    (sum, item) => sum + item.count,
+    0,
+  );
   return (
     <div className="grid gap-3 md:grid-cols-4">
       <SummaryMetric
@@ -900,7 +962,11 @@ function RunInspectionPanel({ controller }: { controller: AdminOperationsControl
           placeholder="Run ID"
           className="min-h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
         />
-        <Button variant="outline" onClick={() => void controller.handleInspectRun()} disabled={controller.operatorAction === "inspect-run"}>
+        <Button
+          variant="outline"
+          onClick={() => void controller.handleInspectRun()}
+          disabled={controller.operatorAction === "inspect-run"}
+        >
           {controller.operatorAction === "inspect-run" ? <Spinner size="xs" className="mr-2" /> : null}
           Inspect run
         </Button>
@@ -922,17 +988,46 @@ function InspectedRunPanel({ controller }: { controller: AdminOperationsControll
   return (
     <div className="mt-4 space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
-        <SummaryMetric label="Status" value={run.run.status} detail={`Attempt ${run.run.current_attempt ?? "unknown"}`} />
-        <SummaryMetric label="Blocked work" value={`${run.active_tasks.length} active · ${run.dead_letter_count} dead`} detail={`${run.pending_decisions.length} pending decisions`} />
+        <SummaryMetric
+          label="Status"
+          value={run.run.status}
+          detail={`Attempt ${run.run.current_attempt ?? "unknown"}`}
+        />
+        <SummaryMetric
+          label="Blocked work"
+          value={`${run.active_tasks.length} active · ${run.dead_letter_count} dead`}
+          detail={`${run.pending_decisions.length} pending decisions`}
+        />
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
-        <Button variant="outline" onClick={() => void controller.handleRunRecoveryAction("force-fail")} disabled={controller.operatorAction === "force-fail"}>Force fail</Button>
-        <Button variant="outline" onClick={() => void controller.handleRunRecoveryAction("force-cancel")} disabled={controller.operatorAction === "force-cancel"}>Force cancel</Button>
-        <Button variant="outline" onClick={() => void controller.handleRunRecoveryAction("force-rehydrate")} disabled={controller.operatorAction === "force-rehydrate"}>Rehydrate</Button>
+        <Button
+          variant="outline"
+          onClick={() => void controller.handleRunRecoveryAction("force-fail")}
+          disabled={controller.operatorAction === "force-fail"}
+        >
+          Force fail
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => void controller.handleRunRecoveryAction("force-cancel")}
+          disabled={controller.operatorAction === "force-cancel"}
+        >
+          Force cancel
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => void controller.handleRunRecoveryAction("force-rehydrate")}
+          disabled={controller.operatorAction === "force-rehydrate"}
+        >
+          Rehydrate
+        </Button>
       </div>
       <div className="max-h-56 overflow-auto rounded-lg border border-border/50">
         {run.tasks.map((task) => (
-          <div key={task.id} className="flex items-start justify-between gap-3 border-b border-border/40 px-3 py-2 last:border-b-0">
+          <div
+            key={task.id}
+            className="flex items-start justify-between gap-3 border-b border-border/40 px-3 py-2 last:border-b-0"
+          >
             <div>
               <p className="text-sm font-medium">{task.title}</p>
               <p className="text-xs text-muted-foreground">
@@ -954,9 +1049,15 @@ function DeadLetterRecoveryPanel({ controller }: { controller: AdminOperationsCo
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="font-medium text-foreground">Dead-letter recovery</p>
-          <p className="text-sm text-muted-foreground">Event ingestion failures, runtime intent poison messages, and audited operator recovery.</p>
+          <p className="text-sm text-muted-foreground">
+            Event ingestion failures, runtime intent poison messages, and audited operator recovery.
+          </p>
         </div>
-        <Button variant="outline" onClick={() => void controller.loadRecoveryData()} disabled={controller.recoveryLoading}>
+        <Button
+          variant="outline"
+          onClick={() => void controller.loadRecoveryData()}
+          disabled={controller.recoveryLoading}
+        >
           {controller.recoveryLoading ? <Spinner size="xs" className="mr-2" /> : null}
           Refresh
         </Button>
@@ -977,14 +1078,35 @@ function EventDeadLettersList({ controller }: { controller: AdminOperationsContr
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{deadLetter.event_type || "unknown event"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{deadLetter.reason || deadLetter.error_class || "No reason recorded"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Seen {deadLetter.retry_count} time(s) · last {formatDateTime(deadLetter.last_seen_at)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {deadLetter.reason || deadLetter.error_class || "No reason recorded"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Seen {deadLetter.retry_count} time(s) · last {formatDateTime(deadLetter.last_seen_at)}
+              </p>
             </div>
             <Badge variant="outline">{deadLetter.status.replace(/_/g, " ")}</Badge>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => void controller.handleEventDeadLetterAction(deadLetter.id, "replay")} disabled={controller.operatorAction === `event-replay:${deadLetter.id}`}>Request replay</Button>
-            <Button size="sm" variant="outline" onClick={() => void controller.handleEventDeadLetterAction(deadLetter.id, "acknowledge")} disabled={Boolean(deadLetter.acknowledged_at) || controller.operatorAction === `event-acknowledge:${deadLetter.id}`}>Acknowledge</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void controller.handleEventDeadLetterAction(deadLetter.id, "replay")}
+              disabled={controller.operatorAction === `event-replay:${deadLetter.id}`}
+            >
+              Request replay
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void controller.handleEventDeadLetterAction(deadLetter.id, "acknowledge")}
+              disabled={
+                Boolean(deadLetter.acknowledged_at) ||
+                controller.operatorAction === `event-acknowledge:${deadLetter.id}`
+              }
+            >
+              Acknowledge
+            </Button>
           </div>
         </div>
       ))}
@@ -1005,7 +1127,9 @@ function RuntimeIntentDeadLettersList({ controller }: { controller: AdminOperati
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{outcome.intent_type}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{outcome.reason || outcome.error_class || "No reason recorded"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {outcome.reason || outcome.error_class || "No reason recorded"}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {outcome.acknowledged_at ? `Acknowledged ${formatDateTime(outcome.acknowledged_at)}` : "Unacknowledged"}
               </p>
@@ -1013,8 +1137,24 @@ function RuntimeIntentDeadLettersList({ controller }: { controller: AdminOperati
             <Badge variant="outline">{outcome.attempt_id || "no attempt"}</Badge>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => void controller.handleIntentAction(outcome.intent_id, "replay")} disabled={controller.operatorAction === `replay:${outcome.intent_id}`}>Replay</Button>
-            <Button size="sm" variant="outline" onClick={() => void controller.handleIntentAction(outcome.intent_id, "acknowledge")} disabled={Boolean(outcome.acknowledged_at) || controller.operatorAction === `acknowledge:${outcome.intent_id}`}>Acknowledge</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void controller.handleIntentAction(outcome.intent_id, "replay")}
+              disabled={controller.operatorAction === `replay:${outcome.intent_id}`}
+            >
+              Replay
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void controller.handleIntentAction(outcome.intent_id, "acknowledge")}
+              disabled={
+                Boolean(outcome.acknowledged_at) || controller.operatorAction === `acknowledge:${outcome.intent_id}`
+              }
+            >
+              Acknowledge
+            </Button>
           </div>
         </div>
       ))}
@@ -1049,13 +1189,39 @@ function GuardrailSummaryCard({ data }: { data: OperationsData }) {
     <Card className="border-border/60 bg-card/70 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>Guardrail summary</CardTitle>
-        <CardDescription>These summaries are derived from the actual tenant policy plus the current runtime mode.</CardDescription>
+        <CardDescription>
+          These summaries are derived from the actual tenant policy plus the current runtime mode.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2">
-        <InfoTile label="HTTP egress" value={httpLabel} detail={`Allowlist: ${data.policy.summary.egress_allowlist_count} · Denylist: ${data.policy.summary.egress_denylist_count}`} />
-        <InfoTile label="Runtime mode" value={data.policy.summary.runtime_mode} detail={`Exec tools are ${data.policy.summary.exec_tools_policy.replace(/_/g, " ")}.`} />
-        <InfoTile label="Allowed providers" value={data.policy.summary.provider_allowlist_count} detail={data.policy.allowed_providers.length > 0 ? data.policy.allowed_providers.join(", ") : "All configured providers are currently allowed."} />
-        <InfoTile label="Allowed models" value={data.policy.summary.model_allowlist_count} detail={data.policy.allowed_models.length > 0 ? data.policy.allowed_models.join(", ") : "No model-specific allowlist is set."} />
+        <InfoTile
+          label="HTTP egress"
+          value={httpLabel}
+          detail={`Allowlist: ${data.policy.summary.egress_allowlist_count} · Denylist: ${data.policy.summary.egress_denylist_count}`}
+        />
+        <InfoTile
+          label="Runtime mode"
+          value={data.policy.summary.runtime_mode}
+          detail={`Exec tools are ${data.policy.summary.exec_tools_policy.replace(/_/g, " ")}.`}
+        />
+        <InfoTile
+          label="Allowed providers"
+          value={data.policy.summary.provider_allowlist_count}
+          detail={
+            data.policy.allowed_providers.length > 0
+              ? data.policy.allowed_providers.join(", ")
+              : "All configured providers are currently allowed."
+          }
+        />
+        <InfoTile
+          label="Allowed models"
+          value={data.policy.summary.model_allowlist_count}
+          detail={
+            data.policy.allowed_models.length > 0
+              ? data.policy.allowed_models.join(", ")
+              : "No model-specific allowlist is set."
+          }
+        />
       </CardContent>
     </Card>
   );
@@ -1068,21 +1234,39 @@ function RetentionLifecycleCard({ controller }: { controller: AdminOperationsCon
     <Card className="border-border/60 bg-card/70 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>Retention and lifecycle</CardTitle>
-        <CardDescription>Operators should be able to explain what data lasts, what is manual, and what a cleanup would remove.</CardDescription>
+        <CardDescription>
+          Operators should be able to explain what data lasts, what is manual, and what a cleanup would remove.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <InfoTile label="Runs" value={formatDays(data.retention.runs_retention_days)} detail="Operation records" />
-          <InfoTile label="Operation logs" value={formatDays(data.retention.run_logs_retention_days)} detail="Execution logs" />
-          <InfoTile label="Audit logs" value={formatDays(data.retention.audit_logs_retention_days)} detail="Governance actions" />
-          <InfoTile label="Usage rows" value={formatDays(data.retention.usage_retention_days)} detail="Usage accounting" />
+          <InfoTile
+            label="Operation logs"
+            value={formatDays(data.retention.run_logs_retention_days)}
+            detail="Execution logs"
+          />
+          <InfoTile
+            label="Audit logs"
+            value={formatDays(data.retention.audit_logs_retention_days)}
+            detail="Governance actions"
+          />
+          <InfoTile
+            label="Usage rows"
+            value={formatDays(data.retention.usage_retention_days)}
+            detail="Usage accounting"
+          />
         </div>
         <Alert className="border-sky-500/30 bg-sky-500/10 text-sky-800 dark:text-sky-100">
           <BrainCircuit className="size-4" />
           <AlertDescription>{data.memoryUsage.retention.summary}</AlertDescription>
         </Alert>
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" onClick={() => void controller.handlePreviewCleanup()} disabled={controller.previewLoading}>
+          <Button
+            variant="outline"
+            onClick={() => void controller.handlePreviewCleanup()}
+            disabled={controller.previewLoading}
+          >
             {controller.previewLoading ? (
               <>
                 <Spinner size="xs" className="mr-2" />
@@ -1104,8 +1288,16 @@ function CleanupPreviewGrid({ preview }: { preview: RetentionCleanupPreview }) {
   return (
     <div className="grid gap-3 md:grid-cols-3">
       <InfoTile label="Would delete" value={preview.total_deleted} detail="Total rows across the current policy." />
-      <InfoTile label="Run artifacts" value={preview.runs_deleted + preview.run_logs_deleted} detail="Operations plus operation logs that are past retention." />
-      <InfoTile label="Usage and audit" value={preview.audit_logs_deleted + preview.llm_usage_deleted + preview.memory_usage_deleted} detail="Audit logs and usage rows that exceed retention." />
+      <InfoTile
+        label="Run artifacts"
+        value={preview.runs_deleted + preview.run_logs_deleted}
+        detail="Operations plus operation logs that are past retention."
+      />
+      <InfoTile
+        label="Usage and audit"
+        value={preview.audit_logs_deleted + preview.llm_usage_deleted + preview.memory_usage_deleted}
+        detail="Audit logs and usage rows that exceed retention."
+      />
     </div>
   );
 }
@@ -1115,7 +1307,9 @@ function SupportExportsCard({ controller }: { controller: AdminOperationsControl
     <Card className="border-border/60 bg-card/70 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>Support-safe exports</CardTitle>
-        <CardDescription>These exports stay tenant-scoped and use the API&apos;s existing redaction behavior.</CardDescription>
+        <CardDescription>
+          These exports stay tenant-scoped and use the API&apos;s existing redaction behavior.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-2">
         {EXPORT_ACTIONS.map((action) => (
@@ -1127,7 +1321,12 @@ function SupportExportsCard({ controller }: { controller: AdminOperationsControl
               </div>
               <FileJson className="size-5 text-muted-foreground" aria-hidden="true" />
             </div>
-            <Button variant="outline" className="mt-4 w-full justify-between" onClick={() => void controller.handleExport(action)} disabled={controller.exportingKey === action.key}>
+            <Button
+              variant="outline"
+              className="mt-4 w-full justify-between"
+              onClick={() => void controller.handleExport(action)}
+              disabled={controller.exportingKey === action.key}
+            >
               {controller.exportingKey === action.key ? (
                 <>
                   <span className="inline-flex items-center">
@@ -1185,8 +1384,14 @@ function HealthDiagnosticsCard({ controller }: { controller: AdminOperationsCont
           <div className="mt-3 grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
             <p>GC last run: {formatDateTime(data.memoryHealth.metrics?.memory_gc_last_run_at)}</p>
             <p>Reindex marker: {formatDateTime(data.memoryHealth.metrics?.memory_gc_last_reindex)}</p>
-            <p>Index jobs: {data.memoryPerformance.indexing.jobs_total} · success {data.memoryPerformance.indexing.success_total}</p>
-            <p>gRPC calls: {data.memoryPerformance.grpc.requests_total} · errors {data.memoryPerformance.grpc.errors_total}</p>
+            <p>
+              Index jobs: {data.memoryPerformance.indexing.jobs_total} · success{" "}
+              {data.memoryPerformance.indexing.success_total}
+            </p>
+            <p>
+              gRPC calls: {data.memoryPerformance.grpc.requests_total} · errors{" "}
+              {data.memoryPerformance.grpc.errors_total}
+            </p>
           </div>
         </div>
       </CardContent>
@@ -1200,13 +1405,26 @@ function OperatorNextStepsCard() {
       <CardHeader>
         <CardTitle>Operator next steps</CardTitle>
         <CardDescription>
-          The admin experience should make the next troubleshooting hop obvious instead of forcing source-code spelunking.
+          The admin experience should make the next troubleshooting hop obvious instead of forcing source-code
+          spelunking.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-3">
-        <NextStepLink href="/admin/billing" title="Blocked by budget or quota" detail="Use Billing to compare plan entitlements, tenant quota, and spend budget." />
-        <NextStepLink href="/admin/audit-logs" title="Need an action trail" detail="Audit explains who changed retention, identity, or curated-memory state." />
-        <NextStepLink href="/memory" title="Need observation context" detail="The Memory Browser shows the actual curated observations backing retrieval." />
+        <NextStepLink
+          href="/admin/billing"
+          title="Blocked by budget or quota"
+          detail="Use Billing to compare plan entitlements, tenant quota, and spend budget."
+        />
+        <NextStepLink
+          href="/admin/audit-logs"
+          title="Need an action trail"
+          detail="Audit explains who changed retention, identity, or curated-memory state."
+        />
+        <NextStepLink
+          href="/memory"
+          title="Need observation context"
+          detail="The Memory Browser shows the actual curated observations backing retrieval."
+        />
       </CardContent>
     </Card>
   );
@@ -1214,7 +1432,10 @@ function OperatorNextStepsCard() {
 
 function NextStepLink({ href, title, detail }: { href: string; title: string; detail: string }) {
   return (
-    <Link href={href} className="rounded-xl border border-border/50 bg-background/70 p-4 transition-colors hover:bg-background">
+    <Link
+      href={href}
+      className="rounded-xl border border-border/50 bg-background/70 p-4 transition-colors hover:bg-background"
+    >
       <p className="font-medium text-foreground">{title}</p>
       <p className="mt-2 text-sm text-muted-foreground">{detail}</p>
     </Link>

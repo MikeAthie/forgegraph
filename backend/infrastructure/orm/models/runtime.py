@@ -5,6 +5,7 @@ from __future__ import annotations
 # ruff: noqa: F401,F403,F405,I001
 
 from infrastructure.orm.models.graphs import *  # noqa: F403
+from infrastructure.orm.models.base import *  # noqa: F403
 from infrastructure.orm.models.base import _make_check_constraint
 
 

@@ -38,7 +38,9 @@ def classify_request(
     """Classify a committed communication message into the next backend-owned path."""
 
     if message.company is None:
-        raise RequestRouterError("company_required", "Request classification requires a company-scoped message.")
+        raise RequestRouterError(
+            "company_required", "Request classification requires a company-scoped message."
+        )
     key = str(idempotency_key or f"request-classification:message:{message.id}").strip()
     existing = RequestClassificationRecord.objects.filter(
         organization=message.organization,
@@ -52,10 +54,16 @@ def classify_request(
     classification = RequestClassificationRecord.CLASS_AMBIGUOUS
     confidence = 0.45
     rationale = "Request needs account-intake clarification before a whiteboard can be created."
-    if matched_whiteboard is not None or matched_service_engagement is not None or _references_existing_work(message):
+    if (
+        matched_whiteboard is not None
+        or matched_service_engagement is not None
+        or _references_existing_work(message)
+    ):
         classification = RequestClassificationRecord.CLASS_EXISTING
         confidence = 0.9
-        rationale = "Request references active work, a service engagement, or an existing work thread."
+        rationale = (
+            "Request references active work, a service engagement, or an existing work thread."
+        )
     elif _looks_like_new_request(message.body, message.message_kind):
         classification = RequestClassificationRecord.CLASS_NEW
         confidence = 0.82
@@ -105,7 +113,9 @@ def create_or_resume_whiteboard(
     classification = classification or classify_request(message=message)
     records: list[TaskRoutingRecord] = []
     if classification.classification == RequestClassificationRecord.CLASS_AMBIGUOUS:
-        records.append(route_account_intake_clarification(message=message, classification=classification))
+        records.append(
+            route_account_intake_clarification(message=message, classification=classification)
+        )
         return None, records
     if classification.classification == RequestClassificationRecord.CLASS_EXISTING:
         whiteboard = classification.matched_whiteboard or _matched_whiteboard_for_message(message)
@@ -119,7 +129,9 @@ def create_or_resume_whiteboard(
         classification=classification,
         idempotency_key=f"whiteboard:message:{message.id}",
     )
-    records.extend(create_onboarding_routing_tasks(whiteboard=whiteboard, classification=classification))
+    records.extend(
+        create_onboarding_routing_tasks(whiteboard=whiteboard, classification=classification)
+    )
     return whiteboard, records
 
 
@@ -132,11 +144,15 @@ def classify_and_route_request(
 
     with transaction.atomic():
         classification = classify_request(message=message, idempotency_key=idempotency_key)
-        whiteboard, records = create_or_resume_whiteboard(message=message, classification=classification)
+        whiteboard, records = create_or_resume_whiteboard(
+            message=message, classification=classification
+        )
     return classification, whiteboard, records
 
 
-def handle_communication_request_receipt(*, receipt: CommunicationEventReceipt) -> WorkWhiteboard | None:
+def handle_communication_request_receipt(
+    *, receipt: CommunicationEventReceipt
+) -> WorkWhiteboard | None:
     """Feature-flagged bridge from consumed Kafka receipt to backend request routing."""
 
     if not bool(getattr(settings, "REQUEST_ROUTER_FROM_KAFKA_ENABLED", False)):
@@ -182,7 +198,11 @@ def _matched_whiteboard_for_message(message: CommunicationMessage) -> WorkWhiteb
     if by_thread is not None:
         return by_thread
     if message.thread.service_engagement_id:
-        return queryset.filter(service_engagement=message.thread.service_engagement).order_by("-updated_at").first()
+        return (
+            queryset.filter(service_engagement=message.thread.service_engagement)
+            .order_by("-updated_at")
+            .first()
+        )
     return None
 
 

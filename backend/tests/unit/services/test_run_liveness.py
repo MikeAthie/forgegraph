@@ -263,6 +263,35 @@ def test_reconcile_stale_runs_fails_resume_policy_without_checkpoint():
     assert "requires a backend-owned checkpoint" in run.error_message
 
 
+@override_settings(RUN_QUEUE_ENABLED=True)
+def test_reconcile_stale_runs_fails_resume_policy_when_snapshot_store_unavailable(monkeypatch):
+    stale_time = timezone.now() - timedelta(minutes=10)
+    run = _make_run(status="resume_requested", last_progress_at=stale_time)
+    run.recovery_policy = RECOVERY_POLICY_RESUME
+    run.resume_requested_at = stale_time
+    run.save(update_fields=["recovery_policy", "resume_requested_at"])
+
+    def _raise_snapshot_unavailable(_run_id):
+        raise RuntimeError("redis unavailable")
+
+    monkeypatch.setattr(
+        "application.services.run_liveness.get_snapshot", _raise_snapshot_unavailable
+    )
+
+    result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+    assert result.scanned == 1
+    assert result.reconciled == 1
+    run.refresh_from_db()
+    assert run.status == "failed"
+    assert run.recovery_reason == "missing_checkpoint"
+    assert "requires a backend-owned checkpoint" in run.error_message
+
+    event = RunEvent.objects.get(run=run, event_type="run.updated")
+    assert event.payload["checkpoint_available"] is False
+    assert event.payload["recovery_policy"] == RECOVERY_POLICY_RESUME
+
+
 def test_reconcile_stale_runs_skips_paused_runs():
     stale_time = timezone.now() - timedelta(minutes=10)
     _make_run(status="paused", last_progress_at=stale_time)

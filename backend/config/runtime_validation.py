@@ -4,6 +4,7 @@ Runtime environment validation helpers.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -111,11 +112,77 @@ def _validate_run_stream_settings(errors: list[str]) -> None:
         )
 
 
+def _validate_communication_kafka_settings(errors: list[str]) -> None:
+    _validate_communication_kafka_routing_flags(errors)
+    if not _is_enabled_setting("COMMUNICATION_KAFKA_ENABLED"):
+        return
+    if importlib.util.find_spec("confluent_kafka") is None:
+        errors.append("confluent-kafka must be installed when COMMUNICATION_KAFKA_ENABLED=true.")
+    bootstrap_servers = str(
+        getattr(settings, "COMMUNICATION_KAFKA_BOOTSTRAP_SERVERS", "")
+        or getattr(settings, "KAFKA_BROKERS", "")
+        or ""
+    ).strip()
+    if not bootstrap_servers:
+        errors.append(
+            "COMMUNICATION_KAFKA_BOOTSTRAP_SERVERS or KAFKA_BROKERS must be configured "
+            "when Kafka is enabled."
+        )
+    topic = str(getattr(settings, "COMMUNICATION_KAFKA_TOPIC", "") or "").strip()
+    if not topic:
+        errors.append("COMMUNICATION_KAFKA_TOPIC must be configured when Kafka is enabled.")
+
+    _validate_communication_kafka_security(errors)
+
+
+def _validate_communication_kafka_routing_flags(errors: list[str]) -> None:
+    if _is_enabled_setting("COMMUNICATION_ROUTING_FROM_KAFKA_ENABLED"):
+        errors.append(
+            "COMMUNICATION_ROUTING_FROM_KAFKA_ENABLED must be disabled in production; "
+            "Kafka is transport-only."
+        )
+    if _is_enabled_setting("REQUEST_ROUTER_FROM_KAFKA_ENABLED"):
+        errors.append(
+            "REQUEST_ROUTER_FROM_KAFKA_ENABLED must be disabled in production; "
+            "Kafka is transport-only."
+        )
+
+
+def _validate_communication_kafka_security(errors: list[str]) -> None:
+    security_protocol = str(
+        getattr(settings, "COMMUNICATION_KAFKA_SECURITY_PROTOCOL", "") or ""
+    ).strip()
+    if security_protocol not in {"SSL", "SASL_SSL"}:
+        errors.append(
+            "COMMUNICATION_KAFKA_SECURITY_PROTOCOL must be SSL or SASL_SSL for production Kafka."
+        )
+    if security_protocol == "SASL_SSL":
+        sasl_mechanism = str(getattr(settings, "COMMUNICATION_KAFKA_SASL_MECHANISM", "") or "")
+        sasl_username = str(getattr(settings, "COMMUNICATION_KAFKA_SASL_USERNAME", "") or "")
+        sasl_password = str(getattr(settings, "COMMUNICATION_KAFKA_SASL_PASSWORD", "") or "")
+        if not sasl_mechanism.strip():
+            errors.append(
+                "COMMUNICATION_KAFKA_SASL_MECHANISM is required when "
+                "COMMUNICATION_KAFKA_SECURITY_PROTOCOL=SASL_SSL."
+            )
+        if not sasl_username.strip():
+            errors.append(
+                "COMMUNICATION_KAFKA_SASL_USERNAME is required when "
+                "COMMUNICATION_KAFKA_SECURITY_PROTOCOL=SASL_SSL."
+            )
+        if not sasl_password.strip():
+            errors.append(
+                "COMMUNICATION_KAFKA_SASL_PASSWORD is required when "
+                "COMMUNICATION_KAFKA_SECURITY_PROTOCOL=SASL_SSL."
+            )
+
+
 def _validate_strict_runtime_settings(errors: list[str]) -> None:
     _validate_runtime_secrets(errors)
     _validate_secure_transport(errors)
     _validate_engine_settings(errors)
     _validate_run_stream_settings(errors)
+    _validate_communication_kafka_settings(errors)
 
 
 def collect_runtime_validation_errors(*, strict: bool | None = None) -> list[str]:

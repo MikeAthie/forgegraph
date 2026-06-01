@@ -5,7 +5,7 @@
 from adapters.api.runs.common import *  # noqa: F403
 
 
-class EngineCallbackIngestionMixin:
+class EngineCallbackIngestionMixin(EngineCallbackComposableMixin):
     def _save_engine_callback_event(
         self,
         context: EngineCallbackContext,

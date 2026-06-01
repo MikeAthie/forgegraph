@@ -567,24 +567,78 @@ function useCompanyWorkspaceShellController({
     },
     [],
   );
-  const setLaunching = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("launching", value), [setWorkspaceField]);
-  const setRetrying = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("retrying", value), [setWorkspaceField]);
-  const setSavingObjective = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("savingObjective", value), [setWorkspaceField]);
-  const setSavingCompanyState = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("savingCompanyState", value), [setWorkspaceField]);
-  const setCompanyPaused = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("companyPaused", value), [setWorkspaceField]);
-  const setOperationBrief = useCallback((value: SetStateAction<string>) => setWorkspaceField("operationBrief", value), [setWorkspaceField]);
-  const setEditableObjective = useCallback((value: SetStateAction<string>) => setWorkspaceField("editableObjective", value), [setWorkspaceField]);
-  const setEditableAutonomyMode = useCallback((value: SetStateAction<CompanyAutonomyMode>) => setWorkspaceField("editableAutonomyMode", value), [setWorkspaceField]);
-  const setEditableAIAccessMode = useCallback((value: SetStateAction<CompanyAIAccessMode>) => setWorkspaceField("editableAIAccessMode", value), [setWorkspaceField]);
-  const setOperatingBrief = useCallback((value: SetStateAction<OperatingBrief | null>) => setWorkspaceField("operatingBrief", value), [setWorkspaceField]);
-  const setOperatingBriefInput = useCallback((value: SetStateAction<string>) => setWorkspaceField("operatingBriefInput", value), [setWorkspaceField]);
-  const setOperatingBriefLoading = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("operatingBriefLoading", value), [setWorkspaceField]);
-  const setOperatingBriefSubmitting = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("operatingBriefSubmitting", value), [setWorkspaceField]);
-  const setOperatingBriefError = useCallback((value: SetStateAction<string | null>) => setWorkspaceField("operatingBriefError", value), [setWorkspaceField]);
-  const setLatestPmAction = useCallback((value: SetStateAction<string | null>) => setWorkspaceField("latestPmAction", value), [setWorkspaceField]);
-  const setLatestInteractionResponse = useCallback((value: SetStateAction<InteractionEventResponse | null>) => setWorkspaceField("latestInteractionResponse", value), [setWorkspaceField]);
-  const setQuestMilestoneComplete = useCallback((value: SetStateAction<boolean>) => setWorkspaceField("questMilestoneComplete", value), [setWorkspaceField]);
-  const setQuestPhase = useCallback((value: SetStateAction<"workspace" | "deliverable" | "done">) => setWorkspaceField("questPhase", value), [setWorkspaceField]);
+  const setLaunching = useCallback(
+    (value: SetStateAction<boolean>) => setWorkspaceField("launching", value),
+    [setWorkspaceField],
+  );
+  const setRetrying = useCallback(
+    (value: SetStateAction<boolean>) => setWorkspaceField("retrying", value),
+    [setWorkspaceField],
+  );
+  const setSavingObjective = useCallback(
+    (value: SetStateAction<boolean>) => setWorkspaceField("savingObjective", value),
+    [setWorkspaceField],
+  );
+  const setSavingCompanyState = useCallback(
+    (value: SetStateAction<boolean>) => setWorkspaceField("savingCompanyState", value),
+    [setWorkspaceField],
+  );
+  const setCompanyPaused = useCallback(
+    (value: SetStateAction<boolean>) => setWorkspaceField("companyPaused", value),
+    [setWorkspaceField],
+  );
+  const setOperationBrief = useCallback(
+    (value: SetStateAction<string>) => setWorkspaceField("operationBrief", value),
+    [setWorkspaceField],
+  );
+  const setEditableObjective = useCallback(
+    (value: SetStateAction<string>) => setWorkspaceField("editableObjective", value),
+    [setWorkspaceField],
+  );
+  const setEditableAutonomyMode = useCallback(
+    (value: SetStateAction<CompanyAutonomyMode>) => setWorkspaceField("editableAutonomyMode", value),
+    [setWorkspaceField],
+  );
+  const setEditableAIAccessMode = useCallback(
+    (value: SetStateAction<CompanyAIAccessMode>) => setWorkspaceField("editableAIAccessMode", value),
+    [setWorkspaceField],
+  );
+  const setOperatingBrief = useCallback(
+    (value: SetStateAction<OperatingBrief | null>) => setWorkspaceField("operatingBrief", value),
+    [setWorkspaceField],
+  );
+  const setOperatingBriefInput = useCallback(
+    (value: SetStateAction<string>) => setWorkspaceField("operatingBriefInput", value),
+    [setWorkspaceField],
+  );
+  const setOperatingBriefLoading = useCallback(
+    (value: SetStateAction<boolean>) => setWorkspaceField("operatingBriefLoading", value),
+    [setWorkspaceField],
+  );
+  const setOperatingBriefSubmitting = useCallback(
+    (value: SetStateAction<boolean>) => setWorkspaceField("operatingBriefSubmitting", value),
+    [setWorkspaceField],
+  );
+  const setOperatingBriefError = useCallback(
+    (value: SetStateAction<string | null>) => setWorkspaceField("operatingBriefError", value),
+    [setWorkspaceField],
+  );
+  const setLatestPmAction = useCallback(
+    (value: SetStateAction<string | null>) => setWorkspaceField("latestPmAction", value),
+    [setWorkspaceField],
+  );
+  const setLatestInteractionResponse = useCallback(
+    (value: SetStateAction<InteractionEventResponse | null>) => setWorkspaceField("latestInteractionResponse", value),
+    [setWorkspaceField],
+  );
+  const setQuestMilestoneComplete = useCallback(
+    (value: SetStateAction<boolean>) => setWorkspaceField("questMilestoneComplete", value),
+    [setWorkspaceField],
+  );
+  const setQuestPhase = useCallback(
+    (value: SetStateAction<"workspace" | "deliverable" | "done">) => setWorkspaceField("questPhase", value),
+    [setWorkspaceField],
+  );
 
   useEffect(() => {
     dispatchWorkspaceState({
@@ -1140,7 +1194,11 @@ function CompanyWorkspaceLoaded({ controller }: { controller: CompanyWorkspaceCo
       <OperatingModelWorkspace companyId={controller.companyId} companyName={controller.profile.companyName} />
       <div className="grid gap-6 2xl:grid-cols-[1.06fr_0.94fr]">
         <div data-guide-id="company-operations-panel">
-          <Panel title="Operations" description="Current and recent operations shown in company language." className="operations-panel">
+          <Panel
+            title="Operations"
+            description="Current and recent operations shown in company language."
+            className="operations-panel"
+          >
             <OperationsList operations={controller.operations} departments={controller.company?.departments ?? []} />
           </Panel>
         </div>
@@ -1164,7 +1222,9 @@ function CompanyHeaderPanel({ controller }: { controller: CompanyWorkspaceContro
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <StatusBadge
-              status={companyStatus === "Needs attention" ? "failed" : companyStatus === "Operating" ? "running" : "pending"}
+              status={
+                companyStatus === "Needs attention" ? "failed" : companyStatus === "Operating" ? "running" : "pending"
+              }
               label={companyStatus}
             />
             <StatusBadge status={editableAutonomyMode} label={editableAutonomyMode} />
@@ -1173,7 +1233,10 @@ function CompanyHeaderPanel({ controller }: { controller: CompanyWorkspaceContro
               label={editableAIAccessMode === "managed" ? "Managed" : "BYOK"}
             />
           </div>
-          <p className="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50" style={{ fontFamily: "var(--font-serif)" }}>
+          <p
+            className="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
             {profile.companyName}
           </p>
           <p className="mt-3 text-sm leading-7 text-zinc-600 dark:text-zinc-300">{profile.objective}</p>
@@ -1182,8 +1245,16 @@ function CompanyHeaderPanel({ controller }: { controller: CompanyWorkspaceContro
           </MicroExplanation>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <CompanyFact label="Company Category" value={profile.companyType} detail="A starting shape that tells ForgeGraph how to organize the first team." />
-          <CompanyFact label="Status" value={displayedCompanyStatus} detail="Tells you whether the company is working, waiting, paused, or needs attention." />
+          <CompanyFact
+            label="Company Category"
+            value={profile.companyType}
+            detail="A starting shape that tells ForgeGraph how to organize the first team."
+          />
+          <CompanyFact
+            label="Status"
+            value={displayedCompanyStatus}
+            detail="Tells you whether the company is working, waiting, paused, or needs attention."
+          />
           <CompanyFact
             label="Autonomy Mode"
             value={editableAutonomyMode}
@@ -1222,7 +1293,13 @@ function CompanyFact({ label, value, detail }: { label: string; value: string; d
 
 function CompanyCommandOpsPanel({ controller }: { controller: CompanyWorkspaceController }) {
   return (
-    <div id="command-ops" data-guide-id="company-command-ops-panel" data-testid="command-ops-panel" tabIndex={-1} className="scroll-mt-24 focus:outline-none">
+    <div
+      id="command-ops"
+      data-guide-id="company-command-ops-panel"
+      data-testid="command-ops-panel"
+      tabIndex={-1}
+      className="scroll-mt-24 focus:outline-none"
+    >
       <Panel
         title="Command Ops"
         description="Interact with the company here: update the Operating Brief, launch work, handle approvals, and adjust controls."
@@ -1258,7 +1335,9 @@ function NextActionCard({ controller }: { controller: CompanyWorkspaceController
 
   return (
     <div className={`rounded-[1.35rem] border p-4 ${toneClass}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-300">Next best action</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-300">
+        Next best action
+      </p>
       <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{nextAction.title}</p>
@@ -1278,7 +1357,12 @@ function NextActionCard({ controller }: { controller: CompanyWorkspaceController
               Resume company
             </Button>
           ) : (
-            <Button size="sm" className="rounded-full" onClick={() => void controller.handleLaunchOperation()} disabled={launching}>
+            <Button
+              size="sm"
+              className="rounded-full"
+              onClick={() => void controller.handleLaunchOperation()}
+              disabled={launching}
+            >
               Launch operation
             </Button>
           )}
@@ -1290,13 +1374,18 @@ function NextActionCard({ controller }: { controller: CompanyWorkspaceController
 
 function ProjectManagerMessage() {
   return (
-    <div data-testid="command-ops-system-message" className="mt-4 rounded-[1.2rem] border border-sky-800/12 bg-sky-50/85 p-4 dark:border-sky-200/15 dark:bg-sky-500/10">
+    <div
+      data-testid="command-ops-system-message"
+      className="mt-4 rounded-[1.2rem] border border-sky-800/12 bg-sky-50/85 p-4 dark:border-sky-200/15 dark:bg-sky-500/10"
+    >
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
           <Bot className="size-4" />
         </span>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-900/70 dark:text-sky-100/75">Project Manager</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-900/70 dark:text-sky-100/75">
+            Project Manager
+          </p>
           <p className="mt-2 text-sm leading-6 text-sky-950 dark:text-sky-50">
             I&apos;m managing this company. Tell me what you want to achieve, and I&apos;ll turn it into a plan.
           </p>
@@ -1307,10 +1396,22 @@ function ProjectManagerMessage() {
 }
 
 function OperatingBriefPanel({ controller }: { controller: CompanyWorkspaceController }) {
-  const { activeBriefOperation, latestInteractionResponse, latestPmAction, operatingBrief, operatingBriefError, operatingBriefInput, operatingBriefLoading, operatingBriefSubmitting } = controller;
+  const {
+    activeBriefOperation,
+    latestInteractionResponse,
+    latestPmAction,
+    operatingBrief,
+    operatingBriefError,
+    operatingBriefInput,
+    operatingBriefLoading,
+    operatingBriefSubmitting,
+  } = controller;
 
   return (
-    <div data-testid="operating-brief-panel" className="mt-5 rounded-[1.5rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+    <div
+      data-testid="operating-brief-panel"
+      className="mt-5 rounded-[1.5rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
@@ -1318,13 +1419,17 @@ function OperatingBriefPanel({ controller }: { controller: CompanyWorkspaceContr
             <p className="text-sm font-semibold">Operating Brief</p>
           </div>
           <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-            {activeBriefOperation ? `Scoped to operation ${activeBriefOperation.id.slice(0, 8)}` : "Scoped to the next company operation"}
+            {activeBriefOperation
+              ? `Scoped to operation ${activeBriefOperation.id.slice(0, 8)}`
+              : "Scoped to the next company operation"}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {operatingBriefLoading ? <StatusBadge status="pending" label="Loading" /> : null}
           {latestPmAction ? <StatusBadge status={latestPmAction} label={latestPmAction} /> : null}
-          {operatingBrief?.autonomy_mode ? <StatusBadge status={operatingBrief.autonomy_mode} label={operatingBrief.autonomy_mode} /> : null}
+          {operatingBrief?.autonomy_mode ? (
+            <StatusBadge status={operatingBrief.autonomy_mode} label={operatingBrief.autonomy_mode} />
+          ) : null}
         </div>
       </div>
       {operatingBriefError ? (
@@ -1334,7 +1439,10 @@ function OperatingBriefPanel({ controller }: { controller: CompanyWorkspaceContr
       ) : null}
       <OperatingBriefSummary brief={operatingBrief} />
       <div className="mt-4">
-        <label htmlFor="components-company-companyworkspaceshell-1282" className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+        <label
+          htmlFor="components-company-companyworkspaceshell-1282"
+          className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+        >
           Update Brief
         </label>
         <Textarea
@@ -1353,7 +1461,11 @@ Examples:
         />
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button data-testid="operating-brief-submit-button" onClick={() => void controller.handleSubmitOperatingBrief()} disabled={operatingBriefSubmitting || operatingBriefLoading}>
+        <Button
+          data-testid="operating-brief-submit-button"
+          onClick={() => void controller.handleSubmitOperatingBrief()}
+          disabled={operatingBriefSubmitting || operatingBriefLoading}
+        >
           {operatingBriefSubmitting ? <Spinner size="xs" className="mr-2" /> : <Send className="size-4" />}
           Update brief
         </Button>
@@ -1372,7 +1484,11 @@ function OperatingBriefSummary({ brief }: { brief: OperatingBrief | null }) {
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <BriefList label="Constraints" items={brief?.constraints ?? []} emptyLabel="No constraints recorded" />
-        <BriefList label="Success Criteria" items={brief?.success_criteria ?? []} emptyLabel="No success criteria recorded" />
+        <BriefList
+          label="Success Criteria"
+          items={brief?.success_criteria ?? []}
+          emptyLabel="No success criteria recorded"
+        />
         <BriefList label="Stakeholders" items={brief?.stakeholders ?? []} emptyLabel="No stakeholders recorded" />
         <BriefList label="Dependencies" items={brief?.dependencies ?? []} emptyLabel="No dependencies recorded" />
       </div>
@@ -1406,7 +1522,9 @@ function OperatingBriefClarifications({ brief }: { brief: OperatingBrief | null 
 
   return (
     <div className="mt-4 rounded-[1.1rem] border border-amber-800/15 bg-amber-50/80 p-4 dark:border-amber-200/20 dark:bg-amber-500/10">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-amber-800 dark:text-amber-100/80">Blocking Clarifications</p>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-amber-800 dark:text-amber-100/80">
+        Blocking Clarifications
+      </p>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-950 dark:text-amber-100">
         {blockingClarifications.map((item) => (
           <li key={`${item.related_field}-${item.question}`}>{item.question}</li>
@@ -1426,7 +1544,10 @@ function OperatingBriefAssumptions({ brief }: { brief: OperatingBrief | null }) 
       <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Assumptions</p>
       <div className="mt-2 space-y-2">
         {brief.assumptions.slice(-3).map((item) => (
-          <div key={`${item.field}-${item.created_at}`} className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 text-sm dark:border-white/8 dark:bg-white/5">
+          <div
+            key={`${item.field}-${item.created_at}`}
+            className="rounded-[1rem] border border-zinc-900/8 bg-white/70 p-3 text-sm dark:border-white/8 dark:bg-white/5"
+          >
             <span className="font-medium text-zinc-900 dark:text-zinc-100">{item.field}: </span>
             <span className="text-zinc-600 dark:text-zinc-300">{formatAssumptionValue(item.value)}</span>
           </div>
@@ -1453,7 +1574,10 @@ function OperationStatsGrid({ controller }: { controller: CompanyWorkspaceContro
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {stats.map((item) => (
-        <div key={item.label} className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+        <div
+          key={item.label}
+          className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+        >
           <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">{item.label}</p>
           <p className="mt-2 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{item.value}</p>
           {item.detail ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{item.detail}</p> : null}
@@ -1490,7 +1614,10 @@ function CompanyDecisionExplanation({ controller }: { controller: CompanyWorkspa
 
 function CompanyControlsPanel({ controller }: { controller: CompanyWorkspaceController }) {
   return (
-    <div id="company-controls" className="mt-5 rounded-[1.5rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8">
+    <div
+      id="company-controls"
+      className="mt-5 rounded-[1.5rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+    >
       <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
         <Settings2 className="size-4" />
         <p className="text-sm font-semibold">Controls</p>
@@ -1508,7 +1635,10 @@ function CompanyControlsPanel({ controller }: { controller: CompanyWorkspaceCont
 function CompanyObjectiveControl({ controller }: { controller: CompanyWorkspaceController }) {
   return (
     <div>
-      <label htmlFor="components-company-companyworkspaceshell-1401" className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+      <label
+        htmlFor="components-company-companyworkspaceshell-1401"
+        className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+      >
         Objective
       </label>
       <Textarea
@@ -1604,7 +1734,10 @@ function ModeButtonGroup<TMode extends string>({
 function CompanyLaunchControl({ controller }: { controller: CompanyWorkspaceController }) {
   return (
     <div>
-      <label htmlFor="components-company-companyworkspaceshell-1471" className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+      <label
+        htmlFor="components-company-companyworkspaceshell-1471"
+        className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400"
+      >
         Launch operation
       </label>
       <Input
@@ -1625,19 +1758,37 @@ function CompanyLaunchControl({ controller }: { controller: CompanyWorkspaceCont
 function CompanyControlActions({ controller }: { controller: CompanyWorkspaceController }) {
   return (
     <div className="flex flex-wrap gap-3">
-      <Button data-testid="company-launch-operation-button" onClick={() => void controller.handleLaunchOperation()} disabled={controller.launching || controller.companyPaused}>
+      <Button
+        data-testid="company-launch-operation-button"
+        onClick={() => void controller.handleLaunchOperation()}
+        disabled={controller.launching || controller.companyPaused}
+      >
         {controller.launching ? <Spinner size="xs" className="mr-2" /> : <PlayCircle className="size-4" />}
         Launch operation
       </Button>
-      <Button data-testid="company-retry-operation-button" variant="outline" onClick={() => void controller.handleRetryFailedOperation()} disabled={controller.retrying || !controller.latestFailedOperation}>
+      <Button
+        data-testid="company-retry-operation-button"
+        variant="outline"
+        onClick={() => void controller.handleRetryFailedOperation()}
+        disabled={controller.retrying || !controller.latestFailedOperation}
+      >
         {controller.retrying ? <Spinner size="xs" className="mr-2" /> : <RotateCcw className="size-4" />}
         Retry failed operation
       </Button>
-      <Button data-testid="company-update-objective-button" variant="outline" onClick={() => void controller.handleSaveObjective()} disabled={controller.savingObjective}>
+      <Button
+        data-testid="company-update-objective-button"
+        variant="outline"
+        onClick={() => void controller.handleSaveObjective()}
+        disabled={controller.savingObjective}
+      >
         {controller.savingObjective ? <Spinner size="xs" className="mr-2" /> : <Bot className="size-4" />}
         Update objective
       </Button>
-      <Button variant="outline" onClick={() => void controller.handleToggleCompanyPause()} disabled={controller.savingCompanyState}>
+      <Button
+        variant="outline"
+        onClick={() => void controller.handleToggleCompanyPause()}
+        disabled={controller.savingCompanyState}
+      >
         {controller.savingCompanyState ? (
           <Spinner size="xs" className="mr-2" />
         ) : controller.companyPaused ? (
@@ -1656,12 +1807,16 @@ function LatestOutputsPanel({ controller }: { controller: CompanyWorkspaceContro
     <div data-guide-id="company-latest-outputs" className="mt-5">
       <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">Latest outputs</p>
       <MicroExplanation className="mt-2">
-        Completed operations leave readable deliverables here so you can quickly decide whether to launch, refine, or retry.
+        Completed operations leave readable deliverables here so you can quickly decide whether to launch, refine, or
+        retry.
       </MicroExplanation>
       <div className="mt-3 space-y-3">
         {controller.latestCompletedOutputs.length ? (
           controller.latestCompletedOutputs.map((item) => (
-            <div key={item.id} className="rounded-[1.2rem] border border-zinc-900/8 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5">
+            <div
+              key={item.id}
+              className="rounded-[1.2rem] border border-zinc-900/8 bg-white/70 p-4 dark:border-white/8 dark:bg-white/5"
+            >
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{item.title}</p>
                 <Button asChild size="sm" variant="outline" className="rounded-full">
@@ -1672,7 +1827,10 @@ function LatestOutputsPanel({ controller }: { controller: CompanyWorkspaceContro
             </div>
           ))
         ) : (
-          <EmptyBlock title="No deliverables yet" description="Completed operations will surface their latest outputs here." />
+          <EmptyBlock
+            title="No deliverables yet"
+            description="Completed operations will surface their latest outputs here."
+          />
         )}
       </div>
     </div>

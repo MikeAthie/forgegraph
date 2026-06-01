@@ -13,9 +13,7 @@ type OAuthCallbackState = {
   message: string;
 };
 
-type OAuthCallbackAction =
-  | { type: "failed"; message: string }
-  | { type: "succeeded"; message: string };
+type OAuthCallbackAction = { type: "failed"; message: string } | { type: "succeeded"; message: string };
 
 function oauthCallbackReducer(state: OAuthCallbackState, action: OAuthCallbackAction): OAuthCallbackState {
   switch (action.type) {

@@ -5,6 +5,7 @@ from __future__ import annotations
 # ruff: noqa: F401,F403,F405,I001
 
 from infrastructure.orm.models.auth import *  # noqa: F403
+from infrastructure.orm.models.base import *  # noqa: F403
 from infrastructure.orm.models.base import _make_check_constraint
 
 
@@ -60,7 +61,13 @@ class PromptTemplateManager(models.Manager.from_queryset(PromptTemplateQuerySet)
 
 
 class Graph(models.Model):
-    """Graph model representing a workflow graph."""
+    """Transitional storage row for workflow definitions and company scopes.
+
+    ForgeGraph is tightening the semantic boundary between Company and Workflow
+    Definition without a destructive database rename. Until that migration
+    lands, callers must use API/view-model aliases to state which concept they
+    mean and must not treat workflow identity as proof of company authority.
+    """
 
     objects = GraphManager()
 

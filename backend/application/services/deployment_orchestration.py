@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import Any, cast
 
 from django.db import IntegrityError, transaction
 from django.db.models import Max
@@ -13,9 +13,15 @@ from application.services.company_access import has_company_access
 from application.services.company_ops import create_company_signal
 from application.services.domain_event_outbox import sanitize_outbox_payload
 from application.services.operating_model_packs import OperatingModelPackError, load_pack_definition
-from application.services.pack_tool_executions import execute_pack_tool
+from application.services.pack_tool_executions import (
+    CONNECTOR_EXECUTION_TOOL_IDS,
+    PackToolExecutionError,
+    execute_deployment_connector_tool,
+    execute_pack_tool,
+)
 from application.services.rbac import has_min_role
 from application.services.routing import register_department, route_event_to_department
+from application.services.task_lifecycle import get_or_create_backend_operation_run
 from infrastructure.orm.models import (
     ApprovalTask,
     Asset,
@@ -60,6 +66,10 @@ class DeploymentOrchestrationError(ValueError):
         super().__init__(message)
 
 
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def load_deployment_policy(
     *,
     whiteboard: WorkWhiteboard,
@@ -89,13 +99,17 @@ def load_deployment_policy(
             continue
         return _normalize_policy(
             sanitize_outbox_payload(candidate),
-            source_policy_id=str(candidate.get("source_policy_id") or candidate.get("pack_id") or ""),
+            source_policy_id=str(
+                candidate.get("source_policy_id") or candidate.get("pack_id") or ""
+            ),
             pack_id=str(candidate.get("pack_id") or ""),
         )
     if not requested and candidates:
         return _normalize_policy(
             sanitize_outbox_payload(candidates[0]),
-            source_policy_id=str(candidates[0].get("source_policy_id") or candidates[0].get("pack_id") or ""),
+            source_policy_id=str(
+                candidates[0].get("source_policy_id") or candidates[0].get("pack_id") or ""
+            ),
             pack_id=str(candidates[0].get("pack_id") or ""),
         )
     raise DeploymentOrchestrationError(
@@ -116,7 +130,7 @@ def list_available_deployment_policies(*, whiteboard: WorkWhiteboard) -> list[di
         seen.add(policy_id)
     projection = _deployment_projection(whiteboard)
     if projection is not None and isinstance(projection.json_state, dict):
-        definition = projection.json_state.get("policy") if isinstance(projection.json_state.get("policy"), dict) else {}
+        definition = _dict_or_empty(projection.json_state.get("policy"))
         policy_id = str(definition.get("policy_id") or "")
         if policy_id and policy_id not in seen:
             policies.append(definition)
@@ -137,11 +151,13 @@ def deployment_contract_for_whiteboard(
         projection = _deployment_projection(whiteboard)
         if projection is None or not isinstance(projection.json_state, dict):
             return None
-        policy = projection.json_state.get("policy") if isinstance(projection.json_state.get("policy"), dict) else {}
-        if not policy:
+        policy = _dict_or_empty(projection.json_state.get("policy"))
+        if not policy or not str(policy.get("policy_id") or "").strip():
             return None
     internal = include_internal or _can_manage_deployment(user=user, whiteboard=whiteboard)
-    return _deployment_contract(whiteboard=whiteboard, policy=policy, user=user, include_internal=internal)
+    return _deployment_contract(
+        whiteboard=whiteboard, policy=policy, user=user, include_internal=internal
+    )
 
 
 def list_deployment_state(
@@ -156,7 +172,9 @@ def list_deployment_state(
             "permission_denied",
             "You do not have access to this whiteboard deployment state.",
         )
-    policy = load_deployment_policy(whiteboard=whiteboard, policy_id=policy_id, definition=definition)
+    policy = load_deployment_policy(
+        whiteboard=whiteboard, policy_id=policy_id, definition=definition
+    )
     return _deployment_contract(
         whiteboard=whiteboard,
         policy=policy,
@@ -175,17 +193,27 @@ def prepare_deployment_for_whiteboard(
     """Prepare deployment items from config, creating receipts or honest blockers."""
 
     _ensure_can_manage_deployment(user=user, whiteboard=whiteboard)
-    policy = load_deployment_policy(whiteboard=whiteboard, policy_id=policy_id, definition=definition)
+    policy = load_deployment_policy(
+        whiteboard=whiteboard, policy_id=policy_id, definition=definition
+    )
     with transaction.atomic():
-        state_channels = create_deployment_items(user=user, whiteboard=whiteboard, policy=policy, execute_ready=True)
+        state_channels = create_deployment_items(
+            user=user, whiteboard=whiteboard, policy=policy, execute_ready=True
+        )
         status = _overall_status(state_channels)
         _upsert_deployment_projection(
             whiteboard=whiteboard,
             policy=policy,
-            state={"status": status, "channels": state_channels, "prepared_at": timezone.now().isoformat()},
+            state={
+                "status": status,
+                "channels": state_channels,
+                "prepared_at": timezone.now().isoformat(),
+            },
         )
     _refresh_whiteboard_snapshot(whiteboard)
-    return _deployment_contract(whiteboard=whiteboard, policy=policy, user=user, include_internal=True)
+    return _deployment_contract(
+        whiteboard=whiteboard, policy=policy, user=user, include_internal=True
+    )
 
 
 def create_deployment_items(
@@ -263,7 +291,9 @@ def evaluate_deployment_readiness(
             "permission_denied",
             "You do not have access to this whiteboard deployment readiness.",
         )
-    policy = load_deployment_policy(whiteboard=whiteboard, policy_id=policy_id, definition=definition)
+    policy = load_deployment_policy(
+        whiteboard=whiteboard, policy_id=policy_id, definition=definition
+    )
     channels = []
     for channel in _channels(policy):
         readiness = _readiness_for_channel(whiteboard=whiteboard, policy=policy, channel=channel)
@@ -301,7 +331,9 @@ def request_tool_execution_for_channel(
     """Request a policy-declared tool execution for one deployment channel."""
 
     _ensure_can_manage_deployment(user=user, whiteboard=whiteboard)
-    policy = load_deployment_policy(whiteboard=whiteboard, policy_id=policy_id, definition=definition)
+    policy = load_deployment_policy(
+        whiteboard=whiteboard, policy_id=policy_id, definition=definition
+    )
     channel = _channel(policy, channel_id)
     if channel is None:
         raise DeploymentOrchestrationError(
@@ -352,17 +384,88 @@ def request_tool_execution_for_channel(
         return blocked
 
     operation = _deployment_run(user=user, whiteboard=whiteboard, policy=policy, channel=channel)
-    payload = _tool_inputs(whiteboard=whiteboard, policy=policy, channel=channel, inputs=inputs or {})
-    receipt = execute_pack_tool(
-        company=whiteboard.company,
-        user=user,
-        operation=operation,
-        tool_id=tool_id,
-        inputs=payload,
-        dry_run=dry_run,
-        idempotency_key=_deployment_key(whiteboard=whiteboard, policy=policy, suffix=f"tool:{channel_id}:{dry_run}"),
+    payload = _tool_inputs(
+        whiteboard=whiteboard, policy=policy, channel=channel, inputs=inputs or {}
     )
+    approval = _approved_approval_task(whiteboard=whiteboard, policy=policy, channel=channel)
+    try:
+        if _is_managed_connector_tool(tool_id):
+            receipt = execute_deployment_connector_tool(
+                company=whiteboard.company,
+                user=user,
+                operation=operation,
+                tool_id=tool_id,
+                inputs=payload,
+                dry_run=dry_run,
+                idempotency_key=_deployment_key(
+                    whiteboard=whiteboard,
+                    policy=policy,
+                    suffix=f"tool:{channel_id}:{dry_run}",
+                ),
+                approved=approval is not None,
+                approval_id=str(approval.id) if approval is not None else "",
+                policy_allows_live=bool(channel.get("allow_live_execution", False)),
+                requires_unsubscribe_footer=bool(channel.get("requires_unsubscribe_footer", False)),
+                operator_confirmed=bool(
+                    payload.get("operator_confirmed") or channel.get("operator_confirmed")
+                ),
+                policy_allows_web_automation_evidence=bool(
+                    channel.get("allow_web_automation_evidence", False)
+                ),
+                policy_allows_manual_publish_evidence=bool(
+                    channel.get("allow_manual_publish_evidence", False)
+                ),
+                policy_allows_provider_publish=bool(channel.get("allow_provider_publish", False)),
+                requires_compliance_gate=bool(channel.get("requires_compliance_gate", False)),
+                requires_originality_check=bool(channel.get("requires_originality_check", False)),
+            )
+        else:
+            receipt = execute_pack_tool(
+                company=whiteboard.company,
+                user=user,
+                operation=operation,
+                tool_id=tool_id,
+                inputs=payload,
+                dry_run=dry_run,
+                idempotency_key=_deployment_key(
+                    whiteboard=whiteboard,
+                    policy=policy,
+                    suffix=f"tool:{channel_id}:{dry_run}",
+                ),
+            )
+    except PackToolExecutionError as exc:
+        blocked = mark_channel_blocked(
+            user=user,
+            whiteboard=whiteboard,
+            policy=policy,
+            channel=channel,
+            reason_code=exc.code,
+            reason=exc.message,
+            operation=operation,
+        )
+        _merge_channel_state(whiteboard=whiteboard, policy=policy, item=blocked)
+        _refresh_whiteboard_snapshot(whiteboard)
+        return blocked
     tool_execution_id = str(receipt.get("tool_execution_id") or "")
+    if str(receipt.get("status") or "") == "failed":
+        error = _dict_or_empty(receipt.get("error"))
+        blocked = mark_channel_blocked(
+            user=user,
+            whiteboard=whiteboard,
+            policy=policy,
+            channel=channel,
+            reason_code=str(error.get("error_code") or "provider_call_failed"),
+            reason=str(error.get("error_message") or "Connector provider call failed."),
+            operation=operation,
+        )
+        blocked = {
+            **blocked,
+            "tool_execution_id": tool_execution_id,
+            "receipt": _receipt_payload(receipt),
+        }
+        _merge_channel_state(whiteboard=whiteboard, policy=policy, item=blocked)
+        _refresh_whiteboard_snapshot(whiteboard)
+        return blocked
     item = _channel_payload(
         whiteboard=whiteboard,
         policy=policy,
@@ -394,6 +497,8 @@ def mark_channel_blocked(
         company=whiteboard.company,
         actor=user,
         signal_type="manual",
+        signal_kind="capability_gap",
+        domain_context="deployment",
         source="deployment_orchestration",
         external_key=_deployment_key(
             whiteboard=whiteboard,
@@ -502,11 +607,19 @@ def _deployment_contract(
             channel=channel,
             status=str(state_channels.get(channel_id, {}).get("status") or "not_started"),
             blocked_reason=str(state_channels.get(channel_id, {}).get("blocked_reason") or ""),
-            blocked_reason_code=str(state_channels.get(channel_id, {}).get("blocked_reason_code") or ""),
+            blocked_reason_code=str(
+                state_channels.get(channel_id, {}).get("blocked_reason_code") or ""
+            ),
             operation_id=str(state_channels.get(channel_id, {}).get("operation_id") or ""),
-            tool_execution_id=str(state_channels.get(channel_id, {}).get("tool_execution_id") or ""),
-            company_signal_id=str(state_channels.get(channel_id, {}).get("company_signal_id") or ""),
-            routing_record_id=str(state_channels.get(channel_id, {}).get("routing_record_id") or ""),
+            tool_execution_id=str(
+                state_channels.get(channel_id, {}).get("tool_execution_id") or ""
+            ),
+            company_signal_id=str(
+                state_channels.get(channel_id, {}).get("company_signal_id") or ""
+            ),
+            routing_record_id=str(
+                state_channels.get(channel_id, {}).get("routing_record_id") or ""
+            ),
             approval_task_id=str(state_channels.get(channel_id, {}).get("approval_task_id") or ""),
             asset_id=str(state_channels.get(channel_id, {}).get("asset_id") or ""),
             asset_version_id=str(state_channels.get(channel_id, {}).get("asset_version_id") or ""),
@@ -529,11 +642,19 @@ def _deployment_contract(
     return sanitize_outbox_payload(contract)
 
 
-def _normalize_policy(policy: dict[str, Any], *, source_policy_id: str, pack_id: str) -> dict[str, Any]:
+def _normalize_policy(
+    policy: dict[str, Any], *, source_policy_id: str, pack_id: str
+) -> dict[str, Any]:
     policy_id = str(policy.get("policy_id") or policy.get("id") or "").strip()
     if not policy_id:
-        raise DeploymentOrchestrationError("deployment_policy_id_required", "Deployment policy requires an id.")
-    channels = [_normalize_channel(item) for item in list(policy.get("channels") or []) if isinstance(item, dict)]
+        raise DeploymentOrchestrationError(
+            "deployment_policy_id_required", "Deployment policy requires an id."
+        )
+    channels = [
+        _normalize_channel(item)
+        for item in list(policy.get("channels") or [])
+        if isinstance(item, dict)
+    ]
     if not channels:
         raise DeploymentOrchestrationError(
             "deployment_channels_required",
@@ -541,7 +662,9 @@ def _normalize_policy(policy: dict[str, Any], *, source_policy_id: str, pack_id:
         )
     return {
         "policy_id": policy_id[:160],
-        "source_policy_id": str(policy.get("source_policy_id") or source_policy_id or policy_id)[:200],
+        "source_policy_id": str(policy.get("source_policy_id") or source_policy_id or policy_id)[
+            :200
+        ],
         "pack_id": str(policy.get("pack_id") or pack_id or "")[:160],
         "required_whiteboard_status": policy.get("required_whiteboard_status") or "",
         "required_approval_status": str(policy.get("required_approval_status") or "approved")[:32],
@@ -557,19 +680,39 @@ def _normalize_policy(policy: dict[str, Any], *, source_policy_id: str, pack_id:
 def _normalize_channel(item: dict[str, Any]) -> dict[str, Any]:
     channel_id = str(item.get("id") or "").strip()
     if not channel_id:
-        raise DeploymentOrchestrationError("deployment_channel_id_required", "Deployment channel requires an id.")
+        raise DeploymentOrchestrationError(
+            "deployment_channel_id_required", "Deployment channel requires an id."
+        )
     return {
         "id": channel_id[:120],
-        "display_name": str(item.get("display_name") or item.get("name") or _label(channel_id))[:160],
-        "department": str(item.get("department") or item.get("department_slug") or "deployment-ops")[:160],
-        "department_name": str(item.get("department_name") or _label(str(item.get("department") or "deployment-ops")))[:255],
-        "department_type": str(item.get("department_type") or item.get("department") or "deployment_ops")[:64],
+        "display_name": str(item.get("display_name") or item.get("name") or _label(channel_id))[
+            :160
+        ],
+        "department": str(
+            item.get("department") or item.get("department_slug") or "deployment-ops"
+        )[:160],
+        "department_name": str(
+            item.get("department_name") or _label(str(item.get("department") or "deployment-ops"))
+        )[:255],
+        "department_type": str(
+            item.get("department_type") or item.get("department") or "deployment_ops"
+        )[:64],
         "required_connector": str(item.get("required_connector") or "")[:160],
         "tool_id": str(item.get("tool_id") or "")[:160],
         "asset_types": [str(value)[:80] for value in list(item.get("asset_types") or [])],
         "approval_required": bool(item.get("approval_required", True)),
         "allow_dry_run": bool(item.get("allow_dry_run", True)),
         "allow_live_execution": bool(item.get("allow_live_execution", False)),
+        "allow_sandbox_evidence": bool(item.get("allow_sandbox_evidence", False)),
+        "allow_web_automation_evidence": bool(item.get("allow_web_automation_evidence", False)),
+        "allow_manual_publish_evidence": bool(item.get("allow_manual_publish_evidence", False)),
+        "allow_provider_publish": bool(item.get("allow_provider_publish", False)),
+        "requires_unsubscribe_footer": bool(item.get("requires_unsubscribe_footer", False)),
+        "requires_compliance_gate": bool(item.get("requires_compliance_gate", False)),
+        "requires_originality_check": bool(item.get("requires_originality_check", False)),
+        "operator_confirmed": bool(item.get("operator_confirmed", False)),
+        "operator_confirmation_required": bool(item.get("operator_confirmation_required", False)),
+        "platform": str(item.get("platform") or "")[:80],
         "risk_level": str(item.get("risk_level") or "")[:64],
         "priority": str(item.get("priority") or "normal")[:16],
         "metadata": sanitize_outbox_payload(item.get("metadata") or {}),
@@ -604,17 +747,23 @@ def _program_for_whiteboard(whiteboard: WorkWhiteboard) -> CompanyProgram | None
     for program_id in candidates:
         if not program_id:
             continue
-        program = CompanyProgram.objects.filter(
-            organization=whiteboard.organization,
-            company=whiteboard.company,
-            id=program_id,
-        ).select_related("installation", "installation__pack_release").first()
+        program = (
+            CompanyProgram.objects.filter(
+                organization=whiteboard.organization,
+                company=whiteboard.company,
+                id=program_id,
+            )
+            .select_related("installation", "installation__pack_release")
+            .first()
+        )
         if program is not None:
             return program
     return None
 
 
-def _policies_from_installation(installation: CompanyOperatingModelInstallation | None) -> list[dict[str, Any]]:
+def _policies_from_installation(
+    installation: CompanyOperatingModelInstallation | None,
+) -> list[dict[str, Any]]:
     if installation is None:
         return []
     sources = [
@@ -784,7 +933,11 @@ def _connector_status_available(item: dict[str, Any]) -> bool:
 def _tool_available(*, company: Graph, tool_id: str) -> bool:
     if not tool_id:
         return False
-    for installation in CompanyOperatingModelInstallation.objects.filter(company=company, status="active"):
+    if tool_id in CONNECTOR_EXECUTION_TOOL_IDS:
+        return True
+    for installation in CompanyOperatingModelInstallation.objects.filter(
+        company=company, status="active"
+    ):
         try:
             definition = load_pack_definition(installation.pack_id)
         except OperatingModelPackError:
@@ -809,10 +962,16 @@ def _asset_for_channel(*, whiteboard: WorkWhiteboard, channel: dict[str, Any]) -
     ).exclude(status="deleted")
     if not asset_types:
         return queryset.order_by("-created_at").first()
-    asset = queryset.filter(metadata_json__output_type__in=asset_types).order_by("-created_at").first()
+    asset = (
+        queryset.filter(metadata_json__output_type__in=asset_types).order_by("-created_at").first()
+    )
     if asset is not None:
         return asset
-    return queryset.filter(metadata_json__artifact_type__in=asset_types).order_by("-created_at").first()
+    return (
+        queryset.filter(metadata_json__artifact_type__in=asset_types)
+        .order_by("-created_at")
+        .first()
+    )
 
 
 def _blocked_department(
@@ -821,8 +980,13 @@ def _blocked_department(
     policy: dict[str, Any],
     channel: dict[str, Any],
 ) -> DepartmentRegistry:
-    blocked = policy.get("on_blocked") if isinstance(policy.get("on_blocked"), dict) else {}
-    slug = str(blocked.get("route_to_department") or blocked.get("route_to") or channel.get("department") or "deployment-ops")
+    blocked = _dict_or_empty(policy.get("on_blocked"))
+    slug = str(
+        blocked.get("route_to_department")
+        or blocked.get("route_to")
+        or channel.get("department")
+        or "deployment-ops"
+    )
     name = str(channel.get("department_name") or _label(slug))
     return register_department(
         organization=whiteboard.organization,
@@ -836,19 +1000,38 @@ def _blocked_department(
 
 def _deployment_graph_version(*, company: Graph, policy_id: str) -> GraphVersion:
     key = f"deployment:{policy_id}"[:255]
-    existing = GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first()
+    existing = cast(
+        GraphVersion | None,
+        GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first(),
+    )
     if existing is not None:
         return existing
-    version = (GraphVersion.objects.filter(graph=company).aggregate(max_version=Max("version"))["max_version"] or 0) + 1
+    version = (
+        GraphVersion.objects.filter(graph=company).aggregate(max_version=Max("version"))[
+            "max_version"
+        ]
+        or 0
+    ) + 1
     try:
-        return GraphVersion.objects.create(
-            graph=company,
-            version=version,
-            external_idempotency_key=key,
-            graph_json={"nodes": [], "edges": [], "source": "deployment_orchestration", "policy_id": policy_id},
+        return cast(
+            GraphVersion,
+            GraphVersion.objects.create(
+                graph=company,
+                version=version,
+                external_idempotency_key=key,
+                graph_json={
+                    "nodes": [],
+                    "edges": [],
+                    "source": "deployment_orchestration",
+                    "policy_id": policy_id,
+                },
+            ),
         )
     except IntegrityError:
-        existing = GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first()
+        existing = cast(
+            GraphVersion | None,
+            GraphVersion.objects.filter(graph=company, external_idempotency_key=key).first(),
+        )
         if existing is not None:
             return existing
         raise
@@ -865,21 +1048,16 @@ def _deployment_run(
     channel_id = str(channel["id"])
     graph_version = _deployment_graph_version(company=whiteboard.company, policy_id=policy_id)
     key = _deployment_key(whiteboard=whiteboard, policy=policy, suffix=f"run:{channel_id}")
-    run = Run.objects.filter(
-        organization=whiteboard.organization,
-        graph_version__graph=whiteboard.company,
-        input_json__idempotency_key=key,
-    ).first()
-    if run is not None:
-        return run
-    return Run.objects.create(
+    now = timezone.now()
+    return get_or_create_backend_operation_run(
         owner=user,
         organization=whiteboard.organization,
         thread_id=whiteboard.communication_thread_id,
         graph_version=graph_version,
+        idempotency_key=key,
         status="succeeded",
-        started_at=timezone.now(),
-        ended_at=timezone.now(),
+        started_at=now,
+        ended_at=now,
         input_json={
             "idempotency_key": key,
             "whiteboard_id": str(whiteboard.id),
@@ -888,7 +1066,11 @@ def _deployment_run(
             "pack_id": policy.get("pack_id"),
             "channel_id": channel_id,
         },
-        output_json={"whiteboard_id": str(whiteboard.id), "policy_id": policy_id, "channel_id": channel_id},
+        output_json={
+            "whiteboard_id": str(whiteboard.id),
+            "policy_id": policy_id,
+            "channel_id": channel_id,
+        },
         dispatch_graph_json=graph_version.graph_json,
     )
 
@@ -906,9 +1088,32 @@ def _tool_inputs(
         "policy_id": policy.get("policy_id"),
         "channel_id": channel.get("id"),
     }
-    payload.setdefault("subject", whiteboard.request_summary or whiteboard.objective or "Deployment dry run")
-    payload.setdefault("title", whiteboard.request_summary or whiteboard.objective or "Deployment dry run")
+    payload.setdefault(
+        "subject", whiteboard.request_summary or whiteboard.objective or "Deployment dry run"
+    )
+    payload.setdefault(
+        "title", whiteboard.request_summary or whiteboard.objective or "Deployment dry run"
+    )
     payload.setdefault("recipients", [])
+    metadata = _dict_or_empty(channel.get("metadata"))
+    platform = str(
+        channel.get("platform") or metadata.get("platform") or channel.get("id") or ""
+    ).strip()
+    if platform:
+        payload.setdefault("platform", platform)
+    asset = _asset_for_channel(whiteboard=whiteboard, channel=channel)
+    if asset is not None:
+        payload.setdefault("asset_id", str(asset.id))
+        payload.setdefault("asset_ids", [str(asset.id)])
+        payload.setdefault("asset_approved", asset.status == "active")
+        payload.setdefault("content_approved", asset.status == "active")
+    payload.setdefault("deployment_channel_id", channel.get("id"))
+    payload.setdefault(
+        "requires_compliance_gate", bool(channel.get("requires_compliance_gate", False))
+    )
+    payload.setdefault(
+        "requires_originality_check", bool(channel.get("requires_originality_check", False))
+    )
     return payload
 
 
@@ -934,7 +1139,7 @@ def _channel_payload(
     approval = _approved_approval_task(whiteboard=whiteboard, policy=policy, channel=channel)
     asset = _asset_for_channel(whiteboard=whiteboard, channel=channel)
     version_id = _asset_version_id(asset)
-    item = {
+    item: dict[str, Any] = {
         "id": str(channel["id"]),
         "display_name": str(channel.get("display_name") or _label(str(channel["id"]))),
         "status": status if status in VALID_DEPLOYMENT_STATUSES else "not_started",
@@ -960,6 +1165,25 @@ def _channel_payload(
                 "required_connector": str(channel.get("required_connector") or ""),
                 "tool_id": str(channel.get("tool_id") or ""),
                 "asset_types": list(channel.get("asset_types") or []),
+                "allow_sandbox_evidence": bool(channel.get("allow_sandbox_evidence", False)),
+                "allow_web_automation_evidence": bool(
+                    channel.get("allow_web_automation_evidence", False)
+                ),
+                "allow_manual_publish_evidence": bool(
+                    channel.get("allow_manual_publish_evidence", False)
+                ),
+                "allow_provider_publish": bool(channel.get("allow_provider_publish", False)),
+                "requires_unsubscribe_footer": bool(
+                    channel.get("requires_unsubscribe_footer", False)
+                ),
+                "requires_compliance_gate": bool(channel.get("requires_compliance_gate", False)),
+                "requires_originality_check": bool(
+                    channel.get("requires_originality_check", False)
+                ),
+                "operator_confirmation_required": bool(
+                    channel.get("operator_confirmation_required", False)
+                ),
+                "platform": str(channel.get("platform") or ""),
                 "risk_level": str(channel.get("risk_level") or ""),
                 "metadata": sanitize_outbox_payload(channel.get("metadata") or {}),
             }
@@ -968,7 +1192,7 @@ def _channel_payload(
 
 
 def _receipt_payload(receipt: dict[str, Any]) -> dict[str, Any]:
-    result = receipt.get("result") if isinstance(receipt.get("result"), dict) else {}
+    result = _dict_or_empty(receipt.get("result"))
     return sanitize_outbox_payload(
         {
             "tool_execution_id": receipt.get("tool_execution_id"),
@@ -978,11 +1202,29 @@ def _receipt_payload(receipt: dict[str, Any]) -> dict[str, Any]:
             "completed_at": receipt.get("completed_at"),
             "result": {
                 "provider": result.get("provider"),
+                "platform": result.get("platform"),
                 "mode": result.get("mode"),
                 "status": result.get("status"),
                 "message_id": result.get("message_id"),
+                "provider_message_id": result.get("provider_message_id"),
+                "provider_post_id": result.get("provider_post_id"),
+                "provider_container_id": result.get("provider_container_id"),
+                "evidence_mode": result.get("evidence_mode"),
+                "sanitized": result.get("sanitized") is not False,
                 "recipient_count": result.get("recipient_count"),
                 "recipient_domains": result.get("recipient_domains"),
+                "recipient_hashes": result.get("recipient_hashes"),
+                "allowlist_matched": result.get("allowlist_matched"),
+                "session_required": result.get("session_required"),
+                "session_status": result.get("session_status"),
+                "asset_count": result.get("asset_count"),
+                "media_asset_ids": result.get("media_asset_ids"),
+                "caption_hash": result.get("caption_hash"),
+                "account_id_hash": result.get("account_id_hash"),
+                "page_id_hash": result.get("page_id_hash"),
+                "profile_id_hash": result.get("profile_id_hash"),
+                "external_post_url_hash": result.get("external_post_url_hash"),
+                "external_post_id_hash": result.get("external_post_id_hash"),
             },
         }
     )
@@ -1000,14 +1242,18 @@ def _asset_version_id(asset: Asset | None) -> str:
     if asset is None:
         return ""
     metadata = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
-    version_id = str(metadata.get("canonical_asset_version_id") or metadata.get("asset_version_id") or "")
+    version_id = str(
+        metadata.get("canonical_asset_version_id") or metadata.get("asset_version_id") or ""
+    )
     if version_id:
         return version_id
     version = asset.versions.order_by("-version_number").first()
     return str(version.id) if version is not None else ""
 
 
-def _merge_channel_state(*, whiteboard: WorkWhiteboard, policy: dict[str, Any], item: dict[str, Any]) -> None:
+def _merge_channel_state(
+    *, whiteboard: WorkWhiteboard, policy: dict[str, Any], item: dict[str, Any]
+) -> None:
     state = _deployment_state(whiteboard)
     existing = {
         str(channel.get("id") or ""): channel
@@ -1015,7 +1261,15 @@ def _merge_channel_state(*, whiteboard: WorkWhiteboard, policy: dict[str, Any], 
         if isinstance(channel, dict)
     }
     existing[str(item["id"])] = sanitize_outbox_payload(item)
-    channels = [existing.get(str(channel["id"]), _channel_payload(whiteboard=whiteboard, policy=policy, channel=channel, status="not_started")) for channel in _channels(policy)]
+    channels = [
+        existing.get(
+            str(channel["id"]),
+            _channel_payload(
+                whiteboard=whiteboard, policy=policy, channel=channel, status="not_started"
+            ),
+        )
+        for channel in _channels(policy)
+    ]
     _upsert_deployment_projection(
         whiteboard=whiteboard,
         policy=policy,
@@ -1031,7 +1285,14 @@ def _upsert_deployment_projection(
 ) -> StateProjection:
     existing = _deployment_projection(whiteboard)
     merged = {
-        **((existing.json_state if existing is not None and isinstance(existing.json_state, dict) else {}) or {}),
+        **(
+            (
+                existing.json_state
+                if existing is not None and isinstance(existing.json_state, dict)
+                else {}
+            )
+            or {}
+        ),
         **sanitize_outbox_payload(state),
         "schema_version": DEPLOYMENT_SCHEMA_VERSION,
         "whiteboard_id": str(whiteboard.id),
@@ -1046,7 +1307,9 @@ def _upsert_deployment_projection(
         projection_type=_deployment_projection_type(whiteboard),
         defaults={
             "display_label": "Whiteboard deployment",
-            "source_refs_json": [{"whiteboard_id": str(whiteboard.id), "policy_id": str(policy["policy_id"])}],
+            "source_refs_json": [
+                {"whiteboard_id": str(whiteboard.id), "policy_id": str(policy["policy_id"])}
+            ],
             "json_state": merged,
             "markdown_summary": "Whiteboard deployment state from configured policy.",
             "generated_by": "system",
@@ -1126,6 +1389,10 @@ def _overall_status(channels: list[dict[str, Any]]) -> str:
 
 def _channels(policy: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in list(policy.get("channels") or []) if isinstance(item, dict)]
+
+
+def _is_managed_connector_tool(tool_id: str) -> bool:
+    return str(tool_id or "").strip() in CONNECTOR_EXECUTION_TOOL_IDS
 
 
 def _channel(policy: dict[str, Any], channel_id: str) -> dict[str, Any] | None:

@@ -966,6 +966,8 @@ def _upsert_metric_input_required_signal(
         company=review.company,
         actor=user,
         signal_type="manual",
+        signal_kind="capability_gap",
+        domain_context="reporting",
         title=f"{review.display_name} needs metric inputs",
         summary=(
             f"{review.display_name} cannot run for {period.period_start.isoformat()} "

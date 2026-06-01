@@ -420,7 +420,10 @@ function useGraphEditorController({
     (value: SetStateAction<boolean>) => setUiField("isEditingMetadata", value),
     [setUiField],
   );
-  const setStartingRun = useCallback((value: SetStateAction<boolean>) => setUiField("startingRun", value), [setUiField]);
+  const setStartingRun = useCallback(
+    (value: SetStateAction<boolean>) => setUiField("startingRun", value),
+    [setUiField],
+  );
   const setOverlayRun = useCallback(
     (value: SetStateAction<RunDetail | null>) => setUiField("overlayRun", value),
     [setUiField],
@@ -672,20 +675,20 @@ function useGraphEditorController({
       });
 
       const newEdges: Edge[] = clipboard.edges.flatMap((edge): Edge[] => {
-          const source = idMap.get(edge.source);
-          const target = idMap.get(edge.target);
-          if (!source || !target) return [];
+        const source = idMap.get(edge.source);
+        const target = idMap.get(edge.target);
+        if (!source || !target) return [];
 
-          return [
-            {
-              id: generateId(),
-              source,
-              target,
-              label: edge.label,
-              data: deepClone(edge.data),
-            } as Edge,
-          ];
-        });
+        return [
+          {
+            id: generateId(),
+            source,
+            target,
+            label: edge.label,
+            data: deepClone(edge.data),
+          } as Edge,
+        ];
+      });
 
       setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
       setEdges((eds) => [...eds.map((e) => ({ ...e, selected: false })), ...newEdges]);
@@ -755,7 +758,16 @@ function useGraphEditorController({
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setIsDirty(true);
-  }, [getSelectedEdges, getSelectedNodes, pushHistory, setEdges, setIsDirty, setNodes, setSelectedEdgeId, setSelectedNodeId]);
+  }, [
+    getSelectedEdges,
+    getSelectedNodes,
+    pushHistory,
+    setEdges,
+    setIsDirty,
+    setNodes,
+    setSelectedEdgeId,
+    setSelectedNodeId,
+  ]);
 
   // Sync editor state when the loaded version changes (save or version switch).
   useEffect(() => {
@@ -857,7 +869,15 @@ function useGraphEditorController({
         setOverlayRunRefreshing(false);
       }
     },
-    [applyExecutionOverlay, graphId, overlayRunId, setOverlayRun, setOverlayRunError, setOverlayRunLoading, setOverlayRunRefreshing],
+    [
+      applyExecutionOverlay,
+      graphId,
+      overlayRunId,
+      setOverlayRun,
+      setOverlayRunError,
+      setOverlayRunLoading,
+      setOverlayRunRefreshing,
+    ],
   );
 
   useEffect(() => {
@@ -942,15 +962,21 @@ function useGraphEditorController({
     [edges, nodes, pushHistory, setEdges, setIsDirty],
   );
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedNodeId(node.id);
-    setSelectedEdgeId(null);
-  }, [setSelectedEdgeId, setSelectedNodeId]);
+  const onNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      setSelectedNodeId(node.id);
+      setSelectedEdgeId(null);
+    },
+    [setSelectedEdgeId, setSelectedNodeId],
+  );
 
-  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
-    setSelectedEdgeId(edge.id);
-    setSelectedNodeId(null);
-  }, [setSelectedEdgeId, setSelectedNodeId]);
+  const onEdgeClick = useCallback(
+    (_: React.MouseEvent, edge: Edge) => {
+      setSelectedEdgeId(edge.id);
+      setSelectedNodeId(null);
+    },
+    [setSelectedEdgeId, setSelectedNodeId],
+  );
 
   const onNodeDragStop = useCallback<OnNodeDrag>(
     (_, node, draggingNodes) => {
@@ -1110,7 +1136,19 @@ function useGraphEditorController({
       // Fallback: add node directly without config dialog
       addExecutableNode(nodeType, { sourceNodeId, config: {} });
     },
-    [addExecutableNode, captureFocusableTarget, nodes, selectedNodeId, setConfigDialogInitialConfig, setConfigDialogInitialLabel, setConfigDialogNodeType, setConfigDialogOpen, setConfigDialogSourceNodeId, setPromptWizardOpen, setPromptWizardSourceNodeId],
+    [
+      addExecutableNode,
+      captureFocusableTarget,
+      nodes,
+      selectedNodeId,
+      setConfigDialogInitialConfig,
+      setConfigDialogInitialLabel,
+      setConfigDialogNodeType,
+      setConfigDialogOpen,
+      setConfigDialogSourceNodeId,
+      setPromptWizardOpen,
+      setPromptWizardSourceNodeId,
+    ],
   );
 
   const handleAddMarketplaceNode = useCallback(
@@ -1157,7 +1195,16 @@ function useGraphEditorController({
         showInfo("Credential setup", `Configure ${provider} credentials in this dialog before adding the node.`);
       }
     },
-    [captureFocusableTarget, nodes, selectedNodeId, setConfigDialogInitialConfig, setConfigDialogInitialLabel, setConfigDialogNodeType, setConfigDialogOpen, setConfigDialogSourceNodeId],
+    [
+      captureFocusableTarget,
+      nodes,
+      selectedNodeId,
+      setConfigDialogInitialConfig,
+      setConfigDialogInitialLabel,
+      setConfigDialogNodeType,
+      setConfigDialogOpen,
+      setConfigDialogSourceNodeId,
+    ],
   );
 
   const handleConfigDialogComplete = useCallback(
@@ -1174,7 +1221,16 @@ function useGraphEditorController({
       setConfigDialogInitialConfig({});
       setConfigDialogInitialLabel(null);
     },
-    [addExecutableNode, configDialogNodeType, configDialogSourceNodeId, setConfigDialogInitialConfig, setConfigDialogInitialLabel, setConfigDialogNodeType, setConfigDialogOpen, setConfigDialogSourceNodeId],
+    [
+      addExecutableNode,
+      configDialogNodeType,
+      configDialogSourceNodeId,
+      setConfigDialogInitialConfig,
+      setConfigDialogInitialLabel,
+      setConfigDialogNodeType,
+      setConfigDialogOpen,
+      setConfigDialogSourceNodeId,
+    ],
   );
 
   const handleOpenMemoryConfig = useCallback(() => {
@@ -1696,7 +1752,17 @@ function useGraphEditorController({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleCopyShortcut, handleDeleteShortcut, handleDuplicateShortcut, handlePasteShortcut, handleRedoShortcut, handleSaveShortcut, handleUndoShortcut, saving, setNodes]);
+  }, [
+    handleCopyShortcut,
+    handleDeleteShortcut,
+    handleDuplicateShortcut,
+    handlePasteShortcut,
+    handleRedoShortcut,
+    handleSaveShortcut,
+    handleUndoShortcut,
+    saving,
+    setNodes,
+  ]);
 
   const overlaySelectedNodeRuns: NodeRunItem[] =
     overlayRun && selectedNodeId
@@ -1727,15 +1793,21 @@ function useGraphEditorController({
     });
   }, [addExecutableNode, selectedNodeId]);
 
-  const handleFocusNode = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId);
-    setSelectedEdgeId(null);
-  }, [setSelectedEdgeId, setSelectedNodeId]);
+  const handleFocusNode = useCallback(
+    (nodeId: string) => {
+      setSelectedNodeId(nodeId);
+      setSelectedEdgeId(null);
+    },
+    [setSelectedEdgeId, setSelectedNodeId],
+  );
 
-  const handleFocusEdge = useCallback((edgeId: string) => {
-    setSelectedEdgeId(edgeId);
-    setSelectedNodeId(null);
-  }, [setSelectedEdgeId, setSelectedNodeId]);
+  const handleFocusEdge = useCallback(
+    (edgeId: string) => {
+      setSelectedEdgeId(edgeId);
+      setSelectedNodeId(null);
+    },
+    [setSelectedEdgeId, setSelectedNodeId],
+  );
 
   const handleQuickFix = useCallback(
     (error: import("@/lib/graph-validator").ValidationError, fixLabel: string) => {
@@ -1803,7 +1875,17 @@ function useGraphEditorController({
         setStartingRun(false);
       }
     },
-    [applyAgentBlueprint, currentVersionId, graphId, isDirty, loadingVersion, push, saveGraphSnapshot, saving, setStartingRun],
+    [
+      applyAgentBlueprint,
+      currentVersionId,
+      graphId,
+      isDirty,
+      loadingVersion,
+      push,
+      saveGraphSnapshot,
+      saving,
+      setStartingRun,
+    ],
   );
 
   return {
@@ -2082,7 +2164,10 @@ function GraphCanvasPanel({ controller }: { controller: GraphEditorController })
           </button>
         </Panel>
       </ReactFlow>
-      <ValidationOverlay onAddStartNode={controller.handleAddStartNode} onAddOutputNode={controller.handleAddOutputNode} />
+      <ValidationOverlay
+        onAddStartNode={controller.handleAddStartNode}
+        onAddOutputNode={controller.handleAddOutputNode}
+      />
     </div>
   );
 }
@@ -2143,11 +2228,13 @@ function GraphVersionSelect({ controller }: { controller: GraphEditorController 
         {controller.availableVersions.length === 0 ? (
           <option value="">No version</option>
         ) : (
-          controller.availableVersions.toSorted((left, right) => right.version - left.version).map((version) => (
-            <option key={version.id} value={version.id}>
-              v{version.version}
-            </option>
-          ))
+          controller.availableVersions
+            .toSorted((left, right) => right.version - left.version)
+            .map((version) => (
+              <option key={version.id} value={version.id}>
+                v{version.version}
+              </option>
+            ))
         )}
       </select>
       {controller.isDirty ? <span className="text-amber-500 ml-1">*</span> : null}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from django.utils import timezone
 
@@ -302,6 +302,8 @@ def _create_review_board_improvement_signals(
             company=company,
             actor=user,
             signal_type="manual",
+            signal_kind="feedback",
+            domain_context="review_board",
             source="consulting_review_board",
             external_key=f"review_board:{evaluation.id}:{index}",
             title=str(item.get("title") or "Review board improvement"),
@@ -827,11 +829,7 @@ def _has_critical_review_board_score_one(sections: dict[str, dict[str, Any]]) ->
 
 
 def _sections_min_score(sections: dict[str, dict[str, Any]]) -> float:
-    return min(
-        float(item["score"])
-        for section in sections.values()
-        for item in section["scores"]
-    )
+    return min(float(item["score"]) for section in sections.values() for item in section["scores"])
 
 
 def _review_board_min_score(scorecard: dict[str, Any]) -> float:
@@ -875,12 +873,11 @@ def _rounded_average(values: list[float]) -> float:
 def _has_exceptional_rationale(item: dict[str, Any]) -> bool:
     text = str(item.get("rationale") or "").lower()
     return any(
-        marker in text
-        for marker in ("exceptional", "top-tier", "best-in-class", "outstanding")
+        marker in text for marker in ("exceptional", "top-tier", "best-in-class", "outstanding")
     )
 
 
-def _raise_submitted_scorecard_error(field: str, message: str) -> None:
+def _raise_submitted_scorecard_error(field: str, message: str) -> NoReturn:
     raise SubmittedScorecardValidationError({f"inputs.submitted_scorecard.{field}": [message]})
 
 
@@ -1550,6 +1547,8 @@ def _create_scorecard_signals(
             company=company,
             actor=user,
             signal_type="manual",
+            signal_kind="risk",
+            domain_context="evaluation",
             title=f"{result.get('label')} needs review",
             summary=f"{result.get('label')} was classified as {result.get('level_label')}.",
             source="evaluation_scorecard",
