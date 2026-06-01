@@ -19,6 +19,7 @@ from application.services.pack_tool_executions import (
     execute_deployment_connector_tool,
     execute_pack_tool,
 )
+from application.services.product_operations import contract_operation_metadata
 from application.services.rbac import has_min_role
 from application.services.routing import register_department, route_event_to_department
 from application.services.task_lifecycle import get_or_create_backend_operation_run
@@ -629,6 +630,13 @@ def _deployment_contract(
             include_internal=include_internal,
         )
         channels.append(item)
+    operation_state = contract_operation_metadata(
+        whiteboard=whiteboard,
+        target_type="deployment_contract",
+        target_id=str(policy["policy_id"]),
+    )
+    current_state = _current_state_payload(state=state, include_internal=include_internal)
+    current_state.update(operation_state)
     contract = {
         "whiteboard_id": str(whiteboard.id),
         "policy_id": str(policy["policy_id"]),
@@ -636,8 +644,9 @@ def _deployment_contract(
         "pack_id": str(policy.get("pack_id") or ""),
         "status": str(state.get("status") or _overall_status(channels)),
         "channels": channels,
-        "current_state": _current_state_payload(state=state, include_internal=include_internal),
+        "current_state": current_state,
         "allowed_actions": _allowed_actions(whiteboard=whiteboard, policy=policy) if manage else [],
+        **operation_state,
     }
     return sanitize_outbox_payload(contract)
 

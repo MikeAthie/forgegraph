@@ -14,6 +14,7 @@ from django.utils import timezone
 from application.services.company_access import has_company_access
 from application.services.company_ops import create_company_signal
 from application.services.domain_event_outbox import sanitize_outbox_payload
+from application.services.product_operations import contract_operation_metadata
 from application.services.rbac import has_min_role
 from application.services.routing import register_department, route_event_to_department
 from application.services.task_lifecycle import (
@@ -722,6 +723,15 @@ def _phase_contract(
 ) -> dict[str, Any]:
     manage = _can_manage_phase(user=user, whiteboard=whiteboard)
     phase_id = str(definition["phase_id"])
+    operation_state = contract_operation_metadata(
+        whiteboard=whiteboard,
+        target_type="phase_contract",
+        target_id=phase_id,
+    )
+    current_state = _current_state(
+        whiteboard=whiteboard, definition=definition, include_internal=include_internal
+    )
+    current_state.update(operation_state)
     contract = {
         "whiteboard_id": str(whiteboard.id),
         "phase_id": phase_id,
@@ -734,12 +744,11 @@ def _phase_contract(
         "gate": _definition_gate_payload(
             definition=definition, whiteboard=whiteboard, include_internal=include_internal
         ),
-        "current_state": _current_state(
-            whiteboard=whiteboard, definition=definition, include_internal=include_internal
-        ),
+        "current_state": current_state,
         "allowed_actions": _allowed_actions(whiteboard=whiteboard, definition=definition)
         if manage
         else [],
+        **operation_state,
     }
     return sanitize_outbox_payload(contract)
 
@@ -1381,9 +1390,7 @@ def _dependency_status_satisfied(*, current_status: str, required_status: str) -
     return current_status == required_status
 
 
-def _approval_dependency_status(
-    *, whiteboard: WorkWhiteboard, dependency: dict[str, Any]
-) -> str:
+def _approval_dependency_status(*, whiteboard: WorkWhiteboard, dependency: dict[str, Any]) -> str:
     approval_task_id = str(dependency.get("approval_task_id") or "").strip()
     queryset = ApprovalTask.objects.filter(
         run__organization=whiteboard.organization,
@@ -1396,9 +1403,7 @@ def _approval_dependency_status(
     return str(approval.status) if approval is not None else "not_started"
 
 
-def _external_dependency_status(
-    *, whiteboard: WorkWhiteboard, dependency: dict[str, Any]
-) -> str:
+def _external_dependency_status(*, whiteboard: WorkWhiteboard, dependency: dict[str, Any]) -> str:
     evidence_key = str(dependency.get("evidence_key") or "").strip()
     if not evidence_key:
         return "blocked"

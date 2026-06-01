@@ -14,6 +14,7 @@ import {
   type WorkWhiteboardPhaseContractDTO,
   type WorkWhiteboardPhaseEvaluationInput,
   type WorkWhiteboardPhaseResponse,
+  type WorkWhiteboardProductOperationDTO,
   type WorkWhiteboardPatchInput,
   type WorkWhiteboardPlanningDTO,
   type WorkWhiteboardPlanningResponse,
@@ -29,6 +30,9 @@ export const whiteboardRepository = {
     whiteboardsApi.list({ company_id: params.companyId, status: params.status }),
 
   get: (whiteboardId: string): Promise<WorkWhiteboardDTO> => whiteboardsApi.get(whiteboardId),
+
+  getOperation: (whiteboardId: string, operationId: string): Promise<WorkWhiteboardProductOperationDTO> =>
+    whiteboardsApi.getOperation(whiteboardId, operationId),
 
   patch: (whiteboardId: string, input: WorkWhiteboardPatchInput): Promise<WorkWhiteboardDTO> =>
     whiteboardsApi.patch(whiteboardId, input),

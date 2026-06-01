@@ -19,6 +19,7 @@ from application.services.pack_tool_executions import (
     PackToolExecutionError,
     execute_pack_tool,
 )
+from application.services.product_operations import contract_operation_metadata
 from application.services.rbac import has_min_role
 from application.services.routing import register_department, route_event_to_department
 from application.services.task_lifecycle import get_or_create_backend_operation_run
@@ -658,6 +659,13 @@ def _performance_contract(
                 include_internal=include_internal,
             )
         )
+    operation_state = contract_operation_metadata(
+        whiteboard=whiteboard,
+        target_type="performance_contract",
+        target_id=str(policy["policy_id"]),
+    )
+    current_state = _current_state_payload(state=state, include_internal=include_internal)
+    current_state.update(operation_state)
     contract = {
         "whiteboard_id": str(whiteboard.id),
         "policy_id": str(policy["policy_id"]),
@@ -666,10 +674,11 @@ def _performance_contract(
         "status": str(state.get("status") or _overall_status(sources)),
         "cadence": str(policy.get("cadence") or ""),
         "sources": sources,
-        "current_state": _current_state_payload(state=state, include_internal=include_internal),
+        "current_state": current_state,
         "allowed_actions": _allowed_actions(whiteboard=whiteboard, state=state, policy=policy)
         if manage
         else [],
+        **operation_state,
     }
     if include_internal:
         contract["evaluation_criteria"] = list(policy.get("evaluation_criteria") or [])

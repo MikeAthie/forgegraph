@@ -127,8 +127,7 @@ const API_PATHS = {
     listCreate: "/api/companies/",
     detail: (companyId: string) => `/api/companies/${companyId}`,
     operatingModelVersions: (companyId: string) => `/api/companies/${companyId}/operating-model-versions`,
-    latestOperatingModelVersion: (companyId: string) =>
-      `/api/companies/${companyId}/operating-model-versions/latest`,
+    latestOperatingModelVersion: (companyId: string) => `/api/companies/${companyId}/operating-model-versions/latest`,
   },
   prompts: {
     listCreate: "/api/prompts/",
@@ -160,6 +159,8 @@ const API_PATHS = {
   whiteboards: {
     list: "/api/whiteboards",
     detail: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}`,
+    operation: (whiteboardId: string, operationId: string) =>
+      `/api/whiteboards/${whiteboardId}/operations/${operationId}`,
     board: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/board`,
     boardCards: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/board/cards`,
     boardCard: (whiteboardId: string, cardId: string) => `/api/whiteboards/${whiteboardId}/board/cards/${cardId}`,
@@ -5336,6 +5337,16 @@ export type WorkWhiteboardPhaseWorkstreamDTO = {
   updated_at?: string;
 };
 
+export type WorkWhiteboardContractReadinessDTO = {
+  contract_revision?: number;
+  last_operation_id?: string;
+  terminal?: boolean;
+  pending_count?: number;
+  running_count?: number;
+  blocked_count?: number;
+  completed_count?: number;
+};
+
 export type WorkWhiteboardPhaseGateDTO = {
   gate_id: string;
   result?: string;
@@ -5358,9 +5369,9 @@ export type WorkWhiteboardPhaseContractDTO = {
     synthesis?: { asset_id: string; asset_version_id: string; created_at: string } | null;
     gate?: Record<string, unknown> | null;
     applied_actions?: Record<string, unknown>;
-  };
+  } & WorkWhiteboardContractReadinessDTO;
   allowed_actions: string[];
-};
+} & WorkWhiteboardContractReadinessDTO;
 
 export type WorkWhiteboardStrategyWorkstreamDTO = {
   id: string;
@@ -5443,7 +5454,7 @@ export type WorkWhiteboardDeploymentContractDTO = {
   channels: WorkWhiteboardDeploymentChannelDTO[];
   current_state: Record<string, unknown>;
   allowed_actions: string[];
-};
+} & WorkWhiteboardContractReadinessDTO;
 
 export type WorkWhiteboardPerformanceSourceDTO = {
   id: string;
@@ -5489,6 +5500,28 @@ export type WorkWhiteboardPerformanceContractDTO = {
     [key: string]: unknown;
   };
   allowed_actions: string[];
+} & WorkWhiteboardContractReadinessDTO;
+
+export type WorkWhiteboardProductOperationDTO = {
+  id: string;
+  company_id: string;
+  whiteboard_id: string;
+  kind: string;
+  status: "accepted" | "running" | "completed" | "failed" | "blocked" | "cancelled" | string;
+  target_type: string;
+  target_id: string;
+  idempotency_key?: string;
+  contract_revision: number;
+  contract_revision_at_accept: number;
+  contract_revision_at_completion: number;
+  terminal: boolean;
+  metadata?: Record<string, unknown>;
+  started_at?: string;
+  completed_at?: string;
+  failed_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  error?: { code: string; message: string } | null;
 };
 
 export type WorkWhiteboardDTO = {
@@ -5737,6 +5770,8 @@ export type WorkWhiteboardPhaseEvaluationInput = {
 };
 
 export type WorkWhiteboardPhaseResponse = {
+  accepted?: boolean;
+  operation?: WorkWhiteboardProductOperationDTO;
   whiteboard_phase_contract: WorkWhiteboardPhaseContractDTO;
   whiteboard?: WorkWhiteboardDTO;
   evaluation_id?: string;
@@ -5749,6 +5784,8 @@ export type WorkWhiteboardDeploymentExecuteInput = {
 };
 
 export type WorkWhiteboardDeploymentResponse = {
+  accepted?: boolean;
+  operation?: WorkWhiteboardProductOperationDTO;
   deployment_contract: WorkWhiteboardDeploymentContractDTO;
   whiteboard?: WorkWhiteboardDTO;
   deployment_channel?: WorkWhiteboardDeploymentChannelDTO;
@@ -5767,6 +5804,8 @@ export type WorkWhiteboardPerformanceEvaluationInput = {
 };
 
 export type WorkWhiteboardPerformanceResponse = {
+  accepted?: boolean;
+  operation?: WorkWhiteboardProductOperationDTO;
   performance_contract: WorkWhiteboardPerformanceContractDTO;
   whiteboard?: WorkWhiteboardDTO;
   evaluation_id?: string;
@@ -5956,6 +5995,12 @@ export const whiteboardsApi = {
       API_PATHS.whiteboards.detail(whiteboardId),
     );
     return response.data.data.whiteboard;
+  },
+  getOperation: async (whiteboardId: string, operationId: string): Promise<WorkWhiteboardProductOperationDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ operation: WorkWhiteboardProductOperationDTO }>>(
+      API_PATHS.whiteboards.operation(whiteboardId, operationId),
+    );
+    return response.data.data.operation;
   },
   patch: async (whiteboardId: string, input: WorkWhiteboardPatchInput): Promise<WorkWhiteboardDTO> => {
     const response = await api.patch<ApiSuccessResponse<{ whiteboard: WorkWhiteboardDTO }>>(

@@ -24,6 +24,8 @@ import {
 } from "./fixtures.live";
 import {
   waitForBackendPostResponse,
+  waitForContractRevision,
+  waitForOperation,
   waitForPerformanceMetricSnapshot,
   waitForPhaseWorkstreamMaterialization,
 } from "./runtime-waits";
@@ -72,6 +74,32 @@ type CommunicationMessage = {
   body: string;
   routed_whiteboard_id?: string | null;
   routed_classification?: string | null;
+};
+type ProductOperation = {
+  id: string;
+  kind: string;
+  status: string;
+  target_type: string;
+  target_id: string;
+  contract_revision: number;
+  contract_revision_at_accept: number;
+  contract_revision_at_completion: number;
+  terminal: boolean;
+  error?: { code?: string; message?: string } | null;
+  metadata?: Record<string, unknown>;
+};
+type OperationEnvelope = {
+  accepted?: boolean;
+  operation?: ProductOperation;
+};
+type ContractReadiness = {
+  contract_revision?: number;
+  last_operation_id?: string;
+  terminal?: boolean;
+  pending_count?: number;
+  running_count?: number;
+  blocked_count?: number;
+  completed_count?: number;
 };
 type WorkWhiteboard = {
   id: string;
@@ -131,8 +159,8 @@ type PhaseContract = {
     all_workstreams_completed?: boolean;
     applied_actions?: Record<string, string>;
     gate?: { result?: string; score?: number };
-  };
-};
+  } & ContractReadiness;
+} & ContractReadiness;
 type DeploymentContract = {
   policy_id: string;
   status: string;
@@ -149,7 +177,8 @@ type DeploymentContract = {
       error?: Record<string, unknown> | null;
     };
   }>;
-};
+  current_state?: ContractReadiness;
+} & ContractReadiness;
 type PerformanceContract = {
   policy_id: string;
   status: string;
@@ -168,7 +197,21 @@ type PerformanceContract = {
     report_run_id?: string;
     evaluation_id?: string;
     routing_record_ids?: string[];
-  };
+  } & ContractReadiness;
+} & ContractReadiness;
+type PhaseActionResponse = OperationEnvelope & {
+  whiteboard_phase_contract: PhaseContract;
+  whiteboard: WorkWhiteboard;
+  evaluation_id?: string;
+};
+type DeploymentActionResponse = OperationEnvelope & {
+  deployment_contract: DeploymentContract;
+  whiteboard: WorkWhiteboard;
+};
+type PerformanceActionResponse = OperationEnvelope & {
+  performance_contract: PerformanceContract;
+  whiteboard: WorkWhiteboard;
+  evaluation_id?: string;
 };
 
 test.use({ video: "on" });
@@ -205,7 +248,15 @@ test.describe("Live ATLAS agency full product loop", () => {
     expect(onboardingBoard.event_version).toBe("whiteboard_board_v1");
     expect(onboardingBoard.cards.length).toBeGreaterThan(0);
 
-    await startPhaseThroughUi(page, request, fixture, whiteboard.id, agencyPhaseId, apiCalls);
+    const phaseStartOperation = await startPhaseThroughUi(
+      page,
+      request,
+      fixture,
+      whiteboard.id,
+      agencyPhaseId,
+      apiCalls,
+    );
+    expect(phaseStartOperation.status).toBe("completed");
     const startedAgency = await fetchPhaseContract(request, fixture, whiteboard.id, agencyPhaseId, apiCalls);
     const initialWorkstreams = workstreamsById(startedAgency);
     const initialParallelIds = [
@@ -261,6 +312,7 @@ test.describe("Live ATLAS agency full product loop", () => {
     expect(approval.status).toBe("approved");
 
     const deployment = await prepareDeploymentThroughUi(page, request, fixture, whiteboard.id, apiCalls);
+    expect(deployment.operation.status).toBe("completed");
     const deploymentContract = deployment.deployment_contract;
     expect(["partial", "prepared", "executed"]).toContain(deploymentContract.status);
     const executedDeployment = deploymentContract.channels.find((channel) => channel.tool_execution_id);
@@ -285,11 +337,12 @@ test.describe("Live ATLAS agency full product loop", () => {
     }
 
     const performance = await startPerformanceThroughUi(page, request, fixture, whiteboard.id, apiCalls);
+    expect(performance.operation.status).toBe("completed");
     expect(performance.performance_contract.current_state.metric_snapshot_id).toBeTruthy();
     expect(performance.performance_contract.sources.some((source) => source.tool_execution_id)).toBe(true);
     expect(performance.performance_contract.sources.some((source) => source.status === "blocked")).toBe(true);
 
-    const report = await postData<{ performance_contract: PerformanceContract; whiteboard: WorkWhiteboard }>(
+    const report = await postData<PerformanceActionResponse>(
       request,
       `/api/whiteboards/${whiteboard.id}/performance/report`,
       fixture.accessToken,
@@ -297,9 +350,18 @@ test.describe("Live ATLAS agency full product loop", () => {
       idempotency(testInfo, "performance-report"),
       apiCalls,
     );
+    const reportOperation = expectOperation(report, "performance_report");
+    await waitForOperationAndContract(
+      request,
+      fixture,
+      whiteboard.id,
+      reportOperation,
+      () => fetchPerformanceContract(request, fixture, whiteboard.id, apiCalls),
+      apiCalls,
+    );
     expect(report.performance_contract.current_state.report_run_id).toBeTruthy();
 
-    const evaluation = await postData<{ performance_contract: PerformanceContract; whiteboard: WorkWhiteboard }>(
+    const evaluation = await postData<PerformanceActionResponse>(
       request,
       `/api/whiteboards/${whiteboard.id}/performance/evaluate`,
       fixture.accessToken,
@@ -312,6 +374,15 @@ test.describe("Live ATLAS agency full product loop", () => {
         },
       },
       idempotency(testInfo, "performance-evaluate"),
+      apiCalls,
+    );
+    const performanceEvaluationOperation = expectOperation(evaluation, "performance_evaluate");
+    await waitForOperationAndContract(
+      request,
+      fixture,
+      whiteboard.id,
+      performanceEvaluationOperation,
+      () => fetchPerformanceContract(request, fixture, whiteboard.id, apiCalls),
       apiCalls,
     );
     expect(evaluation.performance_contract.current_state.evaluation_id).toBeTruthy();
@@ -330,7 +401,14 @@ test.describe("Live ATLAS agency full product loop", () => {
       ]),
     );
 
-    await expectOtherClientIsolation(request, fixture, thread.id, whiteboard.id, apiCalls);
+    await expectOtherClientIsolation(
+      request,
+      fixture,
+      thread.id,
+      whiteboard.id,
+      [deployment.operation.id, performanceEvaluationOperation.id],
+      apiCalls,
+    );
     await assertWorkspaceRendering(browser, page, request, fixture, whiteboard.id, apiCalls);
 
     const allApiRequests = [
@@ -368,6 +446,11 @@ test.describe("Live ATLAS agency full product loop", () => {
             phaseId: agency.contract.phase_id,
             result: agency.contract.current_state.gate?.result,
             approvalTaskId,
+            operations: {
+              phaseStart: operationEvidence(phaseStartOperation),
+              synthesis: operationEvidence(agency.synthesisOperation),
+              gateEvaluation: operationEvidence(agency.evaluationOperation),
+            },
             initialFanout: initialParallelIds.map((id) => ({
               id,
               status: initialWorkstreams[id]?.status,
@@ -392,11 +475,17 @@ test.describe("Live ATLAS agency full product loop", () => {
           approval,
           deployment: {
             status: deploymentContract.status,
+            operation: operationEvidence(deployment.operation),
             executed: deploymentContract.channels.filter((channel) => channel.tool_execution_id),
             blocked: blockedDeployment,
           },
           performance: {
             status: evaluation.performance_contract.status,
+            operations: {
+              start: operationEvidence(performance.operation),
+              report: operationEvidence(reportOperation),
+              evaluation: operationEvidence(performanceEvaluationOperation),
+            },
             metricSnapshotId: evaluation.performance_contract.current_state.metric_snapshot_id,
             reportRunId: evaluation.performance_contract.current_state.report_run_id,
             evaluationId: evaluation.performance_contract.current_state.evaluation_id,
@@ -420,14 +509,11 @@ async function assertOperatingModelPackHealth(
   fixture: LiveAtlasLegacyConsultFixture,
   apiCalls: ApiCall[],
 ): Promise<OperatingModelPackHealth> {
-  const response = await rawGet(
-    request,
-    "/api/system/operating-model-packs/health",
-    fixture.accessToken,
-    apiCalls,
-  );
+  const response = await rawGet(request, "/api/system/operating-model-packs/health", fixture.accessToken, apiCalls);
   if (!response.ok()) {
-    throw new Error(`GET /api/system/operating-model-packs/health failed with ${response.status()}: ${await response.text()}`);
+    throw new Error(
+      `GET /api/system/operating-model-packs/health failed with ${response.status()}: ${await response.text()}`,
+    );
   }
   const health = (await response.json()) as OperatingModelPackHealth;
   expect(health.status).toBe("ok");
@@ -665,7 +751,7 @@ async function startPhaseThroughUi(
   whiteboardId: string,
   phaseId: string,
   apiCalls: ApiCall[],
-): Promise<void> {
+): Promise<ProductOperation> {
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
   const startButton = page.getByTestId(`whiteboard-phase-start-${phaseId}`);
@@ -676,7 +762,20 @@ async function startPhaseThroughUi(
     30_000,
   );
   await startButton.click();
-  await startResponsePromise;
+  const response = await startResponsePromise;
+  const payload = await responseData<PhaseActionResponse>(
+    response,
+    `POST /api/whiteboards/${whiteboardId}/phases/${phaseId}/start`,
+  );
+  const operation = expectOperation(payload, "phase_start");
+  await waitForOperationAndContract(
+    request,
+    fixture,
+    whiteboardId,
+    operation,
+    () => fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls),
+    apiCalls,
+  );
   await expect(page.getByTestId(`whiteboard-phase-${phaseId}`)).toContainText(/In |Started|Strategy|Content/i, {
     timeout: 30_000,
   });
@@ -684,6 +783,7 @@ async function startPhaseThroughUi(
     () => fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls),
     30_000,
   );
+  return operation;
 }
 
 async function fetchPhaseContract(
@@ -700,6 +800,96 @@ async function fetchPhaseContract(
     apiCalls,
   );
   return response.whiteboard_phase_contract;
+}
+
+async function fetchDeploymentContract(
+  request: APIRequestContext,
+  fixture: LiveAtlasLegacyConsultFixture,
+  whiteboardId: string,
+  apiCalls: ApiCall[],
+): Promise<DeploymentContract> {
+  const response = await getData<{ deployment_contract: DeploymentContract }>(
+    request,
+    `/api/whiteboards/${whiteboardId}/deployment`,
+    fixture.accessToken,
+    apiCalls,
+  );
+  return response.deployment_contract;
+}
+
+async function fetchPerformanceContract(
+  request: APIRequestContext,
+  fixture: LiveAtlasLegacyConsultFixture,
+  whiteboardId: string,
+  apiCalls: ApiCall[],
+): Promise<PerformanceContract> {
+  const response = await getData<{ performance_contract: PerformanceContract }>(
+    request,
+    `/api/whiteboards/${whiteboardId}/performance`,
+    fixture.accessToken,
+    apiCalls,
+  );
+  return response.performance_contract;
+}
+
+async function fetchOperation(
+  request: APIRequestContext,
+  fixture: LiveAtlasLegacyConsultFixture,
+  whiteboardId: string,
+  operationId: string,
+  apiCalls: ApiCall[],
+): Promise<ProductOperation> {
+  const response = await getData<{ operation: ProductOperation }>(
+    request,
+    `/api/whiteboards/${whiteboardId}/operations/${operationId}`,
+    fixture.accessToken,
+    apiCalls,
+  );
+  return response.operation;
+}
+
+async function waitForOperationAndContract<TContract extends ContractReadiness>(
+  request: APIRequestContext,
+  fixture: LiveAtlasLegacyConsultFixture,
+  whiteboardId: string,
+  operation: ProductOperation,
+  fetchContract: () => Promise<TContract>,
+  apiCalls: ApiCall[],
+): Promise<void> {
+  await waitForOperation(
+    () => fetchOperation(request, fixture, whiteboardId, operation.id, apiCalls),
+    ["completed"],
+    60_000,
+  );
+  await waitForContractRevision(fetchContract, operationCompletionRevision(operation), 60_000);
+}
+
+function expectOperation(payload: OperationEnvelope, expectedKind: string): ProductOperation {
+  expect(payload.accepted).toBe(true);
+  expect(payload.operation?.id).toBeTruthy();
+  expect(payload.operation?.kind).toBe(expectedKind);
+  expect(payload.operation?.target_id).toBeTruthy();
+  expect(payload.operation?.contract_revision_at_completion ?? 0).toBeGreaterThan(0);
+  return payload.operation!;
+}
+
+function operationCompletionRevision(operation: ProductOperation): number {
+  return (
+    operation.contract_revision_at_completion ||
+    operation.contract_revision ||
+    operation.contract_revision_at_accept + 1
+  );
+}
+
+function operationEvidence(operation: ProductOperation): Record<string, unknown> {
+  return {
+    id: operation.id,
+    kind: operation.kind,
+    status: operation.status,
+    targetType: operation.target_type,
+    targetId: operation.target_id,
+    contractRevision: operationCompletionRevision(operation),
+  };
 }
 
 function workstreamsById(contract: PhaseContract): Record<string, PhaseContract["workstreams"][number]> {
@@ -719,6 +909,8 @@ async function completeAgencyPhaseInDependencyOrder(
   contract: PhaseContract;
   afterFoundations: PhaseContract;
   afterContentTiming: PhaseContract;
+  synthesisOperation: ProductOperation;
+  evaluationOperation: ProductOperation;
 }> {
   const foundationalBatch = [
     "account_brief_compilation",
@@ -745,8 +937,16 @@ async function completeAgencyPhaseInDependencyOrder(
   const afterContentTiming = await fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls);
   expect(workstreamsById(afterContentTiming).deployment_readiness_plan?.status).toBe("queued");
 
-  await completePhaseWorkstream(request, fixture, whiteboardId, phaseId, "deployment_readiness_plan", testInfo, apiCalls);
-  await postData<{ whiteboard_phase_contract: PhaseContract; whiteboard: WorkWhiteboard }>(
+  await completePhaseWorkstream(
+    request,
+    fixture,
+    whiteboardId,
+    phaseId,
+    "deployment_readiness_plan",
+    testInfo,
+    apiCalls,
+  );
+  const synthesis = await postData<PhaseActionResponse>(
     request,
     `/api/whiteboards/${whiteboardId}/phases/${phaseId}/synthesize`,
     fixture.accessToken,
@@ -754,7 +954,16 @@ async function completeAgencyPhaseInDependencyOrder(
     idempotency(testInfo, `phase-synthesize-${phaseId}`),
     apiCalls,
   );
-  const evaluated = await postData<{ whiteboard_phase_contract: PhaseContract; whiteboard: WorkWhiteboard }>(
+  const synthesisOperation = expectOperation(synthesis, "phase_synthesize");
+  await waitForOperationAndContract(
+    request,
+    fixture,
+    whiteboardId,
+    synthesisOperation,
+    () => fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls),
+    apiCalls,
+  );
+  const evaluated = await postData<PhaseActionResponse>(
     request,
     `/api/whiteboards/${whiteboardId}/phases/${phaseId}/evaluate`,
     fixture.accessToken,
@@ -762,11 +971,22 @@ async function completeAgencyPhaseInDependencyOrder(
     idempotency(testInfo, `phase-evaluate-${phaseId}`),
     apiCalls,
   );
+  const evaluationOperation = expectOperation(evaluated, "phase_gate_evaluate");
+  await waitForOperationAndContract(
+    request,
+    fixture,
+    whiteboardId,
+    evaluationOperation,
+    () => fetchPhaseContract(request, fixture, whiteboardId, phaseId, apiCalls),
+    apiCalls,
+  );
   return {
     whiteboard: evaluated.whiteboard,
     contract: evaluated.whiteboard_phase_contract,
     afterFoundations,
     afterContentTiming,
+    synthesisOperation,
+    evaluationOperation,
   };
 }
 
@@ -864,11 +1084,7 @@ async function resolveApprovalThroughUi(
   await expect(page.getByRole("heading", { name: /Decide with context/i })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(liveLegacyCompanyName).first()).toBeVisible({ timeout: 30_000 });
   await page.getByPlaceholder(/Add guidance/i).fill("Approved content package for sandbox deployment preparation.");
-  const resolveResponsePromise = waitForBackendPostResponse(
-    page,
-    `/api/approvals/${approvalTaskId}/resolve`,
-    30_000,
-  );
+  const resolveResponsePromise = waitForBackendPostResponse(page, `/api/approvals/${approvalTaskId}/resolve`, 30_000);
   await page.getByRole("button", { name: "Approve with notes" }).click();
   await resolveResponsePromise;
   await expect
@@ -899,7 +1115,7 @@ async function prepareDeploymentThroughUi(
   fixture: LiveAtlasLegacyConsultFixture,
   whiteboardId: string,
   apiCalls: ApiCall[],
-): Promise<{ deployment_contract: DeploymentContract; whiteboard: WorkWhiteboard }> {
+): Promise<{ deployment_contract: DeploymentContract; whiteboard: WorkWhiteboard; operation: ProductOperation }> {
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
   const deploymentResponsePromise = waitForBackendPostResponse(
@@ -908,23 +1124,31 @@ async function prepareDeploymentThroughUi(
     60_000,
   );
   await page.getByTestId("whiteboard-prepare-deployment-button").click();
-  await deploymentResponsePromise;
+  const response = await deploymentResponsePromise;
+  const payload = await responseData<DeploymentActionResponse>(
+    response,
+    `POST /api/whiteboards/${whiteboardId}/deployment/prepare`,
+  );
+  const operation = expectOperation(payload, "deployment_prepare");
+  await waitForOperationAndContract(
+    request,
+    fixture,
+    whiteboardId,
+    operation,
+    () => fetchDeploymentContract(request, fixture, whiteboardId, apiCalls),
+    apiCalls,
+  );
   await expect(page.getByTestId("whiteboard-deployment-section")).toContainText(/Receipt|Blocked/i, {
     timeout: 30_000,
   });
-  const deploymentContract = await getData<{ deployment_contract: DeploymentContract }>(
-    request,
-    `/api/whiteboards/${whiteboardId}/deployment`,
-    fixture.accessToken,
-    apiCalls,
-  );
+  const deploymentContract = await fetchDeploymentContract(request, fixture, whiteboardId, apiCalls);
   const whiteboard = await getData<{ whiteboard: WorkWhiteboard }>(
     request,
     `/api/whiteboards/${whiteboardId}`,
     fixture.accessToken,
     apiCalls,
   );
-  return { deployment_contract: deploymentContract.deployment_contract, whiteboard: whiteboard.whiteboard };
+  return { deployment_contract: deploymentContract, whiteboard: whiteboard.whiteboard, operation };
 }
 
 async function startPerformanceThroughUi(
@@ -933,7 +1157,7 @@ async function startPerformanceThroughUi(
   fixture: LiveAtlasLegacyConsultFixture,
   whiteboardId: string,
   apiCalls: ApiCall[],
-): Promise<{ performance_contract: PerformanceContract; whiteboard: WorkWhiteboard }> {
+): Promise<{ performance_contract: PerformanceContract; whiteboard: WorkWhiteboard; operation: ProductOperation }> {
   await openLiveTokenSession(page, request, fixture.accessToken, `/companies/${fixture.companyId}`);
   await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
   const performanceResponsePromise = waitForBackendPostResponse(
@@ -942,35 +1166,35 @@ async function startPerformanceThroughUi(
     60_000,
   );
   await page.getByTestId("whiteboard-start-performance-button").click();
-  await performanceResponsePromise;
+  const response = await performanceResponsePromise;
+  const payload = await responseData<PerformanceActionResponse>(
+    response,
+    `POST /api/whiteboards/${whiteboardId}/performance/start`,
+  );
+  const operation = expectOperation(payload, "performance_start");
+  await waitForOperationAndContract(
+    request,
+    fixture,
+    whiteboardId,
+    operation,
+    () => fetchPerformanceContract(request, fixture, whiteboardId, apiCalls),
+    apiCalls,
+  );
   await expect(page.getByTestId("whiteboard-performance-section")).toContainText(/Receipt|Blocked|Metrics/i, {
     timeout: 30_000,
   });
   await waitForPerformanceMetricSnapshot(
-    async () =>
-      (
-        await getData<{ performance_contract: PerformanceContract }>(
-          request,
-          `/api/whiteboards/${whiteboardId}/performance`,
-          fixture.accessToken,
-          apiCalls,
-        )
-      ).performance_contract,
+    () => fetchPerformanceContract(request, fixture, whiteboardId, apiCalls),
     30_000,
   );
-  const performanceContract = await getData<{ performance_contract: PerformanceContract }>(
-    request,
-    `/api/whiteboards/${whiteboardId}/performance`,
-    fixture.accessToken,
-    apiCalls,
-  );
+  const performanceContract = await fetchPerformanceContract(request, fixture, whiteboardId, apiCalls);
   const whiteboard = await getData<{ whiteboard: WorkWhiteboard }>(
     request,
     `/api/whiteboards/${whiteboardId}`,
     fixture.accessToken,
     apiCalls,
   );
-  return { performance_contract: performanceContract.performance_contract, whiteboard: whiteboard.whiteboard };
+  return { performance_contract: performanceContract, whiteboard: whiteboard.whiteboard, operation };
 }
 
 async function assertWorkspaceRendering(
@@ -1003,7 +1227,9 @@ async function assertWorkspaceRendering(
   }
   await page.getByTestId("whiteboard-phase-section").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("whiteboard-phase-section")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId(`whiteboard-phase-${agencyPhaseId}`)).toContainText(/Strategy brief|Deployment readiness/i);
+  await expect(page.getByTestId(`whiteboard-phase-${agencyPhaseId}`)).toContainText(
+    /Strategy brief|Deployment readiness/i,
+  );
   await page.getByTestId("whiteboard-deployment-section").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("whiteboard-deployment-section")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("whiteboard-performance-section").scrollIntoViewIfNeeded();
@@ -1054,6 +1280,7 @@ async function expectOtherClientIsolation(
   fixture: LiveAtlasLegacyConsultFixture,
   threadId: string,
   whiteboardId: string,
+  operationIds: string[],
   apiCalls: ApiCall[],
 ): Promise<void> {
   const denied = await Promise.all([
@@ -1063,6 +1290,14 @@ async function expectOtherClientIsolation(
     rawGet(request, `/api/whiteboards/${whiteboardId}/board`, fixture.otherClientAccessToken, apiCalls),
     rawGet(request, `/api/whiteboards/${whiteboardId}/deployment`, fixture.otherClientAccessToken, apiCalls),
     rawGet(request, `/api/whiteboards/${whiteboardId}/performance`, fixture.otherClientAccessToken, apiCalls),
+    ...operationIds.map((operationId) =>
+      rawGet(
+        request,
+        `/api/whiteboards/${whiteboardId}/operations/${operationId}`,
+        fixture.otherClientAccessToken,
+        apiCalls,
+      ),
+    ),
   ]);
   for (const response of denied) {
     expect(response.status()).toBe(404);
