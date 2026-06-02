@@ -174,6 +174,8 @@ const API_PATHS = {
       `/api/whiteboards/${whiteboardId}/phases/${phaseId}/synthesize`,
     evaluatePhase: (whiteboardId: string, phaseId: string) =>
       `/api/whiteboards/${whiteboardId}/phases/${phaseId}/evaluate`,
+    completeWorkstream: (whiteboardId: string, phaseId: string, workstreamId: string) =>
+      `/api/whiteboards/${whiteboardId}/phases/${phaseId}/workstreams/${workstreamId}/complete`,
     deployment: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/deployment`,
     prepareDeployment: (whiteboardId: string) => `/api/whiteboards/${whiteboardId}/deployment/prepare`,
     executeDeploymentChannel: (whiteboardId: string, channelId: string) =>
@@ -5769,6 +5771,10 @@ export type WorkWhiteboardPhaseEvaluationInput = {
   scores?: Record<string, unknown>;
 };
 
+export type WorkWhiteboardWorkstreamCompleteInput = {
+  result: Record<string, unknown>;
+};
+
 export type WorkWhiteboardPhaseResponse = {
   accepted?: boolean;
   operation?: WorkWhiteboardProductOperationDTO;
@@ -6088,6 +6094,18 @@ export const whiteboardsApi = {
   ): Promise<WorkWhiteboardPhaseResponse> => {
     const response = await api.post<ApiSuccessResponse<WorkWhiteboardPhaseResponse>>(
       API_PATHS.whiteboards.evaluatePhase(whiteboardId, phaseId),
+      input,
+    );
+    return response.data.data;
+  },
+  completeWorkstream: async (
+    whiteboardId: string,
+    phaseId: string,
+    workstreamId: string,
+    input: WorkWhiteboardWorkstreamCompleteInput,
+  ): Promise<WorkWhiteboardPhaseResponse> => {
+    const response = await api.post<ApiSuccessResponse<WorkWhiteboardPhaseResponse>>(
+      API_PATHS.whiteboards.completeWorkstream(whiteboardId, phaseId, workstreamId),
       input,
     );
     return response.data.data;

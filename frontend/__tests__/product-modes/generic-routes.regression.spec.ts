@@ -125,9 +125,9 @@ test.describe("Product modes", () => {
     expect(sawProductModeApiPath(apiRequests, "/api/portfolio-health")).toBe(true);
     expect(sawProductModeApiPath(apiRequests, "/api/cross-company-queues")).toBe(true);
     expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}`)).toBe(true);
-    expect(
-      sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/operating-model-versions/latest`),
-    ).toBe(true);
+    expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/operating-model-versions/latest`)).toBe(
+      true,
+    );
     expect(sawProductModeApiPath(apiRequests, "/api/operating-model-packs")).toBe(true);
     expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/packs`)).toBe(true);
     expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/operating-model`)).toBe(true);
@@ -147,6 +147,177 @@ test.describe("Product modes", () => {
       ),
     ).toBe(true);
     expect(sawStateProjectionType(apiRequests, seed.companyId, "client_service_history")).toBe(true);
+    expect(verticalProductModeApiRequests(apiRequests, forbiddenVerticalMarketingRoutePattern)).toEqual([]);
+  });
+
+  test("P1 Atlas UI controls dispatch generic company and whiteboard commands", async ({ page, request }, testInfo) => {
+    const apiRequests = collectProductModeApiRequests(page);
+    const user = createTestUser(testInfo, "product-mode-p1-controls");
+    await ensureUserRegistered(request, user);
+    const accessToken = await getAccessToken(request, user);
+    const seed = await createCompanyViaApi(request, accessToken, {
+      name: "Legacy Eyewear",
+      companyType: "Eyewear Company",
+      objective: "Exercise P1 Atlas controls through generic routes.",
+      autonomyMode: "assisted",
+      aiAccessMode: "managed",
+    });
+    const latestVersion = await fetchLatestGraphVersion(request, accessToken, seed.companyId);
+    const state = buildLegacyMultiPackProductModeState({
+      companyId: seed.companyId,
+      companyName: "Legacy Eyewear",
+      graphVersion: latestVersion,
+      pendingApprovalCount: 0,
+      operations: [
+        {
+          id: "53333333-3333-4333-8333-333333333333",
+          status: "succeeded",
+          startedAt: "2026-05-10T10:00:00.000Z",
+          endedAt: "2026-05-10T10:05:00.000Z",
+          operationBrief: "Exercise P1 Atlas controls through generic routes.",
+          deliverable: "Deliverable: P1 connector, whiteboard, phase, and performance controls.",
+          llmMode: "managed",
+        },
+      ],
+    });
+    const whiteboard = state.whiteboards?.[0];
+    const phase = whiteboard?.phase_contracts?.[0];
+    expect(whiteboard).toBeTruthy();
+    expect(phase).toBeTruthy();
+    if (!whiteboard || !phase) {
+      throw new Error("P1 control regression fixture did not create a whiteboard phase.");
+    }
+    const phaseId = "legacy-eyewear.p1-ui-phase";
+    phase.phase_id = phaseId;
+    phase.phase_name = "P1 UI Phase";
+    phase.workstreams = [
+      {
+        id: "strategy_brief",
+        name: "Strategy Brief",
+        status: "queued",
+        required: true,
+        output_type: "artifact",
+        department_id: "strategy",
+        department_name: "Strategy",
+        reason: "Complete the primary strategy brief.",
+        created_at: "2026-05-12T12:12:00.000Z",
+        updated_at: "2026-05-12T12:12:00.000Z",
+      },
+    ];
+    phase.gate = {
+      gate_id: "legacy-eyewear.p1-ui-gate",
+      criteria: [
+        { key: "readiness", value_type: "number", operator: ">=", threshold: 80 },
+        { key: "legal_precheck", value_type: "enum", operator: "in", expected: ["pass"] },
+      ],
+      approval_required: true,
+    };
+    phase.current_state = {
+      status: "started",
+      all_workstreams_completed: false,
+      synthesis: null,
+      gate: null,
+      applied_actions: {},
+    };
+    phase.allowed_actions = [];
+    whiteboard.status = "in_content";
+    whiteboard.work_status = "planning";
+    if (whiteboard.performance_contract) {
+      whiteboard.performance_contract.allowed_actions = ["report"];
+      whiteboard.performance_contract.current_state.report_run_id = "";
+      whiteboard.performance_contract.current_state.evaluation_id = "";
+    }
+
+    await installProductModeMocks(page, state);
+    await openBackendAuthenticatedPage(page, request, user, "/companies");
+    await page
+      .getByRole("link", { name: /Legacy Eyewear/i })
+      .first()
+      .click();
+    await page.waitForURL(new RegExp(`/companies/${seed.companyId}$`));
+
+    await page.getByTestId("connector-management-panel").scrollIntoViewIfNeeded();
+    await expect(page.getByTestId("connector-management-panel")).toBeVisible();
+    await expect(page.getByTestId("connector-toggle-email_connector")).toBeChecked();
+    await page.getByTestId("connector-sandbox-core-preset").click();
+    await expect(page.getByTestId("connector-toggle-social_connector")).toBeChecked();
+    await expect(page.getByTestId("connector-toggle-analytics_connector")).toBeChecked();
+    await expect(page.getByTestId("connector-toggle-whatsapp_connector")).not.toBeChecked();
+    await page.getByTestId("connector-save-button").click();
+    expect(state.installedPacks[0]?.config).not.toHaveProperty("workstream_phases");
+    expect(state.installedPacks[0]?.config).not.toHaveProperty("deployment_policies");
+    expect(state.installedPacks[0]?.config.available_connectors).toEqual(
+      expect.arrayContaining(["email_connector", "social_connector", "analytics_connector"]),
+    );
+
+    await page.getByTestId("whiteboard-panel").scrollIntoViewIfNeeded();
+    await page.getByTestId("whiteboard-context-edit-toggle").click();
+    await page.getByTestId("whiteboard-context-objective").fill("Updated from P1 context editor.");
+    await page
+      .getByTestId("whiteboard-context-constraints")
+      .fill(
+        JSON.stringify({ legal_compliance_constraints: "No unsupported claims.", visual_constraints: "Product only." }),
+      );
+    await page.getByTestId("whiteboard-context-stakeholders").fill(JSON.stringify({ approval_owner: "Legacy owner" }));
+    await page
+      .getByTestId("whiteboard-context-resources")
+      .fill(JSON.stringify({ scope: "Campaign strategy", success_metrics: ["qualified intent"] }));
+    await page
+      .getByTestId("whiteboard-context-delivery")
+      .fill(JSON.stringify({ requested_channels: ["email"], connector_readiness: "sandbox" }));
+    await page.getByTestId("whiteboard-context-save-button").click();
+    await expect(page.getByTestId("whiteboard-known-fields")).toContainText(/Updated from P1 context editor/i);
+
+    await page.getByTestId(`whiteboard-phase-workstream-strategy_brief-summary`).fill("Strategy brief complete.");
+    await page
+      .getByTestId(`whiteboard-phase-workstream-strategy_brief-context`)
+      .fill(JSON.stringify({ channel: "email", source: "p1-regression" }));
+    await page.getByTestId(`whiteboard-phase-workstream-strategy_brief-complete`).click();
+    await expect(page.getByTestId(`whiteboard-phase-workstream-strategy_brief`)).toContainText(/Completed/i);
+
+    await page.getByTestId(`whiteboard-phase-synthesize-${phaseId}`).click();
+    await expect(page.getByTestId("whiteboard-phase-gate")).toContainText(/Captured/i);
+    await page.getByTestId(`whiteboard-phase-evaluate-${phaseId}`).click();
+    await expect(page.getByTestId("whiteboard-phase-gate")).toContainText(/Pass/i);
+    await expect(page.getByTestId("whiteboard-phase-approval")).toContainText(/Queued/i);
+
+    await page.getByTestId("whiteboard-performance-section").scrollIntoViewIfNeeded();
+    await page.getByTestId("whiteboard-performance-report-button").click();
+    await expect(page.getByTestId("whiteboard-performance-report")).toContainText(/mock-performance-report-run/i);
+    await page.getByTestId("whiteboard-performance-evaluate-button").click();
+    await expect(page.getByTestId("whiteboard-performance-evaluation")).toContainText(/mock-performance-evaluation/i);
+
+    expect(
+      sawProductModeApiPath(
+        apiRequests,
+        `/api/companies/${seed.companyId}/packs/${legacyMultiPackIds.primary}.installation`,
+      ),
+    ).toBe(true);
+    expect(sawProductModeApiPath(apiRequests, `/api/whiteboards/${legacyMultiPackIds.whiteboard}`)).toBe(true);
+    expect(
+      sawProductModeApiPath(
+        apiRequests,
+        `/api/whiteboards/${legacyMultiPackIds.whiteboard}/phases/${phaseId}/workstreams/strategy_brief/complete`,
+      ),
+    ).toBe(true);
+    expect(
+      sawProductModeApiPath(
+        apiRequests,
+        `/api/whiteboards/${legacyMultiPackIds.whiteboard}/phases/${phaseId}/synthesize`,
+      ),
+    ).toBe(true);
+    expect(
+      sawProductModeApiPath(
+        apiRequests,
+        `/api/whiteboards/${legacyMultiPackIds.whiteboard}/phases/${phaseId}/evaluate`,
+      ),
+    ).toBe(true);
+    expect(
+      sawProductModeApiPath(apiRequests, `/api/whiteboards/${legacyMultiPackIds.whiteboard}/performance/report`),
+    ).toBe(true);
+    expect(
+      sawProductModeApiPath(apiRequests, `/api/whiteboards/${legacyMultiPackIds.whiteboard}/performance/evaluate`),
+    ).toBe(true);
     expect(verticalProductModeApiRequests(apiRequests, forbiddenVerticalMarketingRoutePattern)).toEqual([]);
   });
 

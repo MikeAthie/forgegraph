@@ -1,225 +1,173 @@
-# Investigación técnica profunda sobre ForgeGraph y Atlas
-
-## Resumen ejecutivo
-
-La evidencia visible del repositorio confirma que ForgeGraph ya está estructurado como un sistema operativo para organizaciones AI-native con una separación explícita entre consola de operador en `frontend/`, plano de control en `backend/` y plano de ejecución en `engine/`. También confirma una carpeta de `operating_model_packs`, múltiples `docker-compose*.yml`, documentación de arquitectura/runtime/ops/perf, y un árbol backend con servicios para compañías, departamentos, aprendizaje, packs, memoria, ruteo, despliegue, performance, proyecciones, cola de ejecuciones, locking, snapshots y observabilidad. En otras palabras: la base del sistema sí está orientada a operar una “empresa” AI, no solo un workflow aislado. citeturn67view0turn68view0turn70view0turn69view0turn35view0turn71view0turn71view1
-
-El contrato arquitectónico más importante del repo es claro y debe gobernar toda la suite de producción: el backend es la única autoridad sobre estado durable; el engine ejecuta trabajo pero no puede ser autoritativo; y los eventos son señales de transporte/observabilidad, no “la verdad” del sistema. Ese mismo contrato además exige liveness, snapshots backend-owned, reintentos limpios, recuperación backend-driven y rechazo explícito de modos de ownership inválidos como `dual-write`. Cualquier “Atlas Production System Run” serio tiene que probar justamente eso bajo fallas, reanudaciones, reload de frontend y reinicio del engine. citeturn9view0turn9view1turn55view0turn55view1turn55view2
-
-Sobre Atlas específicamente, el hallazgo más importante es mixto. **Repo-confirmado:** el backend ya tiene abstracciones genéricas para `company_*`, `departments`, `department_routing`, `company_operating_models`, `company_learning`, `deployment_orchestration`, `performance_orchestration`, `evaluations`, `policy_evaluations`, `run_queue`, `runtime_write_intents`, `os_projections`, `program_stage_outputs`, `task_lifecycle`, `memory_*`, `operator_actions`, `request_router`, `routing`, `pack_tool_executions` y más. **Inferencia fuerte:** Atlas hoy probablemente existe como una referencia/fixture montada sobre esas abstracciones genéricas. **Hallazgo negativo importante:** en las superficies públicas navegables inspeccionadas no apareció la cadena `Atlas`; en cambio, sí aparecieron artefactos frontend llamados `consulting-report-1.json`, `consulting-run-latest.json`, `e2e-report.json` y `test-results-live-review-board`. Eso sugiere que la representación pública actualmente visible es más “consulting/company-mode fixture” que un pack Atlas claramente first-class y trazable por nombre. citeturn69view0turn35view0turn45view0turn45view1turn45view2turn45view3turn71view2
-
-También hay una asimetría importante entre lo que el repo **sí** enseña y lo que todavía no queda públicamente trazable en los artefactos accesibles. Memoria, approvals, costos, observabilidad, ruteo, despliegue, performance, tenancy y proyecciones sí tienen evidencia repo-visible razonable. En cambio, **whiteboard** no apareció como nombre explícito en las páginas navegables inspeccionadas, y tampoco apareció un artefacto público “Atlas” o un contrato explícito de “workstream contracts”. Por eso, mi recomendación principal es diseñar la suite de producción con dos comportamientos: primero, validar todo lo repo-confirmado; segundo, convertir los conceptos hoy implícitos o insuficientemente visibles —Atlas pack named, whiteboard útil, contratos departamentales explícitos, mejora de segunda corrida por memoria, recuperación controlada end-to-end— en criterios de aceptación duros. citeturn72view0turn69view0turn35view0turn68view1
-
-La conclusión práctica es esta: ForgeGraph ya tiene suficiente base para una **suite integrada de producción** que mida simultáneamente corrección de implementación, integridad de arquitectura y calidad de comportamiento empresarial de Atlas. Pero esa suite no debe limitarse a “terminó la corrida”; debe fallar explícitamente si la memoria no mejora la segunda campaña, si el whiteboard no ayuda a operar, si los approvals no bloquean despliegue, si el engine logra corromper estado durable, si las proyecciones divergen, o si el frontend solo refleja estado decorativo en vez de estado reconstruible desde backend. citeturn68view0turn68view1turn9view0turn55view0turn55view1turn55view2
-
-## Mapa confirmado del repositorio
+# Atlas And ForgeGraph Reliability Roadmap
 
-**Qué es ForgeGraph hoy.** El README lo define como un operating system para organizaciones AI-native. El producto ya se orienta a “organizational system state” como superficie primaria, no al autor de workflows como centro de gravedad, y declara como hechos canónicos `Run`, `NodeRun`, `RunEvent`, `ApprovalTask`, `MemoryObservation`, `LLMUsage` y `AuditLog`, con read models OS encima: `AgentRegistryEntry`, `TaskRecord`, `DecisionRecord`, `CostLedgerEntry` y `CostAggregate`. Esto importa porque Atlas no debe evaluarse como un simple prompt chain, sino como un “company operating model” montado sobre estado organizacional, decisiones, memoria y costo. citeturn4view1turn68view0turn9view2
+## Summary
 
-**Qué es Atlas hoy.** Con base estricta en la evidencia visible, Atlas no aparece como un pack o fixture públicamente rastreable por nombre en las superficies inspeccionadas. Sí aparecen, en cambio, la carpeta top-level `operating_model_packs`, documentación específica de `docs/operating-model-packs`, servicios backend centrados en compañías/departamentos/programas/learners y artefactos frontend de demo tipo `consulting-run-latest.json` y `consulting-report-1.json`. La lectura más prudente es: **Atlas hoy es, como mínimo, una combinación de operating-model abstraction genérica + fixture/company-mode demo + pruebas E2E/reportes de consultoría accesibles**, pero aún no un artefacto público-fácilmente-auditable por nombre propio. Esto es una **inferencia** sustentada en ausencia de `Atlas` en las superficies navegables y presencia de artefactos genéricos/consulting. citeturn67view0turn70view0turn69view0turn71view2turn14view0turn14view1turn45view0turn45view1turn45view2turn45view3
+This document is the current implementation roadmap for improving Atlas and the core ForgeGraph system together. It replaces the earlier external inspection snapshot and corrects stale findings against the local repository state.
 
-**Qué sí define o ejercita comportamiento “tipo Atlas”.** En el backend son especialmente relevantes `company_access.py`, `company_archive.py`, `company_blueprints.py`, `company_learning.py`, `company_operating_models.py`, `company_ops.py`, `company_programs.py`, `department_routing.py`, `departments.py`, `deployment_orchestration.py`, `evaluations.py`, `memory_intents.py`, `memory_observation_indexing.py`, `memory_observation_service.py`, `operating_model_packs.py`, `organization_state_feed.py`, `os_projection_rebuild.py`, `os_projections.py`, `pack_tool_executions.py`, `performance_orchestration.py`, `periodic_reviews.py`, `policy_evaluations.py`, `program_stage_outputs.py`, `request_router.py`, `routing.py`, `run_event_streaming.py`, `run_liveness.py`, `run_locking.py`, `run_preparation.py`, `run_queue.py`, `run_snapshots.py`, `run_state_machine.py`, `runtime_transport_*`, `runtime_write_intents.py`, `strategy_orchestration.py`, `strategy_report_builder.py`, `task_judges.py`, `task_lifecycle.py`, `telemetry.py`, `tenancy.py`, `tool_executions.py`, `validation_decisions.py`, `vector_search_service.py` y `websocket_subscribers.py`. Esa lista, por sí sola, ya dibuja un operating model de compañía bastante más rico que un demo lineal. citeturn69view0turn35view0
+Atlas is now visible as the `digital_marketing_pro.v1` operating model pack. Its agency workflow is pack-driven through `operating_model_packs/digital_marketing_pro/agency_ops.yml`, not hidden in client code or inferred from screenshots. The backend already owns the first-class primitives required for the loop: `WorkWhiteboard`, `TaskRoutingRecord`, `StateProjection`, `ProductOperation`, `ToolExecution`, `MetricSnapshot`, `ReportRun`, and `EvaluationRun`.
 
-**Qué superficies del producto parecen ejercer ese comportamiento.** El frontend visible tiene `__tests__`, `pages`, `components`, `contexts`, `domain`, `hooks`, `testsprite_tests`, `playwright.config.ts`, `playwright.demo.config.ts`, `e2e-report.json`, `test-results-live-review-board`, además de los artefactos `consulting-report-1.json` y `consulting-run-latest.json`. El `package.json` confirma Next.js, React Query, `@xyflow/react`, `dagre`, Jest y Playwright, además de un script `playwright:openai-mock`, lo que indica una superficie UI con cobertura de browser/E2E y, al menos, un path de mocking para proveedor OpenAI-compatible. citeturn71view2turn75view0turn75view1turn75view2turn75view3
+The canonical live acceptance target is `frontend/__tests__/product-modes-live/atlas-agency-full-flow.e2e.spec.ts`, normally run through:
 
-**Qué valida hoy el live E2E accesible.** El README deja claro que la automatización debe cubrir las rutas `/overview`, `/agents`, `/tasks`, `/inbox`, `/memory`, `/accounting`, `/library`, `/workflows`, `/settings`, que existen compat routes `/graphs`, `/runs`, `/approvals`, y que el fixture de browser siembra una organización por defecto, prompt editable, approval pendiente, memory observation visible y credencial visible. Eso sugiere que el E2E accesible hoy sí valida, al menos, una consola de operador con estado organizacional, approvals y memoria visibles, además del lifecycle de ejecución y callbacks firmados del engine. Lo que **no** queda todavía repo-confirmado como parte del live E2E público es un Atlas named flow con departamentos evaluados por calidad, un whiteboard útil, mejora de segunda corrida por memoria, despliegue contra conectores reales, o un score end-to-end de “se comportó como agencia real”. citeturn68view0turn68view1turn68view2turn71view2turn45view0turn45view2
+```powershell
+cd frontend
+npm run test:e2e:atlas:docker:local-llm
+```
 
-La topología visible del repositorio y de la documentación también confirma que ForgeGraph ya piensa en gobierno operacional y no solo en ejecución: hay `docs/ops`, `docs/perf`, `docs/reliability`, `docs/runtime`, `docs/security`, `docs/operating-model-packs`, múltiples compose files, scripts de CI y release, backup/restore de Postgres y un folder `tools/loadgen`. Todo eso favorece diseñar una sola corrida de producción que no sea solamente funcional, sino también de resiliencia, observabilidad y operación. citeturn70view0turn67view0turn68view1
+The goal is no longer to prove that Atlas exists. The goal is to prove Atlas performs useful agency work while ForgeGraph preserves backend-owned durable state under realistic dependencies, approvals, deployment blockers, performance feedback, recovery pressure, and tenant isolation.
 
-La siguiente matriz resume los moving parts más importantes y su clasificación actual. En la columna “estado” uso cuatro etiquetas: **confirmado por repo**, **inferido desde repo**, **faltante visible**, y **recomendación**. La base factual del inventario proviene del árbol raíz, el inventario de servicios backend, los directorios backend/engine/frontend, las dependencias declaradas y los documentos de arquitectura. citeturn67view0turn69view0turn35view0turn71view0turn71view1turn71view2turn74view0turn75view0turn55view0
+README and docs references were locally revalidated during the docs-cleanup pass. That cleanup should remain a separate PR from this Atlas/system reliability roadmap. Generated TestSprite temporary artifacts should stay out of tracked docs and source control.
 
-| Moving part | Categoría | Source of truth / owner | Evidencia repo | Estado y lectura |
-|---|---|---|---|---|
-| Frontend operator console | Product surface | Backend como verdad; frontend como observador | `frontend/`, rutas OS primarias, Next.js, React Query, Playwright, Jest citeturn68view0turn75view0 | **Confirmado por repo** |
-| Backend API / control plane | Backend domain / infrastructure | Backend | `backend/`, Django/DRF/Channels/Daphne, aliases `/api/*`, ownership docs citeturn71view0turn74view0turn55view1 | **Confirmado por repo** |
-| Go execution engine | Execution | Backend decide; engine ejecuta | `engine/`, `main.go`, gRPC, `architecture_enforcement_test.go`, `statelessness_guard_test.go` citeturn71view1turn73view0 | **Confirmado por repo** |
-| Postgres / pgvector | Data store | Backend | README local deps + `pgvector` dep + control-plane docs citeturn68view1turn74view0turn55view0 | **Confirmado por repo** |
-| Redis | Data store / queue substrate | Backend y engine consumen, backend gobierna estado | README local deps + `redis` en backend + `go-redis` en engine citeturn68view1turn74view0turn73view1 | **Confirmado por repo** |
-| memory subsystem | Backend domain + execution helper | Backend durable owner | `memory_intents.py`, `memory_observation_*`, `memory_retriever.go`, runtime docs citeturn35view0turn71view1turn9view0turn9view1 | **Confirmado por repo** |
-| Dedicated memory gRPC service | Infrastructure / service | No owner visible separado | gRPC está confirmado, pero no apareció un servicio top-level de memoria separado citeturn55view0turn74view0turn71view1 | **Inferido desde repo; no first-class visible** |
-| Run queue | Worker / orchestration | Backend | `run_queue.py`, `run_locking.py`, `run_preparation.py`, Celery dep citeturn35view0turn74view0 | **Confirmado por repo, worker concrete path parcial** |
-| Runtime write intents | Worker / integrity | Backend | `runtime_write_intents.py`, runtime ownership docs citeturn35view0turn9view0turn9view1 | **Confirmado por repo, dedicated worker no visible** |
-| OS projections | Worker / read model | Backend | `os_projections.py`, `os_projection_rebuild.py`, `process_os_projection_events.py` citeturn35view0turn35view1 | **Confirmado por repo** |
-| Operating model packs | Domain configuration | Backend / pack artifacts | top-level `operating_model_packs` + `docs/operating-model-packs` + `operating_model_packs.py` citeturn67view0turn70view0turn35view0 | **Confirmado por repo** |
-| Tool manifests / connectors | Execution + integration | Backend policies, engine executes | `engine/tool-manifests`, `mcp_registry.py`, `runtime_web_tools.py`, `tool_executions.py`, `pack_tool_executions.py` citeturn71view1turn35view0 | **Confirmado por repo** |
-| Company / organization model | Backend domain | Backend | `company_*`, `departments.py`, `department_routing.py`, `company_programs.py` citeturn69view0 | **Confirmado por repo** |
-| Communication / intake / routing | Backend domain | Backend | `communications.py`, `communication_kafka.py`, `request_router.py`, `routing.py` citeturn69view0turn74view0 | **Confirmado por repo** |
-| Whiteboard | Product/domain surface | No owner explícito visible | no apareció `whiteboard` en superficies navegables; frontend sí usa `@xyflow/react`+`dagre` citeturn72view0turn75view0 | **Faltante visible o embebido sin first-class naming** |
-| Operation lifecycle | Backend + execution | Backend authoritativo | `run_state_machine.py`, `run_snapshots.py`, `run_liveness.py`, `task_lifecycle.py`, docs de invariantes citeturn35view0turn9view0 | **Confirmado por repo** |
-| Workstream contracts | Product/domain contract | No contrato explícito visible | No apareció archivo contrato first-class; lo más cercano son packs, programs, stage outputs y validation decisions citeturn35view0turn67view0 | **Parcial / implícito** |
-| Approvals / HITL | Product/domain | Backend | `ApprovalTask`/`Decision` aliases, pending approval fixture, `/api/decisions`, compat `/approvals` citeturn68view0turn68view1turn9view0 | **Confirmado por repo** |
-| Deployment orchestration | Product/domain | Backend | `deployment_orchestration.py` citeturn69view0 | **Confirmado por repo** |
-| Performance orchestration | Product/domain | Backend | `performance_orchestration.py`, `periodic_reviews.py`, `evaluations.py` citeturn35view0 | **Confirmado por repo** |
-| Accounting / cost | Product/domain + read models | Backend | `CostLedgerEntry`, `CostAggregate`, `/api/accounting`, `llm_pricing.py`, `commerce.py` citeturn68view0turn9view2turn69view0 | **Confirmado por repo, explicit ledger files no visibles** |
-| Audit log / runtime events | Domain + observability | Backend authoritative, engine emits | canonical facts + `audit_log.py`, `canonical_events.py`, `domain_events.py`, `run_event_streaming.py`, `event_dead_letters.py` citeturn68view0turn69view0turn9view0 | **Confirmado por repo** |
-| Observability / telemetry | Cross-cutting | Both planes, backend materializes | `telemetry.py`, `metrics.py`, `structured_logging.py`, `runtime_transport_*`, OpenTelemetry deps backend+engine citeturn35view0turn74view0turn73view2 | **Confirmado por repo** |
-| Tenant isolation / auth / permissions | Cross-cutting | Backend | control-plane docs + `tenancy.py`, `company_access.py`, `rbac.py`, `ops_permissions.py`, OIDC/SCIM deps citeturn55view1turn69view0turn74view0 | **Confirmado por repo** |
-| Release / backup / recovery | Ops / reliability | Backend and ops scripts | backup/restore, rollback/release runbooks, run snapshots/liveness docs citeturn68view1turn9view0turn35view0 | **Confirmado por repo** |
-| Local OpenAI-compatible LLM runtime | Infra / test system | No servicio explícito visible | frontend tiene `playwright:openai-mock`; backend tiene `llm_access.py`; compose existe pero no fue line-readable aquí citeturn75view3turn69view0turn67view0 | **Parcial / inferido** |
+## Current Status
 
-## Modelo operativo de Atlas
+### Implemented And Passing
 
-La base repo-confirmada no fija todavía una taxonomía concreta de departamentos Atlas en los artefactos públicos accesibles; lo que sí fija es que ForgeGraph ya piensa en empresas, departamentos, programas, packs, despliegue, evaluación, learning y ruteo. Por eso, el modelo departamental que sigue debe leerse así: **la existencia de capacidad genérica está confirmada; la definición exacta de Atlas como pack operativo es una recomendación de diseño para cerrar la brecha entre sistema y compañía simulada.** citeturn69view0turn35view0turn67view0turn70view0
+- `digital_marketing_pro.v1` is the current Atlas/DMP pack identifier.
+- `operating_model_packs/digital_marketing_pro/agency_ops.yml` defines the integrated Atlas agency work graph, deployment policy, and performance policy.
+- The agency work graph includes strategy, legal/compliance, tech/martech, media, copy, analytics, traffic, content, timing, and deployment-readiness workstreams.
+- `WorkWhiteboard` is backend-owned and first-class.
+- Phase state and routing state are persisted through backend-owned records, including `TaskRoutingRecord.metadata_json` and `StateProjection`.
+- Generic `/api/whiteboards/*` routes are used for Atlas work instead of vertical Atlas or marketing APIs.
+- Operation lifecycle readiness is represented with backend-owned `ProductOperation` records.
+- The live Atlas flow covers request routing, whiteboard creation, workstream fan-out, dependency blocking/unblocking, approval, deployment preparation, performance review, isolation, and forbidden vertical route checks.
+- The live Atlas flow emits a release evidence bundle with route checks, operation IDs, contract revisions, workstream dependency transitions, approval state, deployment receipts/blockers, performance IDs, memory references, helper-assisted steps, and isolation checks.
+- The live Atlas flow now includes a second-run memory-uplift follow-up that routes a fresh campaign, reuses prior approved memory, and records avoided rejected claims/channels in backend phase evidence.
+- Backend memory attribution/reuse tests cover prior-run memory reuse, and liveness tests cover backend-owned checkpoint recovery when stale resume attempt state exists.
+- The full-flow agency test emits a consolidated Atlas quality, system reliability, and runtime integrity score summary.
+- Docker/local-LLM Atlas acceptance has passed with the live full-flow target.
+- The primary Atlas live flow is UI-driven for connector availability, structured whiteboard context editing, workstream completion, phase synthesis, gate evaluation, performance report generation, and performance evaluation.
 
-Para que Atlas se comporte como una agencia de marketing real —no como una colección de prompts— recomiendo que el pack Atlas incluya, además de los departamentos obligatorios que pediste, cinco funciones adicionales que en una agencia real reducen fricción operacional: **Creative Direction / Design**, **Production**, **Project / Traffic Management**, **Research / Insights** y **Partnerships / Vendor Management**. “Account Strategy” conviene absorberla dentro de **Strategy** y **Client Approval Ops / Account Management** para no duplicar ownership, salvo que quieras una agencia muy enterprise. Esto es una recomendación de operating-model, no un hecho ya visible en el repo. La justificación repo-base es que el backend ya tiene abstracciones de compañía, departamentos, programas, outputs, evaluaciones y revisiones periódicas; falta aterrizarlas en un Atlas pack explícito. citeturn69view0turn35view0
+### Partially Mature
 
-La tabla siguiente define la organización Atlas propuesta, indicando qué está ya razonablemente cubierto por abstracciones del repo y qué debería vivir explícitamente dentro del pack Atlas. Las ubicaciones propuestas siguen la convención que ya sugieren `operating_model_packs/` y el backend de `company_operating_models.py`. citeturn67view0turn35view0
+- The second-run memory-uplift follow-up is helper-assisted through backend communication and phase APIs until guided follow-up authoring and memory-review UI exist.
+- Connector management is availability/config-only. Real credential onboarding and provider verification are still out of scope.
+- Structured whiteboard editing uses pragmatic JSON fields and compact controls rather than full guided artifact authoring.
+- Performance report and evaluation UI exists, but richer review packets, score explanations, and human-review rubric support are still immature.
 
-| Departamento | Propósito, entregables y decisiones | Dependencias, concurrencia y gates | Memoria / whiteboard | Base repo o ubicación propuesta |
-|---|---|---|---|---|
-| Strategy | Produce tesis de campaña, segmentación, positioning, KPI tree, budget logic y constraints. Decide la lógica estratégica, no la pieza final. | Arranca inmediatamente tras onboarding. Bloquea dirección creativa final, media final y deployment final, pero puede coexistir con research y analytics baseline. Gate HITL solo si la estrategia cambia alcance/presupuesto. | Lee brief, histórico y learnings; escribe hipótesis y constraints. Whiteboard: mapa de objetivos, supuestos y dependencias. | **Repo base:** `strategy_orchestration.py`, `strategy_report_builder.py`, `company_operating_models.py`. **Pack:** `operating_model_packs/atlas/departments/strategy.yaml`. citeturn35view0turn69view0 |
-| Research / Insights | Construye audiencia, competitive scan, demand signals, objections y evidence pack. | Arranca en paralelo con Strategy. Puede producir artefactos provisionales. | Debe escribir evidence refs reutilizables; whiteboard con incertidumbres y huecos de información. | **Recomendado:** `operating_model_packs/atlas/departments/research.yaml`; backend puede colgar de `company_blueprints.py` y `evaluations.py`. citeturn69view0turn35view0 |
-| Creative Direction / Design | Traduce tesis en sistema creativo, visual direction y asset specs. Decide guidelines creativas, no media placement ni legal status. | Puede iniciar con brief + estrategia provisional. Debe esperar estrategia aprobada para lock visual final. | Memoria de brand kit aprobado; whiteboard con system map de assets y versiones. | **Parcialmente soportado por repo genérico**; falta evidencia pública first-class. Proponer `operating_model_packs/atlas/departments/creative.yaml`. citeturn69view0turn71view2 |
-| Copywriting | Produce claims, messaging variants, CTAs, scripts y copy matrices. Decide wording, no legal clearance. | Puede empezar con estrategia provisional; debe reconfirmarse al cerrar Legal. | Debe leer memorias de claims rechazados; whiteboard con claim status y evidence refs. | **Pack recomendado** + anclaje a `validation_decisions.py`, `policy_evaluations.py`. citeturn35view0 |
-| Content | Produce long-form/short-form assets, calendars y content packages. | Puede correr con Copy y Creative; debe esperar legal green para piezas de alto riesgo. | Memoria de formatos ganadores; whiteboard con asset lineage y estado. | **Pack recomendado**; outputs podrían materializarse vía `program_stage_outputs.py`. citeturn35view0 |
-| Media | Diseña canal mix, buying logic, budget allocation y experiment matrix. Decide distribución, no legal signoff ni trafficking final. | Puede correr temprano con estrategia preliminar; deployment final espera aprobaciones y tracking listo. | Memoria de channel performance; whiteboard con allocation rationale y blockers. | **Repo base:** `performance_orchestration.py`, `deployment_orchestration.py`, `evaluations.py`. **Pack:** `media.yaml`. citeturn35view0 |
-| Tech / Martech / Web Ops | Define landing pages, tracking, martech setup, connector readiness y deployment prerequisites. Decide readiness técnica. | Arranca en paralelo con Strategy y Media. Bloquea launch si tracking o destination no están en verde. | Memoria de connector failures/recovery; whiteboard con env, credentials y rollout plan. | **Repo base:** `deployment_orchestration.py`, `provider_credentials.py`, `tool_executions.py`, `runtime_web_tools.py`. citeturn35view0 |
-| Timing / Media Ops / Trafficking | Convierte plan aprobado en calendarización, trafficking, launch checklist y rollback window. | Debe esperar legal green, client approval y tech readiness. | Whiteboard con critical path, blocked duration, cutoff times. | **Pack recomendado**; backend hooks en `deployment_orchestration.py` y `run_queue.py`. citeturn35view0 |
-| Legal / Compliance | Clasifica claims por riesgo, evidencia, disclaimers y deployment eligibility. Decide green/yellow/red legal status. | Arranca temprano sobre claims provisionales. Bloquea deployment cuando status ≠ green o con mitigaciones incompletas. | Memoria durable de claims rechazados, disclaimers y precedentes. Whiteboard con redlines y owner. | **Repo base:** `policy_evaluations.py`, `validation_decisions.py`, `periodic_reviews.py`. citeturn35view0 |
-| Analytics / Performance | Construye measurement plan, baseline, attribution/tracking checks, experiment readout y learning loop. Decide performance interpretation y next-best-action. | Arranca desde onboarding para baseline; aprendizaje fuerte depende de launch. | Memoria durable de hipótesis ganadoras/perdedoras; whiteboard con metrics tree y anomaly log. | **Repo base:** `performance_orchestration.py`, `evaluations.py`, `metrics.py`, `llm_pricing.py`. citeturn35view0 |
-| Client Approval Ops / Account Management | Gestiona intake, clarification, expectation management, approval packets y client-facing decisions. Decide qué está listo para presentar. | Corre de principio a fin. Debe coordinar gates y resolver ambigüedades. | Memoria de preferencias del cliente y cambios aprobados. Whiteboard con approvals pendientes y rationale. | **Repo base:** approvals/decisions routes, pending approval fixture, `operator_actions.py`, `communications.py`, `request_router.py`. citeturn68view1turn69view0 |
-| Project / Traffic Management | Orquesta dependencias, SLAs internos, rework routing y critical path. No decide estrategia ni legalidad. | Arranca inmediatamente. Debe ser el orquestador visible del board. | Whiteboard es su superficie principal; memoria sólo para patrones de atraso/rework. | **Repo base parcial:** `task_lifecycle.py`, `run_queue.py`, `run_locking.py`, `rework_plans.py`. citeturn35view0 |
-| Production | Convierte artefactos aprobados en deliverables ejecutables y standards de calidad. | Espera creative/copy/legal/tech listos. | Memoria de defects recurrentes; whiteboard con defect backlog y asset checksum/version. | **Pack recomendado** + `program_stage_outputs.py`. citeturn35view0 |
-| Partnerships / Vendor Management | Maneja dependencias externas, vendors, ad ops externos y connector readiness no propia. | Paralelo a Media y Tech; bloquea sólo si proveedor es requerido para launch. | Memoria de vendor reliability; whiteboard con dependency status y fallbacks. | **Nice-to-have temprano** en `partnerships.yaml`. |
+### Missing Release-Grade Evidence
 
-**Objetivos y deliverables por departamento.** El principio rector es que ningún departamento “genere texto por generar”. Strategy debe emitir tesis, segments, KPIs y constraints; Research debe emitir evidence pack; Creative debe emitir design system; Copy debe emitir claim matrix con evidence refs; Legal debe emitir semáforo de riesgo y disclaimers; Tech debe emitir readiness técnico y tracking plan; Media debe emitir allocation y experiment plan; Trafficking debe emitir launch plan; Analytics debe emitir baseline, readout y learnings; Account Management debe emitir approval packet y scope log; Project/Traffic Management debe emitir dependency log y risk register. La relación con el resultado Atlas global es directa: si uno de esos artefactos no existe, o existe pero no gobierna a los demás, Atlas no está operando como empresa sino como colección de respuestas. La relación con la integridad ForgeGraph también es directa: cada artefacto debe corresponder a estado backend-owned, a un lifecycle trazable y a evidencia observable en UI/API/eventos. citeturn68view0turn69view0turn35view0turn9view0
+- Controlled engine-restart evidence in a Docker/live flow, beyond the backend liveness regression tests.
+- Load, projection-lag, and event-transport evidence under realistic pressure.
+- A stronger human-review rubric for final deliverable quality.
+- Richer production deployment evidence.
+- Real provider connector evidence beyond configured sandbox receipts and honest blockers.
 
-**Contract shape recomendado.** El repo visible no expone un módulo first-class de `workstream_contracts`, así que la recomendación es modelar contratos departamentales explícitos dentro de `operating_model_packs/atlas/contracts/` o `operating_model_packs/atlas/departments/*.yaml`, referenciables por backend vía `company_operating_models.py` y `operating_model_packs.py`. Deben incluir siempre `inputs_required`, `outputs_required`, `quality_checks`, `blocking_rules`, `approval_rules`, `memory_write_policy`, `whiteboard_write_policy`, `deployability_rules` y `evaluation_rules`. Sin eso, el sistema puede “hacer cosas”, pero no demostrar que opera con contratos útiles y auditables. citeturn35view0turn67view0
+## Reliable Test Objective
 
-## Modelos de evaluación transversales
+The primary gate remains:
 
-**Métricas de éxito por departamento.** Recomiendo puntuar cada departamento de 0 a 100 con un threshold mínimo específico y con dos tipos de criterio: uno automatizable y otro de revisión humana. Strategy debe pasar si su KPI tree, segmentación y constraints son coherentes y reutilizados downstream; Research si aporta evidencias accionables y no ruido; Creative/Copy/Content si sus artifacts son consistentes con tesis y restricciones; Legal sólo pasa si bloquea claims riesgosos y conserva precedentes; Tech y Timing sólo pasan si deployment readiness es real; Media y Analytics sólo pasan si sus decisiones son medibles y aprenden; Account/Project sólo pasan si el operador puede entender estado, blockers y approvals sin leer logs crudos. La base repo-confirmada para este enfoque es que ForgeGraph ya tiene servicios de evaluaciones, revisiones periódicas, policy validations, task lifecycle, program outputs y proyecciones OS. citeturn35view0turn69view0turn68view0
+```powershell
+cd frontend
+npm run test:e2e:atlas:docker:local-llm
+```
 
-| Departamento | Métricas clave | Qué debe automatizarse | Qué exige revisión humana | Umbral mínimo |
-|---|---|---|---|---|
-| Strategy | coherencia de tesis, completitud KPI tree, reuso downstream | existencia y propagación de constraints/targets | calidad del razonamiento estratégico | 80 |
-| Research | evidencia por claim, cobertura de objeciones, claridad de segmentos | referencias y cobertura mínima | pertinencia de insights | 78 |
-| Creative / Design | consistencia visual con brief, completitud asset spec | checklist de asset system | juicio estético/brand fit | 75 |
-| Copywriting | claim quality, CTA clarity, compliance readiness | no claims huérfanos, evidence refs | persuasion y tono | 80 |
-| Content | calendario, formato correcto, coherencia multiformato | completitud de paquete de contenidos | calidad editorial | 75 |
-| Media | lógica de canal, asignación presupuestal, experimento claro | allocation + hypothesis + targets | juicio de mix y alcance | 78 |
-| Tech / Martech | readiness técnico, tracking correcto, connector status | smoke tests, env checks, deployment pack completeness | prudencia de arquitectura | 82 |
-| Timing / Trafficking | launch correctness, calendar integrity, rollback window | no launch sin prereqs verdes | robustez operativa | 82 |
-| Legal / Compliance | clasificación de riesgo, disclaimers, bloqueos | hard-stop cuando status legal no es green | calidad de interpretación regulatoria | 90 |
-| Analytics / Performance | baseline, metric tree, experiment readout, learning quality | metric existence, alert rules, second-run uplift | calidad causal del readout | 82 |
-| Client Approval Ops | approval packets claros, trazabilidad de cambios | state machine correcta, no bypass | calidad de account handling | 80 |
-| Project / Traffic Mgmt | dependencia correcta, blocked-time control, rework management | critical path, blocker age, stale blocked tasks | claridad operacional | 83 |
-| Production | completitud y calidad de entregables ejecutables | versioning, asset integrity | craft final y polish | 78 |
-| Partnerships / Vendor Mgmt | vendor readiness y fallback | readiness flags | calidad de contingencia | 72 |
+The test objective is not "the flow completed." The objective is:
 
-**Memoria.** Aquí sí hay base repo-confirmada fuerte: el backend es dueño de memoria durable; aparecen `memory_intents.py`, `memory_observation_indexing.py`, `memory_observation_service.py`; el engine tiene `memory_retriever.go`; y el fixture de browser siembra una memory observation visible para que la UI no quede vacía. Por tanto, Atlas debería escribir memoria en momentos muy concretos: resumen aprobado de onboarding, guidelines de marca aprobadas, claims rechazados y su razón, restricciones legales, learnings de performance, causas raíz de fallas de deployment, preferencias del cliente y resultados de experimentos. También debería leerla en momentos concretos: ruteo inicial, formulación estratégica, generación de copies, revisión legal, preparación de launch, evaluación post-campaña y segunda campaña. Todo memory hit útil debe poder explicar por qué se usó y de qué corrida/artefacto provino. Si la memoria no cambia decisiones downstream o no mejora una segunda corrida, su score debe ser cero aunque haya objetos persistidos. citeturn9view0turn9view1turn35view0turn71view1turn68view1
+> Atlas performed useful agency work while ForgeGraph preserved backend-owned durable state under realistic dependencies, approvals, deployment blockers, performance feedback, and isolation.
 
-**Modelo de memoria durable versus whiteboard temporal.** Debe permanecer durable todo lo que sea policy, precedent, approval estable, learning validado o preferencia de cliente que afecte campañas futuras. Debe permanecer temporal —es decir, whiteboard state— toda hipótesis de trabajo no aprobada, dudas abiertas, borradores, dependencias internas y blockers operativos. La razón no es filosófica sino arquitectónica: el backend sí puede ser autoritativo sobre memoria durable, pero no conviene que también confunda borradores efímeros con conocimiento institucional. La memoria durable debe exigir `tenant_id`, `company_id`, `operation_id`, `source_artifact_id`, `decision_context`, `confidence`, `approved_by` cuando aplique y `supersedes` para precedentes reemplazados. citeturn9view0turn9view1turn55view1
+The live test must fail on:
 
-**Pruebas de memoria útiles.** Automáticamente, la suite de producción debe comprobar cuatro cosas: primero, que la primera campaña escribe memorias aprobadas y observables; segundo, que la segunda campaña las lee; tercero, que cambia su salida gracias a ellas; y cuarto, que conserva aislamiento por tenant/compañía. Humanamente, la revisión debe responder si el sistema recordó la restricción correcta, evitó un error previamente rechazado y pudo explicar cuál memoria reutilizó. Si sólo “repite contexto” sin demostrar mejora o trazabilidad, falla. La persistencia después de restart y la recuperación después de engine crash son obligatorias porque el contrato de runtime exige que la pérdida de memoria del engine no corrompa lo durable. citeturn9view0turn55view2turn69view0
+- `/api/atlas/*`, `/api/marketing/*`, or `/api/legacy/*` usage.
+- Fake connector success when a connector is unavailable.
+- Tenant leakage across whiteboards, operations, approvals, deployments, performance records, artifacts, memory, or routes.
+- Any backend/client/engine ownership violation of durable state.
+- Missing approval gates before deployment preparation.
+- Missing or non-terminal `ProductOperation` evidence for phase, deployment, and performance actions.
+- Missing contract revision evidence for mutable phase/deployment/performance work.
+- Untraceable memory or performance outcomes.
+- Helper-assisted steps that are not listed in the evidence artifact.
 
-**Whiteboard.** Aquí la situación es más débil y debe declararse así. El frontend usa `@xyflow/react` y `dagre`, lo que sugiere una superficie de nodos/flujo/graph-like UI; además, el producto conserva un workspace de Workflows. Pero no apareció ningún artefacto público claramente nombrado `whiteboard` en backend services ni en las superficies navegables inspeccionadas. Mi lectura es: el whiteboard o bien existe embebido en componentes/pages no directamente trazables desde la inspección pública, o bien todavía no está first-class. Para una corrida Atlas de producción eso no puede quedar ambiguo: el whiteboard debe ser una workspace operativa backend-backed, no una visualización decorativa. citeturn75view0turn68view0turn72view0
+## Roadmap Task List
 
-**Modelo de whiteboard recomendado.** Cada departamento debería escribir al whiteboard algo distinto pero compatible: Strategy escribe objetivos, supuestos y constraints; Research evidencia e incertidumbres; Creative un asset map; Copy la claim matrix; Legal redlines y semáforos; Tech readiness técnico y connector status; Media allocation y experiment cells; Trafficking launch critical path; Analytics baseline y alert thresholds; Account Management approvals y requested changes; Project Management blockers, owners y SLA. El operador debe poder recargar la UI y reconstruir exactamente el board desde backend projections; debe poder ver qué está provisional, qué está bloqueado, qué está aprobado y qué artifacts están listos. Si el board no explica progreso ni permite resolver bloqueos humanos, falla por “decorativo”. La ubicación recomendada es una combinación de `frontend/domain` / `frontend/pages` y un backend explícito como `backend/application/services/whiteboard.py` más read model/projection asociada. citeturn71view2turn68view0turn35view0
+### P0 - Release Evidence And Runtime Integrity
 
-**Concurrencia.** La concurrencia sí está repo-confirmada como propiedad del execution plane. El documento `execution-plane.md` asigna al engine la responsabilidad de “concurrent execution correctness”, scheduling, dependencies y retries, mientras que `control-plane-vs-execution-plane.md` dibuja el flujo `frontend -> backend persist intent -> backend dispatch via gRPC -> engine execute -> events -> backend materialize state`. Además, en backend aparecen `run_queue.py`, `run_locking.py`, `run_liveness.py`, `task_lifecycle.py`, `rework_plans.py`, `request_router.py` y `runtime_write_intents.py`, lo que sugiere que ya existe una base para diferenciar trabajo ejecutable, trabajo bloqueado y rework. citeturn55view0turn55view2turn35view0
+- [x] Extend the existing live Atlas spec with a production evidence bundle containing route checks, operation IDs, contract revisions, workstream dependency transitions, approval state, deployment receipts/blockers, performance IDs, memory references, and isolation checks.
+- [x] Add operation lifecycle assertions for phase start, synthesis, gate evaluation, deployment preparation, performance review, report generation, and evaluation.
+- [x] Add a second-run memory-uplift follow-up to the live Atlas flow. The follow-up campaign must reuse prior approved constraints/learnings and avoid at least one previously rejected claim, channel, or assumption.
+- [x] Add backend tests for memory attribution and second-run reuse using the existing memory services.
+- [x] Add recovery and liveness test coverage proving backend-owned recovery, no stale resume acknowledgement, and no engine durable ownership.
+- [x] Add a score summary combining Atlas quality, system reliability, and runtime integrity.
 
-**Cómo debe probarse la concurrencia real.** Después de onboarding, deben iniciar de inmediato Strategy, Research/Insights, Account Management, Analytics baseline y Tech/Martech readiness. Media puede iniciar de forma provisional en paralelo. Copy, Content y Creative pueden arrancar con outputs provisionales antes del cierre estratégico, pero deben reconciliarse cuando cambien constraints. Deployment/Trafficking y Performance final deben quedar bloqueados hasta aprobaciones y readiness legal/técnica. La prueba debe demostrar paralelismo real por timestamps/eventos, no sólo múltiples etiquetas. Las métricas mínimas son: `time_to_first_artifact`, `effective_parallelism`, `blocked_duration`, `queue_wait`, `retry_count`, `rework_rate`, `critical_path_length`, `projection_lag`, `resume_latency`, `approval_wait_time`, `llm_queue_wait`, `worker_lock_time` y `duplicate_execution_count`. Si dos departamentos “paralelos” empiezan sólo después del anterior, el sistema no pasó la prueba de compañía. citeturn55view2turn35view0turn9view0
+### P1 - Product UI Maturity
 
-## Plan integrado de QA y corrida Atlas Production System Run
+- [x] Add UI for workstream artifact submission and completion.
+- [x] Add UI for phase synthesis and gate evaluation.
+- [x] Add structured whiteboard editing for onboarding and campaign constraints.
+- [x] Add connector-management UI so Playwright no longer patches connector availability.
+- [x] Add consolidated release evidence export with routes, operation IDs, revisions, approvals, deployment receipts/blockers, performance IDs, memory references, helper-assisted steps, and isolation checks.
+- [x] Make performance report and evaluation reviewable from the product UI.
 
-La corrida propuesta debe unir tres cosas en una sola ejecución: **QA funcional**, **integridad arquitectónica** y **calidad empresarial de Atlas**. Tiene que tocar `frontend`, `backend`, `engine`, Postgres/pgvector, Redis, packs, tool manifests, approvals, memoria, proyecciones, auditabilidad, scoring y recuperación. También debe tratar como “hard fail” cualquier violación del contrato central: si el engine parece authoritative, si la UI no se reconstruye desde backend, si las proyecciones no convergen, si memory y whiteboard son decorativos, o si deployment ocurre sin gating legal/approval. La base repo-confirmada para este diseño son los invariants de runtime, la separación de planos, las rutas OS, la siembra de fixture, la presencia de servicios de run queue/write intents/projections/evaluations, y la existencia de compose files, testsprite tests, Playwright y Go enforcement tests. citeturn9view0turn55view0turn68view1turn69view0turn35view0turn71view0turn71view1turn71view2
+P1 implementation status: complete for the primary Atlas live flow. The Docker/local-LLM live gate passes with connector setup, onboarding enrichment, primary workstream completion, synthesis, gate evaluation, performance report generation, and performance evaluation driven through UI controls. Follow-up memory uplift remains helper-assisted by design until guided follow-up authoring and memory-review UI exist.
 
-**Escenario integrado Atlas Production System Run.**
-
-1. Arrancar `docker-compose.yml` más cualquier compose complementario necesario y verificar salud de servicios. El repo confirma la existencia de `docker-compose.yml`, `docker-compose.dev.yml`, `docker-compose.kafka.yml` y de dependencias locales mínimas Postgres/Redis; la corrida debe extender esa validación al stack completo visible para el equipo. citeturn67view0turn68view1
-
-2. Verificar pack health de `operating_model_packs` y que el backend pueda resolver el pack Atlas o, si todavía no existe con ese nombre, fallar con evidencia explícita “pack no encontrado / fixture consulting-only”. El repo confirma la carpeta de packs, docs de packs y servicio `operating_model_packs.py`. citeturn67view0turn70view0turn35view0
-
-3. Verificar disponibilidad del runtime LLM configurado. En público no pude confirmar un servicio local OpenAI-compatible first-class, aunque sí hay `llm_access.py` y un `playwright:openai-mock`; por tanto, la suite debe tener dos modos: real local-runtime y mock-controlado, y marcarlo en el score. citeturn69view0turn75view3
-
-4. Crear dos tenants/companies: **Atlas** y un tenant control. Si Atlas todavía no existe como company fixture first-class, la suite debe crearla a partir de onboarding JSON y pack assignment; si eso no es posible, ése es un gap de implementación, no un “skip”. El backend visible ya tiene tenancy, company access, company operating models y programs. citeturn69view0turn55view1
-
-5. Ingerir onboarding JSON con brief de campaña, metas, presupuesto, restricciones, brand inputs y sensibilidad legal. El request debe pasar por `request_router.py` / `routing.py` y materializar un programa/operación rastreable. citeturn35view0turn69view0
-
-6. Crear o materializar el workspace operativo compartido. Si el whiteboard existe, debe poblarse; si no existe como entidad backend-backed, la corrida debe fallar con un hallazgo explícito “whiteboard no first-class”. El operador no debería depender de logs crudos para entender progreso. citeturn75view0turn72view0turn68view0
-
-7. Lanzar workstreams concurrentes: Strategy, Research, Analytics baseline, Tech readiness, Account Management y Media provisional. Deben existir evidencias temporales independientes de inicio y primeras salidas. El engine debe ejecutar concurrentemente; el backend debe materializar lifecycle y bloquear/reanudar correctamente. citeturn55view2turn35view0turn9view0
-
-8. Validar memoria y outputs departamentales. Deben escribirse memorias durables cuando haya aprobaciones o learnings validados; las hipótesis provisionales deben quedarse en board y no contaminar knowledge institucional. citeturn9view1turn35view0
-
-9. Disparar un approval gate real con cambios solicitados por cliente o por Legal. El repo ya muestra decisiones/approvals como parte del modelo y de la fixture seeded; la corrida debe probar `paused -> resume_requested -> resumed` con `resume_attempt_id` válido y sin duplicaciones. citeturn68view1turn9view0
-
-10. Preparar deployment package sólo si Legal = green, Client Approval = green y Tech readiness = green. Cualquier bypass debe ser hard fail. La base repo-confirmada son `deployment_orchestration.py`, `policy_evaluations.py`, `validation_decisions.py` y el ownership backend de pause/resume. citeturn35view0turn9view0
-
-11. Ejecutar tool/connector paths disponibles y registrar costos, event stream, audit log, projection updates y state feed al frontend. El repo confirma `tool_executions.py`, `pack_tool_executions.py`, `mcp_registry.py`, `runtime_web_tools.py`, `run_event_streaming.py`, `websocket_subscribers.py`, `state_feed.py`, `organization_state_feed.py`, `metrics.py` y `telemetry.py`. citeturn35view0
-
-12. Arrancar performance collection, generar evaluation report y persistir learnings de campaña. El repo confirma `performance_orchestration.py`, `evaluations.py`, `periodic_reviews.py`, `company_learning.py` y read models de costo. citeturn35view0turn9view2
-
-13. Ejecutar una segunda campaña o follow-up request relacionado. El objetivo no es repetir el happy path sino comprobar reutilización de memoria: evitar un claim antes rechazado, reusar brand constraints, aprovechar learnings de channel mix o de messaging y reducir tiempo a artefacto útil. Si no mejora algo relevante, la dimensión “memory usefulness” falla. citeturn35view0turn9view1
-
-14. Simular una falla controlada: crash del engine después de que algunos outputs y snapshots ya existen, pero antes del cierre final. El backend debe detectar inactivity, preservar autoridad, decidir recovery y reanudar desde snapshot backend-owned, nunca desde memoria de proceso del engine. Después, verificar reload de frontend y consistencia de proyecciones. citeturn9view0turn55view1turn55view2
-
-15. Verificar tenant isolation: ningún memory observation, approval, cost entry, feed, projection o artifact de Atlas debe aparecer en el tenant control, y viceversa. Esto es requisito central porque el control plane declara ownership de tenancy, auth, query-boundary isolation y governance. citeturn55view1turn69view0
-
-La siguiente matriz resume **cómo evaluar cada moving part** dentro de esa sola corrida. La parte factual de “qué componentes existen” proviene del repo; lo demás es diseño de QA recomendado para convertir esa base en una suite de producción. citeturn67view0turn69view0turn35view0turn71view0turn71view1turn71view2
-
-| Moving part | Paso de evaluación | Evidencia esperada | Aserción automatizada | Señal manual | Invariante o concern que prueba |
-|---|---|---|---|---|---|
-| Frontend | inicio, reload, approval, memory, accounting | UI reconstruida, rutas correctas, state feeds consistentes | DOM assertions + reload consistency | claridad operativa del tablero | frontend no autoritativo |
-| Backend control plane | toda la corrida | APIs, projections, decisions, tenancy, auth, state feeds | status transitions monotónicas | coherencia del modelo de operación | backend authoritative |
-| Engine | dispatch, concurrency, crash/restart | event emission, parallel starts, restart limpio | no writes durables directos, no duplicate side effects | credibilidad de concurrent execution | engine no autoritativo |
-| Postgres / pgvector | persistencia, recovery, second run | state durable, search/memory persistidos | rows/read models sobreviven restart | no pérdida de contexto | durability |
-| Redis | queue, locks, websocket backing | queue depth, locks, feed continuity | no deadlock, no zombie runs | fluidez del sistema | resilience |
-| Run queue | lanzamiento concurrente | queue timestamps y dispatch order | expected queue states | sensación de paralelismo real | scheduling correctness |
-| Runtime write intents | commits de lifecycle/memory | receipts/transitions idempotentes | repeated callbacks no duplican estado | trazabilidad clara | idempotencia durable |
-| OS projections worker | updates a UI/system-state | feeds/projections convergen | projection lag bajo umbral | pantalla consistente con backend | projection consistency |
-| Memory subsystem | segunda campaña | memory reads/writes con provenance | second-run uplift | sistema “recuerda” correctamente | memory usefulness |
-| Whiteboard | progreso y coordinación | blockers, assumptions, outputs visibles | board refresh = backend state | board ayuda a operar | usefulness over decoration |
-| Approvals / HITL | pause/resume | state machine correcta + rationale | no resume sin decision válida | claridad de packet de aprobación | deterministic lifecycle |
-| Deployment orchestration | pre-launch y launch | launch package + rollback plan | no deploy sin gates verdes | lanzamiento parece real y seguro | safety gating |
-| Performance orchestration | post-launch y second run | metric tree, report, learnings | learning entries persistidas | readout útil, no humo | business learning loop |
-| Accounting / cost | throughout | ledger/cost aggregates coherentes | costs suman y no cruzan tenants | costos explicables | accounting integrity |
-| Audit log / events | throughout | timeline trazable | every important transition has event + state | investigación operacional posible | auditability |
-| Tenant isolation | dual tenant | feeds y memorias separadas | zero cross-tenant leakage | confianza de aislamiento | isolation |
-| Failure recovery | engine crash | backend recovery_reason, resume/retry correcto | no corruption, no stale resume ack | resiliencia creíble | recovery correctness |
-
-**Scoring rubric del run completo.** Recomiendo puntuar 100 con tres buckets y con hard-fails obligatorios. *Atlas company quality* debe valer 40 puntos; *System QA* debe valer 35; *System integrity* debe valer 25. El score global mínimo de release debe ser 80/100, pero además cada bucket debe pasar 70/100 y existen cuatro hard-fails no negociables: violación de backend state ownership, fuga entre tenants, deploy sin legal/approval gate, y ausencia de mejora o trazabilidad en memoria/segunda corrida. La base repo para priorizar estos buckets es el fuerte énfasis documental en ownership/invariants, la expansión de superficies OS, y la existencia explícita de costos, decisiones, memoria y auditoría como hechos canónicos. citeturn9view0turn9view1turn68view0turn55view0
-
-| Bucket | Peso | Dimensiones internas | Mínimo bucket |
-|---|---:|---|---:|
-| Atlas company quality | 40 | strategic coherence, department output quality, deliverable quality, legal/compliance safety, media/deployment readiness, performance learning, memory usefulness, whiteboard usefulness, operator clarity | 70 |
-| System QA | 35 | happy-path completion, lifecycle determinism, dependency handling, approval handling, deployment/performance contract handling, API correctness, frontend correctness, test determinism | 70 |
-| System integrity | 25 | backend state ownership, engine non-authoritative behavior, idempotency, recovery, projection consistency, auditability, cost/accounting integrity, Redis resilience, Postgres persistence, memory scoping | 70 |
-
-**Plan automatizado.** La automatización debe tener cuatro capas. Primera, gates rápidos ya alineados con el repo: backend `uv run pytest`, frontend Jest/Playwright y Go tests del engine. Segunda, suite de integración backend-engine con callbacks firmados y lifecycle state assertions. Tercera, “Atlas Production System Run” dockerizado completo. Cuarta, suite de chaos/recovery y second-run-learning. El repo ya muestra `pytest`, `testsprite_tests` en backend/engine/frontend, Playwright, Jest, `architecture_enforcement_test.go`, `statelessness_guard_test.go` y `tools/loadgen`, así que el esqueleto de automatización existe; falta unirlo en una corrida de producción única con scoring consolidado. citeturn68view1turn71view0turn71view1turn71view2turn75view2turn75view3turn67view0
-
-**Rúbrica de revisión humana.** La revisión humana debe ser corta pero fuerte: una persona de producto/ops debe calificar 0–5 en estrategia, claridad del package de aprobación, calidad de deliverables, utilidad real de memoria, utilidad real del whiteboard, credibilidad del readout de performance, claridad UI, y calidad de evidencia ante falla. Si el sistema “cumple técnicamente” pero el revisor no puede responder qué se está haciendo, por qué, qué está bloqueado, qué ya fue aprobado y qué aprendió Atlas, el run debe quedar en amarillo o rojo. La necesidad de esta revisión humana se deriva del hecho de que el repo sí provee primitives de decisiones/memoria/costos/proyecciones, pero la calidad empresarial de Atlas no es reducible a asserts binarios. citeturn68view0turn35view0
-
-**Observabilidad y evidencia requerida.** Cada corrida debe generar un bundle mínimo con: `run_id`, `tenant_id`, `company_id`, timestamps de dispatch/start/finish, queue wait, blocked duration, approval wait, `resume_attempt_id`, `recovery_reason`, snapshot lineage, write-intent receipts, projection version/lag, websocket feed evidence, LLM usage/cost, selected memories with provenance, board exports, operator screenshots clave, deployment package hash, performance report hash y diff entre campaña uno y dos. Esto no es burocracia: el runtime contract explícitamente exige liveness, snapshot semantics, recovery decisions backend-owned y events no autoritativos; sin evidencia cruzada no podrás demostrar que el sistema obedeció el contrato bajo carga/falla. citeturn9view0turn55view0turn55view1turn35view0
-
-## Delta de implementación y riesgos
-
-**Ya implementado y utilizable como base inmediata.** La separación `frontend`/`backend`/`engine` y el contrato de ownership están muy bien definidos. También están presentes las rutas OS principales, los aliases de compatibilidad, las dependencias base de backend para Django/Channels/Redis/Celery/pgvector/gRPC, las dependencias del engine para Redis/gRPC/OpenTelemetry, el seed fixture con approval y memory visibles, los servicios backend para compañía/departamentos/packs/memoria/deployment/performance/routing/lifecycle/proyecciones, los tests de enforcement del engine, los directorios `testsprite_tests` en los tres planos y la infraestructura operacional de backup/restore/release. Eso ya permite una suite de producción seria sin rediseñar el producto desde cero. citeturn68view0turn68view1turn74view0turn73view0turn69view0turn35view0turn71view0turn71view1turn71view2
-
-**Parcialmente implementado.** Operating model packs son clearly first-class por carpeta y servicio, pero el Atlas pack no es públicamente rastreable por nombre desde las superficies inspeccionadas. La cola de runs, write intents, proyecciones y evaluación existen como piezas, pero sus workers/harnesses end-to-end no están todos first-class visibles. Accounting aparece en read models y APIs, pero la superficie “ledger” no es tan explícita en los nombres visibles como memoria, deployment o performance. El runtime LLM local OpenAI-compatible es plausible por contexto y por `playwright:openai-mock`, pero no quedó first-class confirmado en la inspección pública. Todo esto son huecos de empaquetado/trazabilidad, no señales de inexistencia del sistema base. citeturn67view0turn35view0turn71view2turn68view0
-
-**Faltante y obligatorio para una corrida de producción.** Primero, un **Atlas pack explícito y nombrado** con departamentos, contratos, goals, scoring y fixtures de onboarding. Segundo, un **whiteboard backend-backed** y medible; hoy no quedó públicamente individualizable. Tercero, **contratos departamentales/workstream contracts** first-class, no sólo implícitos en servicios y stage outputs. Cuarto, una **suite única de producción** que mida segunda corrida y mejora por memoria. Quinto, evidencia fuerte de **tenant isolation** y de **failure recovery** en E2E cross-tier. Sexto, un **score consolidado** que pueda bloquear release si Atlas no se comporta como empresa, aunque el stack técnico “termine”. Todos estos faltantes soportan al mismo tiempo QA, integridad y calidad Atlas. citeturn45view0turn72view0turn69view0turn35view0turn68view1
-
-**Faltante pero opcional para después del production-grade run.** Partnerships / Vendor Management como departamento formal, portfolios multi-pack comparativos por industria, richer analytics de agency utilization, simuladores de budget pacing multi-canal y dashboards ejecutivos más detallados. El repo ya sugiere direcciones hacia portfolio y marketplace, así que estos agregados son naturales, pero no deberían bloquear la primera suite de producción. citeturn35view0turn15view0
-
-**Nice-to-have posterior.** Scorecards automáticos por departamento con LLM-as-judge calibrado, diffs visuales de whiteboard entre corridas, drift detector de proyecciones, replay forense de runs y comparación Atlas-versus-tenant-control vía `tools/loadgen` con escenarios de carga reproducibles. El folder `tools/loadgen` y la documentación de perf/reliability hacen plausible ese camino. citeturn67view0turn70view0
-
-Los siguientes PRs son, en mi opinión, la secuencia correcta para cerrar la brecha entre el repo actual y la suite Atlas de producción. La priorización combina impacto en **QA**, **integridad del sistema** y **calidad Atlas**. citeturn69view0turn35view0turn9view0
-
-| PR propuesto | Razón | Módulos / archivos impactados | Pruebas esperadas | Prioridad | Soporta |
-|---|---|---|---|---|---|
-| Atlas pack explícito | Convertir Atlas en artefacto first-class | `operating_model_packs/atlas/*`, `backend/application/services/company_operating_models.py`, `operating_model_packs.py` | pack health + onboarding + routing | P0 | las tres |
-| Contratos departamentales explícitos | Dejar de inferir workstreams implícitos | `operating_model_packs/atlas/contracts/*`, DTOs backend | contract validation + blocking rules | P0 | las tres |
-| Whiteboard first-class | Volverlo operable y medible | `backend/application/services/whiteboard.py`, projections, `frontend/domain/whiteboard/*` | persistence/reload/isolation/usefulness | P0 | Atlas + QA |
-| Atlas Production System Run | Unificar QA + integrity + behavior quality | backend integration tests, frontend Playwright, engine tests, scripts | end-to-end docker run con score | P0 | las tres |
-| Memory uplift test | Probar mejora real de segunda corrida | memory services, engine retriever, fixtures | second-run delta assertions | P0 | Atlas + integrity |
-| Recovery and chaos path | Validar restart/resume backend-owned | `run_liveness.py`, `run_snapshots.py`, engine restart tests | crash-resume-no-corruption | P0 | QA + integrity |
-| Tenant isolation audit suite | Bloquear fugas de memoria/costos/feeds | tenancy, company access, feeds, projections | dual-tenant leakage suite | P1 | integrity |
-| Accounting evidence bundle | Hacer costo útil, no decorativo | pricing, commerce, accounting projections/UI | cost sum, attribution, UI evidence | P1 | QA + Atlas |
-| Terminology boundary hardening | Evitar surfacing internal runtime terms | frontend/domain, terminology script, API ViewModels | language boundary assertions | P1 | QA + product |
-| Loadgen + observability harness | Probar coherencia bajo carga | `tools/loadgen`, telemetry, metrics | queue lag, projection lag, retries | P2 | integrity |
-
-**Riesgos abiertos.** El primero es de trazabilidad: Atlas parece importante para el plan de producto, pero no resulta públicamente localizable por nombre en las superficies inspeccionadas; eso hace difícil evaluar si el sistema está probando Atlas o un fixture genérico de consultoría. El segundo es de degradación silenciosa: sin contratos departamentales first-class, Atlas podría “completar corridas” aun cuando sus supuestos y deliverables no gobiernen nada. El tercero es de UX operativa: sin whiteboard claramente backend-backed, el operador podría no entender progreso real. El cuarto es de verificación incompleta: el repo visible sí confirma mucha infraestructura, pero no deja públicamente trazable un live Atlas full-flow nombrado. El quinto es de documentación: el README referencia documentos de producto/frontend que no pudieron recuperarse vía raw durante esta inspección, de modo que conviene revalidar trazabilidad documental dentro del repo. citeturn45view0turn45view2turn71view2turn31view0turn9view3turn32view0
-
-Mi recomendación final, ya aterrizada a implementación, es que la **suite de producción de Atlas** se convierta en el release gate principal del producto. No sólo porque el repo ya tiene la base para hacerlo, sino porque ese gate es exactamente el lugar donde las tres preguntas difíciles convergen: “¿la app funciona?”, “¿la arquitectura sigue íntegra bajo falla y carga?” y “¿Atlas se comporta como una empresa AI de marketing útil, con memoria, aprobaciones, costos, despliegue, performance y aprendizaje que realmente aportan valor?”. Hoy el repositorio está cerca de poder responder “sí”, pero todavía necesita que Atlas, whiteboard y los contratos departamentales dejen de ser implícitos y pasen a ser artefactos verificables. citeturn68view0turn69view0turn35view0turn9view0
+### P1 Implementation Plan
+
+P1 target: the primary Atlas live flow should be UI-driven for connector setup, onboarding enrichment, workstream completion, phase synthesis, gate evaluation, performance report generation, and performance evaluation. Follow-up memory uplift may remain helper-assisted until guided follow-up authoring and memory-review UI exist.
+
+- Implement pragmatic v1 controls, not rich artifact editors: compact forms, JSON inputs where structured authoring is still immature, and backend-owned responses as the source of truth.
+- Keep every action on generic ForgeGraph routes: company pack config updates through `/api/companies/{companyId}/packs/{installationId}`, and whiteboard phase/deployment/performance actions through `/api/whiteboards/*`.
+- Add connector availability controls from pack metadata and preserve pack-owned configuration by only changing `available_connectors`, with generated policy keys removed from submitted company config.
+- Add whiteboard context editing for objective, budget, timeline, constraints, stakeholder/resource/delivery context, and assumptions, then reload backend state after save.
+- Add workstream completion controls, phase synthesize/evaluate controls, and performance report/evaluate controls in `WhiteboardPanel`, using existing backend contracts and operation lifecycle evidence.
+- Update the live Atlas spec so helper-assisted steps for the primary run are removed; remaining helpers must be limited to follow-up memory uplift, durable-state/isolation verification, and evidence collection.
+
+### P2 - Scale, Transport, And Review Depth
+
+- [ ] Add a Kafka-enabled whiteboard transport variant while preserving backend-owned authority.
+- [ ] Add load-generation coverage for workstream fan-out, dependency transitions, operation lifecycle writes, and projection lag.
+- [ ] Add richer scorecards and a human-review packet for release decisions.
+- [ ] Add optional real connector integrations for approved deployment channels, with sandbox receipts and honest blockers where providers are unavailable.
+
+## Success Criteria
+
+### Atlas Quality
+
+- Strategy, legal/compliance, tech/martech, media, copy, analytics, traffic, content, timing, and deployment-readiness workstreams are visible in evidence with correct dependency transitions.
+- The final deliverable is judged or scored against strategy coherence, compliance safety, execution readiness, client clarity, measurement readiness, and tool honesty.
+- A follow-up campaign proves memory usefulness by reusing prior approved constraints/learnings and avoiding at least one previously rejected claim, channel, or assumption.
+
+### System Reliability
+
+- Every phase, deployment, and performance action has a durable `ProductOperation` with terminal status and contract revision evidence.
+- Whiteboard, phase, deployment, performance, approval, memory, and routing state can be re-read from backend APIs after frontend reload.
+- Missing connectors create blockers or signals, not fake `ToolExecution` success.
+- Other-client isolation returns no whiteboard, operation, approval, deployment, performance, artifact, memory, or route leakage.
+- No `/api/atlas/*`, `/api/marketing/*`, or `/api/legacy/*` routes are used.
+
+### Runtime Integrity
+
+- Backend remains the only durable source of truth.
+- Redis, Kafka, and WebSocket state are treated as cache or transport only.
+- Engine tests and runtime checks continue to reject durable ownership regressions.
+- Recovery tests prove no stale resume acknowledgement or engine-memory dependency can corrupt state.
+
+### Release Gate
+
+- Existing targeted backend tests pass.
+- Architecture invariant tests pass.
+- Frontend typecheck passes.
+- `npm run test:e2e:atlas:docker:local-llm` passes.
+- The Atlas evidence attachment includes enough IDs and revisions to debug the run without relying on screenshots alone.
+
+## Evidence Contract
+
+The live Atlas evidence artifact should include at minimum:
+
+- Pack id and namespace.
+- Company, customer, campaign, whiteboard, and phase identifiers.
+- Route list proving only generic routes were used.
+- Workstream batches before and after dependency transitions.
+- `ProductOperation` IDs, terminal statuses, and contract revisions for phase, deployment, and performance actions.
+- Approval task ID, approval status, reviewer identity, and approval timestamp.
+- Deployment readiness result, executed connector receipts, and blocker records for missing connectors.
+- Performance metric snapshot ID, report run ID, evaluation run ID, and optimization routing records.
+- Memory references used by the run and follow-up memory-uplift proof.
+- Recovery or resume identifiers for recovery-focused runs.
+- Tenant isolation checks for whiteboards, operations, approvals, deployments, performance records, artifacts, memory, and routes.
+- Helper-assisted steps with the reason each helper was still required.
+
+## Assumptions
+
+- Keep Atlas on generic ForgeGraph primitives; do not introduce `/api/atlas/*` or marketing-specific core durable models.
+- Keep `digital_marketing_pro.v1` as the current Atlas/DMP pack identifier.
+- Keep the existing live Atlas spec as the primary acceptance target rather than creating a parallel production spec immediately.
+- Treat docs cleanup as a separate PR from Atlas/system reliability work.
+- Keep helper-assisted steps allowed only where the product UI does not exist yet, and require every helper-assisted step to be listed in the evidence artifact.

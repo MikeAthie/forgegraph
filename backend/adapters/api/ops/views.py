@@ -40,6 +40,9 @@ from application.services.runtime_write_intents import (
     build_runtime_intent_redis_client,
     decode_runtime_intent_message,
 )
+from application.services.whiteboard_board_kafka import (
+    whiteboard_board_kafka_transport_evidence,
+)
 from application.workers.process_os_projection_events import process_pending_projection_events
 from infrastructure.orm.models import (
     AuditLog,
@@ -565,6 +568,54 @@ class OpsProjectionLagView(APIView):
                 "active_dead_letters": [
                     _event_dead_letter_summary(item) for item in active_dead_letters
                 ],
+            }
+        )
+
+
+class OpsTransportEvidenceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        allowed = _require_ops_permission(request, OPS_PROJECTION_READ)
+        if isinstance(allowed, Response):
+            return allowed
+        _, organization = allowed
+
+        transport = str(request.query_params.get("transport") or "").strip()
+        if transport != "whiteboard_board_kafka":
+            return error_response(
+                "UNSUPPORTED_TRANSPORT",
+                "Only whiteboard_board_kafka transport evidence is available.",
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+        whiteboard_id = str(request.query_params.get("whiteboard_id") or "").strip()
+        if whiteboard_id:
+            try:
+                UUID(whiteboard_id)
+            except ValueError:
+                return error_response(
+                    "INVALID_WHITEBOARD_ID",
+                    "whiteboard_id must be a UUID.",
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+        company_id = str(request.query_params.get("company_id") or "").strip()
+        if company_id:
+            try:
+                UUID(company_id)
+            except ValueError:
+                return error_response(
+                    "INVALID_COMPANY_ID",
+                    "company_id must be a UUID.",
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+
+        return success_response(
+            {
+                "transport_evidence": whiteboard_board_kafka_transport_evidence(
+                    organization=organization,
+                    whiteboard_id=whiteboard_id,
+                    company_id=company_id,
+                )
             }
         )
 

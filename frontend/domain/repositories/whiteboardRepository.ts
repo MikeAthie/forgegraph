@@ -22,6 +22,7 @@ import {
   type WorkWhiteboardStrategyDTO,
   type WorkWhiteboardStrategyResponse,
   type WorkWhiteboardStrategySynthesisInput,
+  type WorkWhiteboardWorkstreamCompleteInput,
   whiteboardsApi,
 } from "@/lib/api";
 
@@ -75,6 +76,14 @@ export const whiteboardRepository = {
     phaseId: string,
     input: WorkWhiteboardPhaseEvaluationInput,
   ): Promise<WorkWhiteboardPhaseResponse> => whiteboardsApi.evaluatePhase(whiteboardId, phaseId, input),
+
+  completeWorkstream: (
+    whiteboardId: string,
+    phaseId: string,
+    workstreamId: string,
+    input: WorkWhiteboardWorkstreamCompleteInput,
+  ): Promise<WorkWhiteboardPhaseResponse> =>
+    whiteboardsApi.completeWorkstream(whiteboardId, phaseId, workstreamId, input),
 
   getDeployment: (whiteboardId: string): Promise<WorkWhiteboardDeploymentContractDTO> =>
     whiteboardsApi.getDeployment(whiteboardId),

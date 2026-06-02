@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 from uuid import UUID
@@ -10,7 +11,7 @@ from uuid import UUID
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from application.services.domain_event_outbox import (
@@ -27,6 +28,7 @@ from application.services.whiteboard_boards import (
 from infrastructure.orm.models import (
     CommunicationEventReceipt,
     DomainEventOutbox,
+    EventDeadLetterRecord,
     Graph,
     Organization,
     WorkWhiteboard,
@@ -502,6 +504,180 @@ def whiteboard_board_kafka_max_payload_bytes() -> int:
     )
 
 
+def build_whiteboard_board_kafka_readiness_payload(
+    *,
+    admin_client_factory: Any | None = None,
+) -> dict[str, Any]:
+    """Check whiteboard board Kafka reachability and backend-owned outbox backlog."""
+
+    started_at = time.perf_counter()
+    topic = whiteboard_board_kafka_topic()
+    backlog_threshold = max(
+        _setting_int("WHITEBOARD_BOARD_KAFKA_OUTBOX_BACKLOG_READY_THRESHOLD", 1000),
+        0,
+    )
+    backlog = whiteboard_board_kafka_outbox_backlog(topic=topic)
+    backlog_ready = backlog_threshold <= 0 or backlog <= backlog_threshold
+    if not whiteboard_board_kafka_enabled():
+        return {
+            "ready": False,
+            "enabled": False,
+            "topic": topic,
+            "broker_ready": False,
+            "topic_ready": False,
+            "backlog": backlog,
+            "backlog_threshold": backlog_threshold,
+            "backlog_ready": backlog_ready,
+            "latency_ms": int((time.perf_counter() - started_at) * 1000),
+            "error": "WHITEBOARD_BOARD_KAFKA_ENABLED is false.",
+        }
+
+    broker_ready = False
+    topic_ready = False
+    error_message = ""
+    try:
+        factory = admin_client_factory or _load_confluent_kafka_admin_client()
+        admin_client = factory(_common_config())
+        metadata_timeout = float(
+            getattr(settings, "WHITEBOARD_BOARD_KAFKA_METADATA_TIMEOUT_SECONDS", 5)
+        )
+        metadata = admin_client.list_topics(topic=topic, timeout=metadata_timeout)
+        topics = getattr(metadata, "topics", {}) or {}
+        topic_metadata = topics.get(topic)
+        topic_error = getattr(topic_metadata, "error", None) if topic_metadata else None
+        broker_ready = True
+        topic_ready = topic_metadata is not None and not topic_error
+        if topic_error:
+            error_message = str(topic_error)[:1000]
+    except Exception as exc:  # noqa: BLE001 - readiness reports failures as data.
+        error_message = str(exc)[:1000]
+
+    ready = bool(broker_ready and topic_ready and backlog_ready)
+    return {
+        "ready": ready,
+        "enabled": True,
+        "topic": topic,
+        "broker_ready": broker_ready,
+        "topic_ready": topic_ready,
+        "backlog": backlog,
+        "backlog_threshold": backlog_threshold,
+        "backlog_ready": backlog_ready,
+        "latency_ms": int((time.perf_counter() - started_at) * 1000),
+        "error": error_message,
+    }
+
+
+def whiteboard_board_kafka_outbox_backlog(*, topic: str | None = None) -> int:
+    return int(
+        DomainEventOutbox.objects.filter(
+            topic=topic or whiteboard_board_kafka_topic(),
+            status__in=["pending", "failed", "deferred"],
+        ).count()
+    )
+
+
+def whiteboard_board_kafka_transport_evidence(
+    *,
+    organization: Organization,
+    whiteboard_id: str = "",
+    company_id: str = "",
+) -> dict[str, Any]:
+    """Return observability-only transport evidence scoped to backend-owned records."""
+
+    topic = whiteboard_board_kafka_topic()
+    group = whiteboard_board_kafka_consumer_group()
+    whiteboard_id = str(whiteboard_id or "").strip()
+    company_id = str(company_id or "").strip()
+
+    organization_id = str(organization.id)
+    outbox_query = DomainEventOutbox.objects.filter(organization=organization, topic=topic)
+    receipt_query = CommunicationEventReceipt.objects.filter(
+        consumer_group=group,
+        topic=topic,
+    ).filter(
+        Q(organization=organization)
+        | Q(organization__isnull=True, payload_json__organization_id=organization_id)
+    )
+    dead_letter_query = EventDeadLetterRecord.objects.filter(
+        source="whiteboard_board_kafka_consumer",
+    ).filter(
+        Q(organization=organization) | Q(organization__isnull=True, payload__organization_id=organization_id)
+    )
+
+    if whiteboard_id:
+        outbox_query = outbox_query.filter(payload_json__whiteboard_id=whiteboard_id)
+        receipt_query = receipt_query.filter(payload_json__whiteboard_id=whiteboard_id)
+        dead_letter_query = dead_letter_query.filter(payload__whiteboard_id=whiteboard_id)
+    if company_id:
+        outbox_query = outbox_query.filter(
+            Q(company_id=company_id) | Q(company__isnull=True, payload_json__company_id=company_id)
+        )
+        receipt_query = receipt_query.filter(
+            Q(company_id=company_id) | Q(company__isnull=True, payload_json__company_id=company_id)
+        )
+        dead_letter_query = dead_letter_query.filter(payload__company_id=company_id)
+
+    outbox_counts = _counts_by_status(
+        outbox_query,
+        statuses=["pending", "published", "failed", "deferred"],
+    )
+    receipt_counts = _counts_by_status(
+        receipt_query,
+        statuses=["handled", "ignored", "failed"],
+    )
+    active_dead_letters = dead_letter_query.filter(status__in=["active", "replay_requested"])
+    return {
+        "transport": "whiteboard_board_kafka",
+        "authoritative_state_source": "backend_db",
+        "enabled": whiteboard_board_kafka_enabled(),
+        "topic": topic,
+        "consumer_group": group,
+        "organization_id": str(organization.id),
+        "company_id": company_id,
+        "whiteboard_id": whiteboard_id,
+        "outbox": {
+            **outbox_counts,
+            "total": outbox_query.count(),
+            "backlog": outbox_query.filter(status__in=["pending", "failed", "deferred"]).count(),
+        },
+        "receipts": {
+            **receipt_counts,
+            "total": receipt_query.count(),
+            "idempotent_duplicate_policy": "existing_receipt_reused",
+        },
+        "dead_letters": {
+            "active_count": active_dead_letters.count(),
+            "total": dead_letter_query.count(),
+            "recent": [
+                {
+                    "id": str(item.id),
+                    "status": item.status,
+                    "reason": item.reason,
+                    "event_id": item.event_id,
+                    "event_type": item.event_type,
+                    "last_seen_at": item.last_seen_at.isoformat(),
+                }
+                for item in dead_letter_query.order_by("-last_seen_at")[:10]
+            ],
+        },
+        "recent_receipts": [
+            {
+                "id": str(item.id),
+                "status": item.status,
+                "event_id": item.event_id,
+                "idempotency_key": item.idempotency_key,
+                "topic": item.topic,
+                "partition": item.partition,
+                "offset": item.offset,
+                "event_type": item.event_type,
+                "received_at": item.received_at.isoformat(),
+            }
+            for item in receipt_query.order_by("-received_at")[:10]
+        ],
+        "generated_at": timezone.now().isoformat(),
+    }
+
+
 def _failed_event(
     payload: dict[str, Any],
     *,
@@ -690,12 +866,25 @@ def _common_config() -> dict[str, Any]:
         raise WhiteboardBoardKafkaConfigurationError(
             "WHITEBOARD_BOARD_KAFKA_BOOTSTRAP_SERVERS or KAFKA_BROKERS is required when board Kafka is enabled."
         )
-    return {
+    config: dict[str, Any] = {
         "bootstrap.servers": bootstrap_servers,
         "client.id": _setting_value("WHITEBOARD_BOARD_KAFKA_CLIENT_ID")
         or _setting_value("KAFKA_CLIENT_ID")
         or "forgegraph-whiteboard-board-outbox",
     }
+    security_protocol = _setting_value("WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL")
+    if security_protocol:
+        config["security.protocol"] = security_protocol
+    sasl_mechanism = _setting_value("WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM")
+    if sasl_mechanism:
+        config["sasl.mechanism"] = sasl_mechanism
+    sasl_username = _setting_value("WHITEBOARD_BOARD_KAFKA_SASL_USERNAME")
+    if sasl_username:
+        config["sasl.username"] = sasl_username
+    sasl_password = _setting_value("WHITEBOARD_BOARD_KAFKA_SASL_PASSWORD")
+    if sasl_password:
+        config["sasl.password"] = sasl_password
+    return config
 
 
 def _load_confluent_kafka_producer() -> Any:
@@ -716,6 +905,25 @@ def _load_confluent_kafka_consumer() -> Any:
             "confluent-kafka is required for board Kafka consuming."
         ) from exc
     return Consumer
+
+
+def _load_confluent_kafka_admin_client() -> Any:
+    try:
+        from confluent_kafka.admin import AdminClient
+    except ImportError as exc:  # pragma: no cover - exercised only when Kafka is installed.
+        raise WhiteboardBoardKafkaConfigurationError(
+            "confluent-kafka is required for board Kafka readiness."
+        ) from exc
+    return AdminClient
+
+
+def _counts_by_status(queryset: Any, *, statuses: list[str]) -> dict[str, int]:
+    counts = dict.fromkeys(statuses, 0)
+    for row in queryset.values("status").annotate(count=Count("id")):
+        status = str(row["status"])
+        if status in counts:
+            counts[status] = int(row["count"])
+    return counts
 
 
 def _encode_payload(payload: dict[str, Any]) -> bytes:

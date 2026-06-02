@@ -74,6 +74,26 @@ export const operatingModelRepository = {
     return toOperatingModelPackVM(installation);
   },
 
+  updateAvailableConnectors: async (input: {
+    companyId: string;
+    installationId: string;
+    currentConfig?: Record<string, unknown>;
+    availableConnectors: string[];
+  }): Promise<OperatingModelPackVM> => {
+    const config = sanitizeConnectorConfig(input.currentConfig ?? {});
+    config.available_connectors = Array.from(new Set(input.availableConnectors)).sort();
+    config.skip_graph_version = true;
+    const installation = await operatingModelsApi.patchCompanyPack(
+      input.companyId,
+      input.installationId,
+      { config },
+      {
+        idempotencyKey: newClientCommandId("operating-model-pack.connectors"),
+      },
+    );
+    return toOperatingModelPackVM(installation);
+  },
+
   createProgram: async (input: {
     companyId: string;
     templateId: string;
@@ -459,5 +479,20 @@ export const operatingModelRepository = {
     return projections.map(toStateProjectionVM);
   },
 };
+
+function sanitizeConnectorConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...config };
+  for (const key of [
+    "workstream_phases",
+    "phases",
+    "deployment_policies",
+    "deployments",
+    "performance_policies",
+    "measurement_policies",
+  ]) {
+    delete next[key];
+  }
+  return next;
+}
 
 type OperatingModelRepository = typeof operatingModelRepository;

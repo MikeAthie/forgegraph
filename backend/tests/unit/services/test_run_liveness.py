@@ -246,6 +246,74 @@ def test_reconcile_stale_runs_requeues_stale_resume_requested_run_from_checkpoin
 
 
 @override_settings(RUN_QUEUE_ENABLED=True)
+def test_reconcile_stale_resume_uses_backend_checkpoint_not_resume_attempt_state():
+    stale_time = timezone.now() - timedelta(minutes=10)
+    active_resume_attempt_id = uuid4()
+    run = _make_run(status="resume_requested", last_progress_at=stale_time)
+    run.recovery_policy = RECOVERY_POLICY_RESUME
+    run.engine_instance_id = "engine-with-stale-memory"
+    run.resume_requested_at = stale_time
+    run.resume_attempt_id = active_resume_attempt_id
+    run.paused_node_id = "client_resume_gate"
+    run.pause_state_json = {
+        "resume_attempt_id": str(active_resume_attempt_id),
+        "next_node": "client_claimed_next_node",
+    }
+    run.save(
+        update_fields=[
+            "recovery_policy",
+            "engine_instance_id",
+            "resume_requested_at",
+            "resume_attempt_id",
+            "paused_node_id",
+            "pause_state_json",
+        ]
+    )
+    checkpoint = RunSnapshot(
+        run_id=run.id,
+        last_completed_node="backend_approved_gate",
+        next_node="backend_owned_next_node",
+        attempt_id="backend-snapshot-attempt",
+        updated_at=timezone.now(),
+    )
+    set_snapshot(checkpoint)
+
+    result = reconcile_stale_runs(stale_after_seconds=60, now=timezone.now())
+
+    assert result.scanned == 1
+    assert result.reconciled == 1
+    run.refresh_from_db()
+    assert run.status == "pending"
+    assert run.recovery_state == "stalled_resume_pending"
+    assert run.recovery_reason == "resume_timeout"
+    assert run.engine_instance_id == ""
+    assert run.resume_requested_at is None
+    assert run.resume_attempt_id is None
+    assert run.paused_node_id is None
+    assert run.pause_state_json is None
+
+    checkpoint_context = CheckpointContext.from_run(run)
+    assert checkpoint_context.checkpoint_node_id == "backend_approved_gate"
+    assert checkpoint_context.checkpoint_next_node == "backend_owned_next_node"
+    assert checkpoint_context.checkpoint_attempt_id == "backend-snapshot-attempt"
+    assert checkpoint_context.checkpoint_attempt_id != str(active_resume_attempt_id)
+
+    event = RunEvent.objects.get(run=run, event_type="run.updated")
+    assert event.payload["recovery_policy"] == RECOVERY_POLICY_RESUME
+    assert event.payload["recovery_action"] == RECOVERY_POLICY_RESUME
+    assert event.payload["recovery_reason"] == "resume_timeout"
+    assert event.payload["checkpoint_cleared"] is False
+    assert event.payload["checkpoint_available"] is True
+    assert event.payload["checkpoint_node_id"] == "backend_approved_gate"
+    assert event.payload["checkpoint_next_node"] == "backend_owned_next_node"
+    assert event.payload["checkpoint_attempt_id"] == "backend-snapshot-attempt"
+    assert str(active_resume_attempt_id) not in event.payload["recovery_message"]
+
+    queue_entry = run.queue_entry
+    assert queue_entry.status == "pending"
+
+
+@override_settings(RUN_QUEUE_ENABLED=True)
 def test_reconcile_stale_runs_fails_resume_policy_without_checkpoint():
     stale_time = timezone.now() - timedelta(minutes=10)
     run = _make_run(status="resume_requested", last_progress_at=stale_time)

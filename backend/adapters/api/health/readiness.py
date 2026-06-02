@@ -20,6 +20,9 @@ from application.services.communication_kafka import build_communication_kafka_r
 from application.services.runtime_transport_observability import (
     get_runtime_transport_observability_snapshot,
 )
+from application.services.whiteboard_board_kafka import (
+    build_whiteboard_board_kafka_readiness_payload,
+)
 from config.runtime_validation import collect_runtime_validation_errors
 
 
@@ -110,17 +113,34 @@ def build_readiness_payload() -> tuple[dict[str, Any], int]:
             }
 
     if getattr(settings, "READINESS_REQUIRE_COMMUNICATION_KAFKA", False):
-        try:
-            checks["communication_kafka"] = build_communication_kafka_readiness_payload()
-        except Exception as exc:  # noqa: BLE001
-            checks["communication_kafka"] = {
-                "ready": False,
-                "error": str(exc),
-            }
+        checks["communication_kafka"] = _communication_kafka_readiness_check()
+
+    if getattr(settings, "READINESS_REQUIRE_WHITEBOARD_BOARD_KAFKA", False):
+        checks["whiteboard_board_kafka"] = _whiteboard_board_kafka_readiness_check()
 
     ready = all(bool(check.get("ready")) for check in checks.values())
     status_code = status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE
     return {"status": "ready" if ready else "not_ready", "checks": checks}, status_code
+
+
+def _communication_kafka_readiness_check() -> dict[str, Any]:
+    try:
+        return build_communication_kafka_readiness_payload()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ready": False,
+            "error": str(exc),
+        }
+
+
+def _whiteboard_board_kafka_readiness_check() -> dict[str, Any]:
+    try:
+        return build_whiteboard_board_kafka_readiness_payload()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ready": False,
+            "error": str(exc),
+        }
 
 
 class ReadinessView(APIView):
