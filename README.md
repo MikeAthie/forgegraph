@@ -1,112 +1,188 @@
 # ForgeGraph
 
-ForgeGraph is an operating system for AI-native organizations.
+ForgeGraph is an AI Company Operating System.
 
-It supervises a system of agents, tasks, decisions, memory, and cost over time. Workflow authoring still exists, but it is now a secondary workspace under `Workflows`, not the primary product surface.
+It lets a user create a company, equip it with departments, skills, tools, policies, and operating-model packs, then launch and supervise real work through operations, approvals, deliverables, and backend-owned evidence.
 
-## Product Direction
+The product is company-first. Advanced workflow and graph editing still exists, but it is an expert surface under the company operating model, not the primary mental model.
 
-- Primary surface: organizational system state
-- Secondary surface: workflow definitions and revisions
-- Canonical runtime facts stay unchanged: `Run`, `NodeRun`, `RunEvent`, `ApprovalTask`, `MemoryObservation`, `LLMUsage`, `AuditLog`
-- New OS read models layer on top: `AgentRegistryEntry`, `TaskRecord`, `DecisionRecord`, `CostLedgerEntry`, `CostAggregate`
+## Runtime Contract
+
+`docs/architecture/runtime-invariants.md` is the canonical runtime contract. If any other document or implementation note conflicts with it, the invariant file wins.
+
+Non-negotiable rules:
+
+- The backend control plane is the only durable source of truth.
+- The engine executes work and may hold ephemeral state, but it does not own durable runtime state.
+- Events, Redis, Kafka, WebSockets, and client state are transport or observability layers, not authoritative state.
+- Snapshots, liveness, recovery, approval handoff, and durable resume state are backend-owned.
+
+## Product Model
+
+ForgeGraph presents a business operating system:
+
+- `Organization`: account, tenant, and permission boundary.
+- `Company`: durable business entity the user creates and operates.
+- `Department`: functional part of a company responsible for a class of work.
+- `Operation`: live or historical unit of company work.
+- `Task`: concrete unit of work inside an operation.
+- `Approval`: human decision that can pause and unblock work.
+- `Deliverable`: result the user can read, approve, use, or act on.
+- `Advanced operating model`: expert surface for direct structure editing.
+
+Primary product routes are `/companies`, `/companies/[companyId]`, `/runs`, and `/approvals`. Compatibility and expert routes remain for graph/workflow editing, execution inspection, admin, analytics, and testing.
 
 ## Architecture
 
-- `frontend/`: Next.js operator console and workflow workspace
-- `backend/`: Django control plane, APIs, projections, governance, marketplace, memory, accounting
-- `engine/`: Go execution plane focused on runtime execution only
-
-## Phase 1 in this repo
-
-- New OS shell with `Overview`, `Agents`, `Tasks`, `Inbox`, `Memory`, `Accounting`, `Library`, `Workflows`, `Settings`
-- Public terminology shift:
-  - `Graph -> Workflow Definition`
-  - `GraphVersion -> Workflow Revision`
-  - `Run -> Execution`
-  - `NodeRun -> Execution Step`
-  - `ApprovalTask -> Decision`
-- Alias APIs under `/api/workflows`, `/api/executions`, `/api/decisions`
-- Projection-backed APIs under `/api/agents`, `/api/tasks`, `/api/accounting`, `/api/system-state`
-
-## Docs
-
-- Canonical runtime contract: [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md)
-- Product: [docs/product/vision.md](docs/product/vision.md)
-- Mental model: [docs/product/mental-model.md](docs/product/mental-model.md)
-- State ownership: [docs/architecture/state-ownership-contract.md](docs/architecture/state-ownership-contract.md)
-- Backend map: [docs/backend/domain-map.md](docs/backend/domain-map.md)
-- Frontend shell: [docs/frontend/app-shell.md](docs/frontend/app-shell.md)
-- Migration: [docs/migration/ui-rollout.md](docs/migration/ui-rollout.md)
-
-## Test Automation Notes
-
-Generated tests should target the current OS surfaces first and treat legacy routes as compatibility coverage:
-
-- Frontend primary routes: `/overview`, `/agents`, `/tasks`, `/inbox`, `/memory`, `/accounting`, `/library`, `/workflows`, `/settings`
-- Frontend compatibility routes: `/graphs`, `/runs`, `/approvals`
-- Backend current aliases: `/api/workflows`, `/api/executions`, `/api/decisions`, `/api/agents`, `/api/tasks`, `/api/accounting`, `/api/system-state`
-- Backend compatibility routes: `/api/graphs`, `/api/runs`, `/api/approvals`
-
-Runtime-sensitive coverage must preserve the control-plane contract from [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md):
-
-- The backend owns durable state, snapshots, resume state, and recovery decisions.
-- The engine executes work but is not authoritative for durable runtime state.
-- The frontend observes backend-owned state and issues user actions; it is not authoritative.
-
-For deterministic browser coverage in local and hosted automation, seed the shared frontend fixture user before generating or running UI-heavy suites:
-
-```bash
-cd backend
-uv run python manage.py seed_testsprite_frontend_fixture
+```text
+Browser / operator UI
+        |
+        | REST + WebSocket
+        v
+Backend control plane ---------------> PostgreSQL + pgvector
+        |                                   Redis
+        | gRPC dispatch                     optional Kafka transport
+        v
+Go execution engine
 ```
 
-That fixture prepares `test@example.com` with a default organization plus an editable prompt, a pending approval, a visible memory observation, and a visible credential so generated tests can cover real operator flows instead of empty states.
+The backend validates commands, persists authoritative state, dispatches execution contracts, ingests signed engine callbacks, materializes projections, and notifies the UI. The engine runs workflow revisions and emits execution results back to backend-owned APIs.
 
-For backend API coverage, prefer these contracts:
+## Repository Map
 
-- Auth flows under `/api/auth/*`
-- Workflow metadata creation followed by workflow revision creation before execution start
-- Execution lifecycle through `/api/executions/*` or `/api/runs/*`
-- Signed engine callback delivery through `/api/runs/engine-events`
+| Path | Purpose |
+| --- | --- |
+| `backend/` | Django control plane, REST APIs, projections, governance, memory, accounting, marketplace, migrations, and backend tests. |
+| `engine/` | Go gRPC execution plane for running workflow revisions from backend-issued contracts. |
+| `frontend/` | Next.js operator console, company workspace, advanced operating-model UI, and Playwright/Jest tests. |
+| `operating_model_packs/` | Pack-owned operating-model configuration, including Digital Marketing Pro / Atlas. |
+| `docs/architecture/` | Runtime, ownership, event, projection, and control-plane contracts. |
+| `docs/product/` | Product ontology, company workspace model, navigation, and UX vocabulary. |
+| `docs/ops/` | Release, rollback, reliability, observability, capacity, and incident runbooks. |
+| `scripts/` | CI, runtime guardrails, ops utilities, release scripts, and validation helpers. |
+| `tools/` | Load generation and supporting developer tooling. |
 
-## Local CI Hook
+## Stack
 
-Install the shared Git hook once per clone:
+- Backend: Python 3.12+, Django 6, Django REST Framework, Channels, PostgreSQL, pgvector, Redis, optional Kafka.
+- Engine: Go 1.25, gRPC, Prometheus metrics, OpenTelemetry.
+- Frontend: Next.js 15, React 19, TypeScript, Tailwind, Radix UI, Jest, Playwright.
+- Local orchestration: Docker Compose.
 
-- macOS/Linux: `bash scripts/install-git-hooks.sh`
-- PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/install-git-hooks.ps1`
+## Quick Start
 
-Run the same gate manually without pushing:
+Prerequisites:
 
-- macOS/Linux: `bash scripts/ci/run_required_checks.sh`
-- PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/run-required-checks.ps1`
-- Shortcut from repo root on Windows: `.\checks.cmd` or `.\checks.ps1`
+- Docker Desktop or Docker Engine with Compose.
+- Node.js 20+ for frontend development.
+- Python 3.12+ and `uv` for backend development.
+- Go 1.25+ for engine development.
 
-The PowerShell wrappers intentionally delegate to `scripts/ci/run_required_checks.sh`, so local Windows runs and GitHub Actions use the same repo-owned check scripts.
+Create local environment values, then start the stack:
 
-Run the fast selective gate locally:
+```powershell
+Copy-Item .env.example .env
+docker compose up --build -d
+docker compose exec backend python manage.py migrate
+```
 
-- macOS/Linux: `bash scripts/ci/run_required_checks_fast.sh`
-- PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/run-required-checks-fast.ps1`
-- Shortcut from repo root on Windows: `.\checks-fast.cmd` or `.\checks-fast.ps1`
+Useful endpoints:
 
-PR CI uses the fast selective scripts. Pushes to `main` and nightly runs use the full authoritative gate.
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
+- Engine gRPC: `localhost:50051`
+- Engine metrics: `http://localhost:9090/metrics`
 
-The `pre-push` hook runs the same repo-owned check scripts used by GitHub Actions. Backend checks expect local Postgres and Redis to be reachable on the repo defaults from `docker-compose.yml`:
+The Docker frontend is built into an image. Rebuild it after frontend source changes:
 
-- Postgres: `localhost:5433`
-- Redis: `localhost:6379`
+```powershell
+docker compose build frontend
+docker compose up -d frontend
+```
 
-Start them with `docker compose up -d postgres redis` before pushing.
+## Local Development
 
-`backend/pytest.ini` points pytest at `config.test_settings`, which loads the repo-owned `.env.test` overrides. With the local dependencies up, the authoritative backend full-suite command is:
+Backend:
 
-- `cd backend && uv run pytest`
+```powershell
+cd backend
+uv sync
+uv run python manage.py migrate
+uv run python manage.py runserver 0.0.0.0:8000
+uv run pytest
+uv run ruff check .
+```
 
-## Production Ops
+Engine:
 
-- Release contract: `scripts/release/run_backend_migrate.sh` and `.github/workflows/release.yml`
-- Native Postgres backup/restore: `scripts/ops/backup_postgres.sh` and `scripts/ops/restore_postgres.sh`
-- Deploy env contract: `docs/ops/deploy-env-contract.md`
-- Release/rollback runbooks: `docs/ops/release-runbook.md`, `docs/ops/rollback-runbook.md`
+```powershell
+cd engine
+go test ./...
+go build -o engine .
+```
+
+Frontend:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+npm test
+npm run test:e2e
+npm run terminology:check
+```
+
+Repo-level checks:
+
+```powershell
+.\checks-fast.ps1
+.\checks.ps1
+```
+
+On macOS/Linux or Git Bash, the `./dev` helper wraps the common Docker Compose commands:
+
+```bash
+./dev up
+./dev migrate
+./dev logs
+./dev down
+```
+
+## Atlas / Operating-Model Pack Acceptance
+
+Atlas lives as pack configuration and generic whiteboard/orchestration behavior, not as a vertical backend route family.
+
+Primary live acceptance command:
+
+```powershell
+cd frontend
+npm run test:e2e:atlas:docker:local-llm
+```
+
+That command expects the Docker stack and a local OpenAI-compatible LLM endpoint as configured by the repo scripts. The acceptance target must stay on generic `/api/whiteboards/*` and pack-owned configuration, with no `/api/atlas/*` or marketing-specific durable core model ownership.
+
+## Documentation Index
+
+Start here when changing product, runtime, or release behavior:
+
+- Runtime invariants: [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md)
+- Product definition: [docs/product/forgegraph-product-definition.md](docs/product/forgegraph-product-definition.md)
+- Canonical terminology: [docs/product/canonical-ontology.md](docs/product/canonical-ontology.md)
+- Company workspace model: [docs/product/company-workspace-model.md](docs/product/company-workspace-model.md)
+- Control plane vs execution plane: [docs/architecture/control-plane-vs-execution-plane.md](docs/architecture/control-plane-vs-execution-plane.md)
+- Backend domain map: [docs/backend/domain-map.md](docs/backend/domain-map.md)
+- Frontend page hierarchy: [docs/frontend/page-hierarchy.md](docs/frontend/page-hierarchy.md)
+- Contributing guide: [docs/contributing.md](docs/contributing.md)
+- Release runbook: [docs/ops/release-runbook.md](docs/ops/release-runbook.md)
+- Rollback runbook: [docs/ops/rollback-runbook.md](docs/ops/rollback-runbook.md)
+- Deployment environment contract: [docs/ops/deploy-env-contract.md](docs/ops/deploy-env-contract.md)
+
+## Security And Generated Artifacts
+
+Do not commit `.env`, local database files, Playwright reports, generated TestSprite temp output, local logs, or provider credentials. Runtime credentials and connector secrets belong in environment-managed configuration, not in docs or fixtures.
+
+If a generated artifact contains test credentials, API keys, tunnel URLs, provider keys, cookies, or bearer tokens, treat it as sensitive and rotate the credential after removal.
+
+## License
+
+See [LICENSE](LICENSE).
