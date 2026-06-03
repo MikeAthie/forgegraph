@@ -14,9 +14,13 @@ import {
 import {
   getMarketplacePackageBadges,
   getMarketplacePackageReason,
+  getMarketplacePackageSetupFields,
+  getMarketplacePackageSourceLabel,
+  getMarketplacePackageSourcePath,
   getMarketplacePackageStatusLabel,
   getMarketplaceReasonLabel,
   getMarketplaceReleaseLabel,
+  isHermesGatewayPackage,
 } from "../../lib/marketplace-runtime";
 import {
   Alert,
@@ -128,12 +132,21 @@ function buildRuntimeManifest(form: ReleaseFormState): Record<string, unknown> |
     return {
       name: toolName,
       version: form.version.trim(),
-      kind: "http",
+      category: "communication",
       description: `${form.package_name.trim() || form.package_slug.trim()} runtime tool`,
-      http: {
-        url: form.runtime_http_url.trim() || "https://example.com/runtime/tool",
-        method: "POST",
+      visibility: "public",
+      input_schema: { type: "object" },
+      output_schema: { type: "object" },
+      execution: {
+        type: "http",
+        timeout_seconds: 30,
+        http: {
+          url: form.runtime_http_url.trim() || "https://example.com/runtime/tool",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
       },
+      side_effects: { type: "external", idempotent: false },
     };
   }
 
@@ -143,6 +156,10 @@ function buildRuntimeManifest(form: ReleaseFormState): Record<string, unknown> |
       name: transformName,
       version: form.version.trim(),
       kind: "transform",
+      category: "transform",
+      input_schema: { type: "object" },
+      output_schema: { type: "object" },
+      transform: { expression: "input" },
     };
   }
 
@@ -244,6 +261,7 @@ function useMarketplaceAdminController() {
     return map;
   }, [installed]);
   const pendingReleases = useMemo(() => releases.filter((release) => release.status === "pending_review"), [releases]);
+  const hermesGatewayPackages = useMemo(() => catalog.filter((pkg) => isHermesGatewayPackage(pkg)), [catalog]);
   const installedStats = useMemo(() => {
     return installed.reduce(
       (acc, pkg) => {
@@ -324,6 +342,7 @@ function useMarketplaceAdminController() {
         },
         config_schema: { type: "object" },
         config_defaults: releaseForm.package_kind === "runtime_tool" ? { tool: toolName } : {},
+        manifest_version: 2,
         runtime_manifest: runtimeManifest,
         cloud_allowed: releaseForm.cloud_allowed,
       });
@@ -350,6 +369,7 @@ function useMarketplaceAdminController() {
     releaseForm,
     installedBySlug,
     pendingReleases,
+    hermesGatewayPackages,
     installedStats,
     executionNodeType,
     refreshData,
@@ -435,6 +455,66 @@ function RuntimeStatCard({ title, description, value }: { title: string; descrip
   );
 }
 
+function HermesGatewayCoverageCard({ controller }: { controller: MarketplaceAdminController }) {
+  const packages = controller.hermesGatewayPackages;
+  const installedCount = packages.filter((pkg) => controller.installedBySlug.has(pkg.slug)).length;
+  const setupFields = Array.from(new Set(packages.flatMap((pkg) => getMarketplacePackageSetupFields(pkg)))).slice(
+    0,
+    10,
+  );
+
+  return (
+    <Card className="overflow-hidden border-border/80 bg-gradient-to-br from-card via-card to-muted/40">
+      <CardHeader>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle>Hermes gateway connector catalog</CardTitle>
+            <CardDescription>
+              Messaging-platform templates copied from NousResearch/hermes-agent gateway adapters and mapped into
+              backend-owned marketplace packages.
+            </CardDescription>
+          </div>
+          <Badge variant="outline">{packages.length} gateway connectors</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {packages.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Hermes gateway connector seeds have not been applied yet.</p>
+        ) : (
+          <>
+            <div className="grid gap-3 md:grid-cols-3">
+              <RuntimePreviewMetric label="Gateway templates" value={String(packages.length)} />
+              <RuntimePreviewMetric label="Installed" value={`${installedCount}/${packages.length}`} />
+              <RuntimePreviewMetric label="Source" value="NousResearch/hermes-agent" />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {packages.map((pkg) => (
+                <Badge key={pkg.slug} variant={controller.installedBySlug.has(pkg.slug) ? "default" : "secondary"}>
+                  {pkg.name.replace(/^Hermes\s+/i, "")}
+                </Badge>
+              ))}
+            </div>
+            {setupFields.length > 0 ? (
+              <div className="rounded-lg border border-border/80 bg-background/70 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Common setup keys surfaced in package schemas
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {setupFields.map((field) => (
+                    <Badge key={field} variant="outline" className="font-mono text-[11px]">
+                      {field}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ApprovedPackagesCard({ controller }: { controller: MarketplaceAdminController }) {
   return (
     <Card>
@@ -469,6 +549,9 @@ function ApprovedPackageRow({ pkg, controller }: { pkg: MarketplacePackage; cont
   const statusLabel = getMarketplacePackageStatusLabel(currentInstall ?? pkg);
   const reason = getMarketplacePackageReason(currentInstall ?? pkg);
   const badges = getMarketplacePackageBadges(currentInstall ?? pkg);
+  const sourceLabel = getMarketplacePackageSourceLabel(currentInstall ?? pkg);
+  const sourcePath = getMarketplacePackageSourcePath(currentInstall ?? pkg);
+  const setupFields = getMarketplacePackageSetupFields(currentInstall ?? pkg);
 
   return (
     <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
@@ -491,6 +574,26 @@ function ApprovedPackageRow({ pkg, controller }: { pkg: MarketplacePackage; cont
           {statusLabel}
           {reason ? ` · ${reason}` : ""}
         </p>
+        {sourceLabel ? (
+          <p className="text-xs text-muted-foreground">
+            Source: {sourceLabel}
+            {sourcePath ? ` · ${sourcePath}` : ""}
+          </p>
+        ) : null}
+        {setupFields.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {setupFields.slice(0, 4).map((field) => (
+              <Badge key={`${pkg.slug}-${field}`} variant="outline" className="font-mono text-[10px]">
+                {field}
+              </Badge>
+            ))}
+            {setupFields.length > 4 ? (
+              <Badge variant="outline" className="font-mono text-[10px]">
+                +{setupFields.length - 4}
+              </Badge>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <Button
         size="sm"
@@ -834,6 +937,7 @@ export default function MarketplaceAdminPage() {
             </Alert>
           ) : null}
           <RuntimeStatsGrid stats={controller.installedStats} />
+          <HermesGatewayCoverageCard controller={controller} />
           <ApprovedPackagesCard controller={controller} />
           <RuntimeManifestPreviewCard preview={controller.runtimePreview} />
           <PublishReleaseCard controller={controller} />

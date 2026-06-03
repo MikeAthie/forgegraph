@@ -108,6 +108,47 @@ const buildReadyPackage = () => ({
   },
 });
 
+const buildHermesGatewayPackage = () => ({
+  id: "pkg-hermes",
+  slug: "hermes-telegram-gateway",
+  name: "Hermes Telegram Gateway",
+  summary: "Connect Telegram bot conversations, voice messages, and channel delivery to workflows.",
+  category: "communication",
+  icon: "telegram",
+  docs_url: "https://github.com/NousResearch/hermes-agent/tree/main/gateway/platforms",
+  homepage_url: "https://github.com/NousResearch/hermes-agent",
+  latest_release: {
+    id: "rel-hermes",
+    version: "1.0.0",
+    changelog: "Seeded from NousResearch Hermes Agent gateway platform catalog.",
+    status: "approved",
+    package_kind: "template_http",
+    execution_node_type: "http",
+    ui_schema: {
+      label: "Hermes Telegram Gateway",
+      source: "NousResearch/hermes-agent",
+      source_path: "gateway/platforms/telegram.py",
+      setup_fields: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS"],
+    },
+    config_schema: { type: "object" },
+    config_defaults: { url: "https://api.telegram.org/bot{{credential.api_key}}/sendMessage" },
+    runtime_manifest: null,
+    manifest_version: 2,
+    cloud_allowed: true,
+    review_notes: "",
+    created_at: "2026-02-05T12:00:00Z",
+  },
+  installed_release: null,
+  runtime_delivery: {
+    state: "template",
+    reason: "template_only",
+    package_kind: "template_http",
+    cloud_allowed: true,
+    manifest_version: 2,
+    checksum: null,
+  },
+});
+
 const buildTemplatePackage = () => ({
   id: "pkg-template",
   slug: "template-http",
@@ -281,6 +322,20 @@ describe("MarketplaceAdminPage", () => {
     expect(screen.getAllByText(/runtime-ready/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/template only/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/crm_lookup/i)).toBeInTheDocument();
+  });
+
+  it("surfaces Hermes gateway connector source metadata and setup keys", async () => {
+    mockedMarketplaceApi.listPackages.mockResolvedValue([buildHermesGatewayPackage()] as any);
+
+    render(<MarketplaceAdminPage />);
+
+    expect(await screen.findByText(/Hermes gateway connector catalog/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/1 gateway connectors/i)).toBeInTheDocument();
+    });
+    expect(screen.getAllByText(/NousResearch\/hermes-agent/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/gateway\/platforms\/telegram.py/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/TELEGRAM_BOT_TOKEN/i).length).toBeGreaterThan(0);
   });
 
   it("derives release payloads from the selected package class", async () => {

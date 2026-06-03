@@ -94,3 +94,32 @@ export function getMarketplacePackageBadges(pkg: MarketplacePackage): string[] {
 
   return badges.filter((badge, index, all) => all.indexOf(badge) === index);
 }
+
+function getReleaseUiSchema(pkg: MarketplacePackage): Record<string, unknown> {
+  return (pkg.installed_release?.ui_schema ?? pkg.latest_release?.ui_schema ?? {}) as Record<string, unknown>;
+}
+
+export function isHermesGatewayPackage(pkg: MarketplacePackage): boolean {
+  const uiSchema = getReleaseUiSchema(pkg);
+  return uiSchema.source === "NousResearch/hermes-agent" || pkg.slug.startsWith("hermes-");
+}
+
+export function getMarketplacePackageSourceLabel(pkg: MarketplacePackage): string | null {
+  const uiSchema = getReleaseUiSchema(pkg);
+  const source = typeof uiSchema.source === "string" ? uiSchema.source.trim() : "";
+  if (source) return source;
+  return isHermesGatewayPackage(pkg) ? "NousResearch/hermes-agent" : null;
+}
+
+export function getMarketplacePackageSourcePath(pkg: MarketplacePackage): string | null {
+  const uiSchema = getReleaseUiSchema(pkg);
+  const sourcePath = typeof uiSchema.source_path === "string" ? uiSchema.source_path.trim() : "";
+  return sourcePath || null;
+}
+
+export function getMarketplacePackageSetupFields(pkg: MarketplacePackage): string[] {
+  const uiSchema = getReleaseUiSchema(pkg);
+  const setupFields = uiSchema.setup_fields;
+  if (!Array.isArray(setupFields)) return [];
+  return setupFields.filter((field): field is string => typeof field === "string" && field.trim().length > 0);
+}
