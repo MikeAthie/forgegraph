@@ -777,6 +777,11 @@ ALLOWED_LLM_PROVIDERS = [
     if provider.strip()
 ]
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_API_BASE_URL = os.environ.get(
+    "OPENAI_API_BASE_URL",
+    os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+).rstrip("/")
+OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1-mini")
 GEMINI_API_BASE_URL = os.environ.get(
     "GEMINI_API_BASE_URL",
     "https://generativelanguage.googleapis.com/v1beta",

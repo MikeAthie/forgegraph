@@ -405,12 +405,71 @@ class OpenRouterMediaClient:
         return _json_or_provider_error(response, provider_label="OpenRouter")
 
 
+class OpenAIImageMediaClient:
+    """OpenAI Images API client using backend-owned requests."""
+
+    def __init__(
+        self, *, api_base_url: str | None = None, session: requests.Session | None = None
+    ) -> None:
+        self.api_base_url = (api_base_url or settings.OPENAI_API_BASE_URL).rstrip("/")
+        self.session = session or requests.Session()
+
+    def generate_image(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        prompt: str,
+        aspect_ratio: str = "1:1",
+    ) -> GeminiMediaBytes:
+        del aspect_ratio
+        model_name = model.strip() or settings.OPENAI_IMAGE_MODEL
+        payload: dict[str, Any] = {
+            "model": model_name,
+            "prompt": prompt,
+            "n": 1,
+            "size": "1024x1024",
+        }
+        if _openai_image_model_accepts_response_format(model_name):
+            payload["response_format"] = "b64_json"
+        response_json = self._post_json(
+            "/images/generations",
+            api_key=api_key,
+            payload=payload,
+            timeout=300,
+        )
+        return _openai_image_bytes_from_response(response_json)
+
+    def _post_json(
+        self,
+        path: str,
+        *,
+        api_key: str,
+        payload: dict[str, Any],
+        timeout: int,
+    ) -> dict[str, Any]:
+        response = self.session.post(
+            f"{self.api_base_url}{path}",
+            headers=_openai_headers(api_key),
+            json=payload,
+            timeout=timeout,
+        )
+        return _json_or_provider_error(response, provider_label="OpenAI")
+
+
 class MediaGenerationService:
     """Create and poll backend-owned media jobs for a company."""
 
-    def __init__(self, *, client: Any | None = None, openrouter_client: Any | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        client: Any | None = None,
+        openrouter_client: Any | None = None,
+        openai_client: Any | None = None,
+    ) -> None:
         self.client = client or GoogleMediaClient()
         self.openrouter_client = openrouter_client or OpenRouterMediaClient()
+        self.openai_client = openai_client or OpenAIImageMediaClient()
 
     def create_job(
         self,
@@ -432,7 +491,7 @@ class MediaGenerationService:
         if modality not in {"image", "video"}:
             raise GeminiMediaError("invalid_modality", "Media modality must be image or video.")
         provider = str(credential.provider or "").strip().lower()
-        if provider == "openrouter" and modality == "video":
+        if provider in {"openrouter", "openai"} and modality == "video":
             raise GeminiMediaError(
                 "unsupported_modality",
                 "Video media generation is currently supported only for Google Gemini/Veo credentials.",
@@ -806,9 +865,10 @@ class MediaGenerationService:
                 "credential_not_found",
                 "Media generation credential was not found for this company organization.",
             )
-        if str(credential.provider).strip().lower() not in {"google", "openrouter"}:
+        if str(credential.provider).strip().lower() not in {"google", "openrouter", "openai"}:
             raise GeminiMediaError(
-                "provider_mismatch", "Media generation requires a Google or OpenRouter credential."
+                "provider_mismatch",
+                "Media generation requires a Google, OpenRouter, or OpenAI credential.",
             )
         if is_credential_revoked(credential.token_metadata):
             raise GeminiMediaError(
@@ -818,6 +878,8 @@ class MediaGenerationService:
     def _media_client_for_job(self, job: MediaGenerationJob) -> Any:
         if job.provider == "openrouter":
             return self.openrouter_client
+        if job.provider == "openai":
+            return self.openai_client
         return self.client
 
     def _decrypt_credential(self, credential: APIKey | None) -> str:
@@ -881,6 +943,8 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
 def _default_model(modality: str, *, provider: str = "google") -> str:
     if provider == "openrouter":
         return str(settings.OPENROUTER_IMAGE_MODEL)
+    if provider == "openai":
+        return str(settings.OPENAI_IMAGE_MODEL)
     if modality == "image":
         return str(settings.GEMINI_IMAGEN_MODEL)
     return str(settings.GEMINI_VEO_MODEL)
@@ -944,6 +1008,10 @@ def _openrouter_model_outputs_text(model: str) -> bool:
     return normalized.startswith("google/gemini") or normalized.startswith("openai/")
 
 
+def _openai_image_model_accepts_response_format(model: str) -> bool:
+    return model.strip().lower().startswith("dall-e-")
+
+
 def _headers(api_key: str) -> dict[str, str]:
     return {
         "Content-Type": "application/json",
@@ -963,7 +1031,16 @@ def _openrouter_headers(api_key: str) -> dict[str, str]:
     return headers
 
 
+def _openai_headers(api_key: str) -> dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+
 def _provider_display_name(provider: str) -> str:
+    if provider == "openai":
+        return "OpenAI"
     if provider == "openrouter":
         return "OpenRouter"
     if provider == "google":
@@ -1081,6 +1158,34 @@ def _openrouter_image_bytes_from_response(response_json: dict[str, Any]) -> Gemi
             response_json=_without_large_payloads(response_json),
         )
     content, mime_type = _decode_data_url(image_url)
+    return GeminiMediaBytes(
+        content=content,
+        mime_type=mime_type,
+        response_json=_without_large_payloads(response_json),
+    )
+
+
+def _openai_image_bytes_from_response(response_json: dict[str, Any]) -> GeminiMediaBytes:
+    encoded = _first_string(response_json, [("data", 0, "b64_json")])
+    if not encoded:
+        raise GeminiMediaError(
+            "missing_image_bytes",
+            "OpenAI image response did not include image bytes.",
+            response_json=_without_large_payloads(response_json),
+        )
+    try:
+        content = base64.b64decode(encoded)
+    except ValueError as exc:
+        raise GeminiMediaError(
+            "invalid_image_bytes", "OpenAI image bytes were not base64."
+        ) from exc
+    output_format = str(response_json.get("output_format") or "png").strip().lower()
+    mime_type = {
+        "jpeg": "image/jpeg",
+        "jpg": "image/jpeg",
+        "png": "image/png",
+        "webp": "image/webp",
+    }.get(output_format, "image/png")
     return GeminiMediaBytes(
         content=content,
         mime_type=mime_type,

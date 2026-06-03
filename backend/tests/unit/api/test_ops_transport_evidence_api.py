@@ -156,3 +156,75 @@ def test_ops_transport_evidence_reports_backend_owned_whiteboard_kafka_counts(
     assert evidence["outbox"]["published"] == 1
     assert evidence["receipts"]["handled"] == 1
     assert evidence["dead_letters"]["active_count"] == 0
+
+
+def test_ops_snapshot_recovery_drill_is_backend_owned_and_company_scoped(
+    authenticated_client,
+    user,
+) -> None:
+    ensure_default_organization(user)
+    organization = user.default_organization
+    assert organization is not None
+    company = Graph.objects.create(
+        owner=user,
+        organization=organization,
+        name=f"Atlas Snapshot Evidence {uuid4().hex[:8]}",
+    )
+    whiteboard = WorkWhiteboard.objects.create(
+        organization=organization,
+        company=company,
+        status=WorkWhiteboard.STATUS_ONBOARDING,
+        client_name=company.name,
+        request_type="service_request",
+        request_summary="Snapshot recovery evidence",
+        objective="Prove backend DB remains authoritative after cache corruption.",
+        created_by=user,
+    )
+
+    response = authenticated_client.post(
+        "/api/ops/snapshot-recovery-drill",
+        data={"whiteboard_id": str(whiteboard.id)},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=f"snapshot-recovery:{whiteboard.id}",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    evidence = response.data["data"]["snapshot_recovery"]
+    assert evidence["available"] is True
+    assert evidence["authoritative_state_source"] == "backend_db"
+    assert evidence["cache_role"] == "cache_transport_only"
+    assert evidence["engine_durable_ownership"] is False
+    assert evidence["whiteboard"]["whiteboard_snapshot"]["snapshot_source"] == "db"
+    assert evidence["whiteboard"]["board_snapshot"]["snapshot_source"] == "db"
+
+    other_user = User.objects.create_user(
+        email=f"atlas-snapshot-other-{uuid4().hex}@example.com",
+        password="password123",
+    )
+    ensure_default_organization(other_user)
+    other_organization = other_user.default_organization
+    assert other_organization is not None
+    other_company = Graph.objects.create(
+        owner=other_user,
+        organization=other_organization,
+        name=f"Other Snapshot Company {uuid4().hex[:8]}",
+    )
+    other_whiteboard = WorkWhiteboard.objects.create(
+        organization=other_organization,
+        company=other_company,
+        status=WorkWhiteboard.STATUS_ONBOARDING,
+        client_name=other_company.name,
+        request_type="service_request",
+        request_summary="Other org snapshot",
+        objective="Should not be visible.",
+        created_by=other_user,
+    )
+
+    denied = authenticated_client.post(
+        "/api/ops/snapshot-recovery-drill",
+        data={"whiteboard_id": str(other_whiteboard.id)},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=f"snapshot-recovery:{other_whiteboard.id}",
+    )
+
+    assert denied.status_code == status.HTTP_404_NOT_FOUND

@@ -199,6 +199,37 @@ def test_install_pack_creates_company_scoped_generic_records_idempotently(
         company=company,
         profile_id="atlas_monthly_kpi_scorecard.v1",
     ).exists()
+    judge_profile_ids = {
+        "digital_marketing_pro.v1.judge.department.strategy_research",
+        "digital_marketing_pro.v1.judge.department.brand_content",
+        "digital_marketing_pro.v1.judge.department.channel_execution",
+        "digital_marketing_pro.v1.judge.department.crm_lifecycle",
+        "digital_marketing_pro.v1.judge.department.analytics_performance",
+        "digital_marketing_pro.v1.judge.department.qa_compliance",
+        "digital_marketing_pro.v1.judge.department.client_approval_ops",
+        "digital_marketing_pro.v1.judge.process.memory_usefulness",
+        "digital_marketing_pro.v1.judge.process.whiteboard_usefulness",
+        "digital_marketing_pro.v1.judge.process.snapshot_recovery",
+        "digital_marketing_pro.v1.judge.process.connector_tool_honesty",
+        "digital_marketing_pro.v1.judge.process.operation_reliability",
+        "digital_marketing_pro.v1.judge.overall.sellability",
+    }
+    installed_judges = {
+        profile.profile_id: profile
+        for profile in EvaluationProfile.objects.filter(
+            company=company,
+            profile_id__in=judge_profile_ids,
+        )
+    }
+    assert set(installed_judges) == judge_profile_ids
+    assert all(
+        profile.rubric_json.get("schema_version") == "atlas_rubric_scorecard_v1"
+        for profile in installed_judges.values()
+    )
+    assert all(
+        len(profile.rubric_json.get("criteria", [])) == 5
+        for profile in installed_judges.values()
+    )
     assert PolicyPack.objects.filter(
         company=company, policy_pack_id="dmp.side_effect_governance"
     ).exists()
