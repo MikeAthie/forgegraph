@@ -67,6 +67,7 @@ env/
 
 # Local tooling (temp)
 tmpclaude-*
+**/testsprite_tests/tmp/
 
 # Windows reserved filename accidentally created by tooling
 /nul

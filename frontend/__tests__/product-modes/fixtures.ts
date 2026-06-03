@@ -267,6 +267,29 @@ export async function installProductModeMocks(page: Page, state: ProductModeMock
     await fulfillJson(route, { packs: state.installedPacks });
   });
 
+  route(new RegExp(`/api/companies/${companyPath}/packs/[^/]+(?:\\?.*)?$`), async (route: Route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    const url = new URL(route.request().url());
+    const installationId = url.pathname.split("/").pop() ?? "";
+    const installation = state.installedPacks.find((pack) => pack.id === installationId);
+    if (!installation) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Pack installation was not found." } }),
+      });
+      return;
+    }
+    const posted = JSON.parse(route.request().postData() || "{}") as { config?: Record<string, unknown> };
+    installation.config = { ...(posted.config ?? {}) };
+    installation.public_config = { ...(posted.config ?? {}) };
+    installation.updated_at = "2026-05-12T12:50:00.000Z";
+    await fulfillJson(route, { installation });
+  });
+
   route(new RegExp(`/api/companies/${companyPath}/operating-model(?:\\?.*)?$`), async (route: Route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
@@ -374,6 +397,32 @@ export async function installProductModeMocks(page: Page, state: ProductModeMock
       return;
     }
     await fulfillJson(route, { whiteboards: scopedByCompany(state.whiteboards ?? [], route) });
+  });
+
+  route(/\/api\/whiteboards\/[^/]+(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)$/);
+    const whiteboardId = match?.[1] ?? "";
+    const whiteboard = (state.whiteboards ?? []).find((item) => item.id === whiteboardId);
+    if (!whiteboard) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Whiteboard was not found." } }),
+      });
+      return;
+    }
+    if (route.request().method() === "GET") {
+      await fulfillJson(route, { whiteboard });
+      return;
+    }
+    if (route.request().method() === "PATCH") {
+      const posted = JSON.parse(route.request().postData() || "{}") as Partial<WorkWhiteboardDTO>;
+      Object.assign(whiteboard, posted, { updated_at: "2026-05-12T12:50:00.000Z" });
+      await fulfillJson(route, { whiteboard });
+      return;
+    }
+    await route.continue();
   });
 
   route(/\/api\/whiteboards\/[^/]+\/board(?:\?.*)?$/, async (route: Route) => {
@@ -527,6 +576,105 @@ export async function installProductModeMocks(page: Page, state: ProductModeMock
     await route.continue();
   });
 
+  route(/\/api\/whiteboards\/[^/]+\/phases\/[^/]+\/workstreams\/[^/]+\/complete(?:\?.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/phases\/([^/]+)\/workstreams\/([^/]+)\/complete$/);
+    const whiteboardId = match?.[1] ?? "";
+    const phaseId = match?.[2] ?? "";
+    const workstreamId = match?.[3] ?? "";
+    const whiteboard = (state.whiteboards ?? []).find((item) => item.id === whiteboardId);
+    const phase = whiteboard?.phase_contracts?.find((item) => item.phase_id === phaseId);
+    const workstream = phase?.workstreams.find((item) => item.id === workstreamId);
+    if (route.request().method() !== "POST" || !whiteboard || !phase || !workstream) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Workstream was not found." } }),
+      });
+      return;
+    }
+    workstream.status = "completed";
+    workstream.updated_at = "2026-05-12T12:51:00.000Z";
+    phase.current_state.all_workstreams_completed = phase.workstreams
+      .filter((item) => item.required !== false)
+      .every((item) => item.status === "completed");
+    if (phase.current_state.all_workstreams_completed) {
+      phase.allowed_actions = ["synthesize"];
+    }
+    whiteboard.updated_at = "2026-05-12T12:51:00.000Z";
+    await fulfillJson(route, { workstream, whiteboard_phase_contract: phase, whiteboard });
+  });
+
+  route(
+    /\/api\/whiteboards\/[^/]+\/phases\/[^/]+(?:\/(?:start|synthesize|evaluate))?(?:\?.*)?$/,
+    async (route: Route) => {
+      const url = new URL(route.request().url());
+      const match = url.pathname.match(
+        /\/api\/whiteboards\/([^/]+)\/phases\/([^/]+)(?:\/(start|synthesize|evaluate))?$/,
+      );
+      const whiteboardId = match?.[1] ?? "";
+      const phaseId = match?.[2] ?? "";
+      const action = match?.[3] ?? "";
+      const whiteboard = (state.whiteboards ?? []).find((item) => item.id === whiteboardId);
+      const phase = whiteboard?.phase_contracts?.find((item) => item.phase_id === phaseId);
+      if (!whiteboard || !phase) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Phase was not found." } }),
+        });
+        return;
+      }
+      if (route.request().method() === "GET" && !action) {
+        await fulfillJson(route, { whiteboard_phase_contract: phase });
+        return;
+      }
+      if (route.request().method() !== "POST" || !action) {
+        await route.continue();
+        return;
+      }
+      const operation = {
+        id: `mock-phase-${action}-operation`,
+        kind: action === "evaluate" ? "phase_gate_evaluate" : `phase_${action}`,
+        status: "completed",
+        target_type: "phase_contract",
+        target_id: phaseId,
+        contract_revision: 2,
+        contract_revision_at_accept: 1,
+        contract_revision_at_completion: 2,
+        terminal: true,
+        metadata: { phase_id: phaseId },
+      };
+      if (action === "start") {
+        phase.current_state.status = "started";
+        phase.allowed_actions = [];
+        whiteboard.status = "in_content";
+      }
+      if (action === "synthesize") {
+        phase.current_state.synthesis = {
+          asset_id: "mock-phase-synthesis",
+          asset_version_id: "mock-phase-synthesis-v1",
+          created_at: "2026-05-12T12:52:00.000Z",
+        };
+        phase.allowed_actions = ["evaluate"];
+      }
+      if (action === "evaluate") {
+        phase.current_state.status = "passed";
+        phase.current_state.gate = {
+          evaluation_id: "mock-phase-gate-evaluation",
+          result: "pass",
+          score: 100,
+        };
+        phase.gate = { ...(phase.gate ?? { gate_id: "mock-phase-gate" }), result: "pass" };
+        phase.current_state.applied_actions = { approval_task_id: "mock-phase-approval" };
+        phase.allowed_actions = [];
+        whiteboard.status = "in_approval";
+      }
+      whiteboard.updated_at = "2026-05-12T12:52:00.000Z";
+      await fulfillJson(route, { accepted: true, operation, whiteboard_phase_contract: phase, whiteboard });
+    },
+  );
+
   route(/\/api\/whiteboards\/[^/]+\/deployment(?:\/prepare)?(?:\?.*)?$/, async (route: Route) => {
     const url = new URL(route.request().url());
     const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/deployment(?:\/prepare)?$/);
@@ -570,14 +718,54 @@ export async function installProductModeMocks(page: Page, state: ProductModeMock
 
   route(/\/api\/whiteboards\/[^/]+\/performance(?:\/(?:start|report|evaluate))?(?:\?.*)?$/, async (route: Route) => {
     const url = new URL(route.request().url());
-    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/performance(?:\/(?:start|report|evaluate))?$/);
+    const match = url.pathname.match(/\/api\/whiteboards\/([^/]+)\/performance(?:\/(start|report|evaluate))?$/);
     const whiteboardId = match?.[1] ?? "";
+    const action = match?.[2] ?? "";
     const whiteboard = (state.whiteboards ?? []).find((item) => item.id === whiteboardId);
     if (!whiteboard?.performance_contract) {
       await route.fulfill({
         status: 404,
         contentType: "application/json",
         body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Performance contract was not found." } }),
+      });
+      return;
+    }
+    if (route.request().method() === "POST" && action) {
+      const operation = {
+        id: `mock-performance-${action}-operation`,
+        kind: action === "evaluate" ? "performance_evaluate" : `performance_${action}`,
+        status: "completed",
+        target_type: "performance_contract",
+        target_id: whiteboard.performance_contract.policy_id,
+        contract_revision: 2,
+        contract_revision_at_accept: 1,
+        contract_revision_at_completion: 2,
+        terminal: true,
+        metadata: { policy_id: whiteboard.performance_contract.policy_id },
+      };
+      if (action === "start") {
+        whiteboard.performance_contract.status = "collecting";
+        whiteboard.performance_contract.current_state.metric_snapshot_id ||= "mock-performance-metric-snapshot";
+        whiteboard.performance_contract.allowed_actions = ["report"];
+      }
+      if (action === "report") {
+        whiteboard.performance_contract.status = "reported";
+        whiteboard.performance_contract.current_state.report_run_id = "mock-performance-report-run";
+        whiteboard.performance_contract.allowed_actions = ["evaluate"];
+      }
+      if (action === "evaluate") {
+        whiteboard.performance_contract.status = "evaluated";
+        whiteboard.performance_contract.current_state.evaluation_id = "mock-performance-evaluation";
+        whiteboard.performance_contract.current_state.routing_record_ids = ["mock-performance-routing-record"];
+        whiteboard.performance_contract.allowed_actions = [];
+      }
+      whiteboard.updated_at = "2026-05-12T12:53:00.000Z";
+      await fulfillJson(route, {
+        accepted: true,
+        operation,
+        performance_contract: whiteboard.performance_contract,
+        whiteboard,
+        evaluation_id: whiteboard.performance_contract.current_state.evaluation_id,
       });
       return;
     }
@@ -809,6 +997,26 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
       evaluations: {
         profiles: [{ id: "legacy.performance-readout", label: "Performance Readout", mode: "periodic_review" }],
       },
+      agency_ops: {
+        deployment_policies: [
+          {
+            policy_id: "legacy-eyewear.launch-deployment",
+            channels: [
+              { id: "email", required_connector: "email_connector" },
+              { id: "social", required_connector: "social_connector" },
+            ],
+          },
+        ],
+        performance_policies: [
+          {
+            policy_id: "legacy-eyewear.performance-review",
+            sources: [
+              { id: "analytics", required_connector: "analytics_connector" },
+              { id: "whatsapp", required_connector: "whatsapp_connector" },
+            ],
+          },
+        ],
+      },
       policies: {
         policy_packs: [
           {
@@ -848,6 +1056,19 @@ export function buildLegacyMultiPackProductModeState(base: CompanyWorkspaceMockS
   const installedPacks = availablePacks.map((pack, index) =>
     buildInstallation(base.companyId, pack, index === 0 ? "primary" : "addon", index + 1),
   );
+  const primaryInstallation = installedPacks[0];
+  if (primaryInstallation) {
+    primaryInstallation.config = {
+      available_connectors: ["email_connector"],
+      workstream_phases: [{ generated: true }],
+      deployment_policies: [{ generated: true }],
+      performance_policies: [{ generated: true }],
+    };
+    primaryInstallation.public_config = {
+      available_connectors: ["email_connector"],
+      workstream_phases: [{ generated: true }],
+    };
+  }
   const programs: CompanyProgramDTO[] = [
     {
       id: programId,

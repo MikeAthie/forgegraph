@@ -366,6 +366,10 @@ READINESS_REQUIRE_COMMUNICATION_KAFKA = _get_bool_env(
     "READINESS_REQUIRE_COMMUNICATION_KAFKA",
     False,
 )
+READINESS_REQUIRE_WHITEBOARD_BOARD_KAFKA = _get_bool_env(
+    "READINESS_REQUIRE_WHITEBOARD_BOARD_KAFKA",
+    False,
+)
 FORGEGRAPH_STRICT_RUNTIME_ENV = _get_bool_env("FORGEGRAPH_STRICT_RUNTIME_ENV", False)
 FORGEGRAPH_ALLOW_INSECURE_TRANSPORT = _get_bool_env("FORGEGRAPH_ALLOW_INSECURE_TRANSPORT", False)
 
@@ -433,6 +437,7 @@ EMAIL_CONNECTOR_TIMEOUT_SECONDS = float(os.environ.get("EMAIL_CONNECTOR_TIMEOUT_
 EMAIL_CONNECTOR_MAX_RECIPIENTS = int(os.environ.get("EMAIL_CONNECTOR_MAX_RECIPIENTS", "50"))
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
 RESEND_API_BASE_URL = os.environ.get("RESEND_API_BASE_URL", "https://api.resend.com").strip()
+ATLAS_P2_REAL_CONNECTORS = _get_bool_env("ATLAS_P2_REAL_CONNECTORS", False)
 
 # Generic outbound messaging connector. Web automation is experimental and opt-in.
 WHATSAPP_CONNECTOR_PROVIDER = (
@@ -640,6 +645,28 @@ WHITEBOARD_BOARD_KAFKA_ISOLATION_LEVEL = os.environ.get(
     "WHITEBOARD_BOARD_KAFKA_ISOLATION_LEVEL",
     "read_committed",
 ).strip()
+WHITEBOARD_BOARD_KAFKA_METADATA_TIMEOUT_SECONDS = float(
+    os.environ.get("WHITEBOARD_BOARD_KAFKA_METADATA_TIMEOUT_SECONDS", "5")
+)
+WHITEBOARD_BOARD_KAFKA_OUTBOX_BACKLOG_READY_THRESHOLD = int(
+    os.environ.get("WHITEBOARD_BOARD_KAFKA_OUTBOX_BACKLOG_READY_THRESHOLD", "1000")
+)
+WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL = os.environ.get(
+    "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL",
+    "",
+).strip()
+WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM = os.environ.get(
+    "WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM",
+    "",
+).strip()
+WHITEBOARD_BOARD_KAFKA_SASL_USERNAME = os.environ.get(
+    "WHITEBOARD_BOARD_KAFKA_SASL_USERNAME",
+    "",
+).strip()
+WHITEBOARD_BOARD_KAFKA_SASL_PASSWORD = os.environ.get(
+    "WHITEBOARD_BOARD_KAFKA_SASL_PASSWORD",
+    "",
+).strip()
 
 # SLO thresholds (defaults)
 FORGEGRAPH_RELEASE_TIER = os.environ.get("FORGEGRAPH_RELEASE_TIER", "beta")
@@ -750,6 +777,11 @@ ALLOWED_LLM_PROVIDERS = [
     if provider.strip()
 ]
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_API_BASE_URL = os.environ.get(
+    "OPENAI_API_BASE_URL",
+    os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+).rstrip("/")
+OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1-mini")
 GEMINI_API_BASE_URL = os.environ.get(
     "GEMINI_API_BASE_URL",
     "https://generativelanguage.googleapis.com/v1beta",

@@ -93,6 +93,18 @@ def _openrouter_credential(user: User) -> APIKey:
     )
 
 
+def _openai_credential(user: User) -> APIKey:
+    organization = user.default_organization
+    assert organization is not None
+    return APIKey.objects.create(
+        organization=organization,
+        user=user,
+        provider="openai",
+        name="Legacy OpenAI Media BYOK",
+        encrypted_key=encrypt_api_key("openai-test-key"),
+    )
+
+
 def test_archive_assets_api_lists_company_assets(authenticated_client, user):
     company = _create_company(user)
     run = _create_run(user, company, output_json={"deliverable": "Reusable launch plan"})
@@ -217,6 +229,55 @@ def test_media_generation_api_accepts_openrouter_image_credential(
     )
     assert content_response.status_code == 200
     assert content_response.content == b"openrouter-png"
+
+
+def test_media_generation_api_accepts_openai_image_credential(
+    authenticated_client,
+    monkeypatch,
+    settings,
+    tmp_path,
+    user,
+):
+    settings.MEDIA_GENERATION_ARTIFACT_ROOT = tmp_path
+    company = _create_company(user)
+    credential = _openai_credential(user)
+
+    def fake_generate_image(self, **kwargs):
+        assert kwargs["model"] == "gpt-image-1-mini"
+        return GeminiMediaBytes(
+            content=b"openai-png",
+            mime_type="image/png",
+            response_json={"ok": True},
+        )
+
+    monkeypatch.setattr(
+        "application.services.gemini_media.OpenAIImageMediaClient.generate_image",
+        fake_generate_image,
+    )
+
+    response = authenticated_client.post(
+        "/api/archive/media-generations",
+        data={
+            "company_id": str(company.id),
+            "credential_id": str(credential.id),
+            "modality": "image",
+            "model": "gpt-image-1-mini",
+            "prompt": "Legacy product image draft",
+            "idempotency_key": "api-openai-image",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    job = response.json()["data"]["media_generation"]
+    assert job["status"] == "succeeded"
+    assert job["provider"] == "openai"
+    content_response = authenticated_client.get(
+        f"/api/archive/assets/{job['output_asset_id']}/versions/"
+        f"{job['output_asset_version_id']}/content"
+    )
+    assert content_response.status_code == 200
+    assert content_response.content == b"openai-png"
 
 
 def test_media_generation_api_hides_other_organization_job(authenticated_client, user):

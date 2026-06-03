@@ -135,6 +135,32 @@ def _validate_communication_kafka_settings(errors: list[str]) -> None:
     _validate_communication_kafka_security(errors)
 
 
+def _validate_whiteboard_board_kafka_settings(errors: list[str]) -> None:
+    if not _is_enabled_setting("WHITEBOARD_BOARD_KAFKA_ENABLED"):
+        return
+    if importlib.util.find_spec("confluent_kafka") is None:
+        errors.append(
+            "confluent-kafka must be installed when WHITEBOARD_BOARD_KAFKA_ENABLED=true."
+        )
+    bootstrap_servers = str(
+        getattr(settings, "WHITEBOARD_BOARD_KAFKA_BOOTSTRAP_SERVERS", "")
+        or getattr(settings, "KAFKA_BROKERS", "")
+        or ""
+    ).strip()
+    if not bootstrap_servers:
+        errors.append(
+            "WHITEBOARD_BOARD_KAFKA_BOOTSTRAP_SERVERS or KAFKA_BROKERS must be configured "
+            "when whiteboard board Kafka is enabled."
+        )
+    topic = str(getattr(settings, "WHITEBOARD_BOARD_KAFKA_TOPIC", "") or "").strip()
+    if not topic:
+        errors.append(
+            "WHITEBOARD_BOARD_KAFKA_TOPIC must be configured when whiteboard board Kafka is enabled."
+        )
+
+    _validate_whiteboard_board_kafka_security(errors)
+
+
 def _validate_communication_kafka_routing_flags(errors: list[str]) -> None:
     if _is_enabled_setting("COMMUNICATION_ROUTING_FROM_KAFKA_ENABLED"):
         errors.append(
@@ -177,12 +203,48 @@ def _validate_communication_kafka_security(errors: list[str]) -> None:
             )
 
 
+def _validate_whiteboard_board_kafka_security(errors: list[str]) -> None:
+    security_protocol = str(
+        getattr(settings, "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL", "") or ""
+    ).strip()
+    if security_protocol not in {"SSL", "SASL_SSL"}:
+        errors.append(
+            "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL must be SSL or SASL_SSL for production Kafka."
+        )
+    if security_protocol == "SASL_SSL":
+        sasl_mechanism = str(
+            getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM", "") or ""
+        )
+        sasl_username = str(
+            getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_USERNAME", "") or ""
+        )
+        sasl_password = str(
+            getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_PASSWORD", "") or ""
+        )
+        if not sasl_mechanism.strip():
+            errors.append(
+                "WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM is required when "
+                "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL=SASL_SSL."
+            )
+        if not sasl_username.strip():
+            errors.append(
+                "WHITEBOARD_BOARD_KAFKA_SASL_USERNAME is required when "
+                "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL=SASL_SSL."
+            )
+        if not sasl_password.strip():
+            errors.append(
+                "WHITEBOARD_BOARD_KAFKA_SASL_PASSWORD is required when "
+                "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL=SASL_SSL."
+            )
+
+
 def _validate_strict_runtime_settings(errors: list[str]) -> None:
     _validate_runtime_secrets(errors)
     _validate_secure_transport(errors)
     _validate_engine_settings(errors)
     _validate_run_stream_settings(errors)
     _validate_communication_kafka_settings(errors)
+    _validate_whiteboard_board_kafka_settings(errors)
 
 
 def collect_runtime_validation_errors(*, strict: bool | None = None) -> list[str]:

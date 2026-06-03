@@ -1,9 +1,14 @@
 # UI Rollout
 
-Safe rollout sequence:
+The product direction is company-first.
 
-1. Ship the new shell and routes
-2. Keep legacy routes live as wrappers
-3. Move the default authenticated route to `/overview`
-4. Validate projections against canonical execution facts
-5. Retire builder-first primary navigation after adoption
+Current rollout rules:
+
+1. Default authenticated navigation should favor company operations.
+2. `/companies`, `/companies/[companyId]`, `/runs`, `/runs/[runId]`, and `/approvals` are primary product routes.
+3. `/workflows`, `/graphs`, `/executions`, `/inbox`, `/agents`, and `/overview` may remain as advanced, compatibility, or redirect surfaces.
+4. Compatibility routes must not drive primary product vocabulary.
+5. Product surfaces must translate raw graph/run/node language through the frontend domain layer.
+6. All visible state must trace back to backend-owned records or backend-owned projections.
+
+Runtime ownership still follows [../architecture/runtime-invariants.md](../architecture/runtime-invariants.md).

@@ -12,6 +12,7 @@ from application.services.gemini_media import (
     GeminiVideoPollResult,
     GoogleMediaClient,
     MediaGenerationService,
+    OpenAIImageMediaClient,
     OpenRouterMediaClient,
     read_media_asset_version_content,
     sanitize_media_prompt,
@@ -65,6 +66,18 @@ def _openrouter_credential(user: User) -> APIKey:
         provider="openrouter",
         name="Legacy OpenRouter BYOK",
         encrypted_key=encrypt_api_key("openrouter-test-key"),
+    )
+
+
+def _openai_credential(user: User) -> APIKey:
+    organization = user.default_organization
+    assert organization is not None
+    return APIKey.objects.create(
+        organization=organization,
+        user=user,
+        provider="openai",
+        name="Legacy OpenAI Media BYOK",
+        encrypted_key=encrypt_api_key("openai-test-key"),
     )
 
 
@@ -211,6 +224,34 @@ def test_openrouter_image_job_creates_backend_owned_draft_asset(settings, tmp_pa
     assert filename.endswith(".png")
 
 
+def test_openai_image_job_creates_backend_owned_draft_asset(settings, tmp_path, user):
+    settings.MEDIA_GENERATION_ARTIFACT_ROOT = tmp_path
+    company = _create_company(user)
+    credential = _openai_credential(user)
+
+    job = MediaGenerationService(openai_client=_FakeMediaClient()).create_job(
+        user=user,
+        company=company,
+        credential=credential,
+        modality="image",
+        prompt="Legacy OpenAI frame editorial draft",
+        model="gpt-image-1-mini",
+        idempotency_key="phase-1-openai-image",
+    )
+
+    assert job.status == "succeeded"
+    assert job.provider == "openai"
+    assert job.output_asset is not None
+    assert job.output_asset.asset_type == "image"
+    assert job.output_asset.metadata_json["provider"] == "openai"
+    assert job.output_asset.metadata_json["review_status"] == "draft"
+    assert job.output_asset_version is not None
+    content, mime_type, filename = read_media_asset_version_content(job.output_asset_version)
+    assert content == b"fake-png"
+    assert mime_type == "image/png"
+    assert filename.endswith(".png")
+
+
 def test_image_job_falls_back_to_openrouter_on_google_limit_error(settings, tmp_path, user):
     settings.MEDIA_GENERATION_ARTIFACT_ROOT = tmp_path
     company = _create_company(user)
@@ -310,6 +351,23 @@ def test_openrouter_video_job_is_rejected_before_provider_call(user):
     assert MediaGenerationJob.objects.count() == 0
 
 
+def test_openai_video_job_is_rejected_before_provider_call(user):
+    company = _create_company(user)
+    credential = _openai_credential(user)
+
+    with pytest.raises(GeminiMediaError, match="Video media generation"):
+        MediaGenerationService(openai_client=_FakeMediaClient()).create_job(
+            user=user,
+            company=company,
+            credential=credential,
+            modality="video",
+            prompt="Legacy video draft",
+            idempotency_key="phase-1-openai-video",
+        )
+
+    assert MediaGenerationJob.objects.count() == 0
+
+
 def test_media_job_idempotency_reuses_existing_job(settings, tmp_path, user):
     settings.MEDIA_GENERATION_ARTIFACT_ROOT = tmp_path
     company = _create_company(user)
@@ -394,12 +452,12 @@ def test_credential_provider_mismatch_is_rejected(user):
     credential = APIKey.objects.create(
         organization=organization,
         user=user,
-        provider="openai",
-        name="OpenAI",
-        encrypted_key=encrypt_api_key("openai-test-key"),
+        provider="anthropic",
+        name="Anthropic",
+        encrypted_key=encrypt_api_key("anthropic-test-key"),
     )
 
-    with pytest.raises(GeminiMediaError, match="Google or OpenRouter credential"):
+    with pytest.raises(GeminiMediaError, match="Google, OpenRouter, or OpenAI credential"):
         MediaGenerationService(client=_FakeMediaClient()).create_job(
             user=user,
             company=company,
@@ -488,6 +546,56 @@ def test_google_media_client_uses_imagen_predict_for_imagen_model():
 
     assert result.content == b"imagen-bytes"
     assert session.posts[0]["url"].endswith("/models/imagen-4.0-generate-001:predict")
+
+
+def test_openai_media_client_parses_image_bytes():
+    encoded = base64.b64encode(b"openai-image").decode()
+    session = _RecordingSession(
+        {
+            "created": 1713833628,
+            "data": [{"b64_json": encoded}],
+            "output_format": "png",
+            "size": "1024x1024",
+            "quality": "low",
+        }
+    )
+    client = OpenAIImageMediaClient(
+        api_base_url="https://api.openai.test/v1", session=cast(Any, session)
+    )
+
+    result = client.generate_image(
+        api_key="openai-test-key",
+        model="gpt-image-1-mini",
+        prompt="Legacy image draft",
+    )
+
+    assert result.content == b"openai-image"
+    assert result.mime_type == "image/png"
+    assert session.posts[0]["url"].endswith("/images/generations")
+    assert session.posts[0]["headers"]["Authorization"] == "Bearer openai-test-key"
+    assert session.posts[0]["json"] == {
+        "model": "gpt-image-1-mini",
+        "prompt": "Legacy image draft",
+        "n": 1,
+        "size": "1024x1024",
+    }
+
+
+def test_openai_media_client_requests_b64_for_dalle_models():
+    encoded = base64.b64encode(b"dalle-image").decode()
+    session = _RecordingSession({"data": [{"b64_json": encoded}]})
+    client = OpenAIImageMediaClient(
+        api_base_url="https://api.openai.test/v1", session=cast(Any, session)
+    )
+
+    result = client.generate_image(
+        api_key="openai-test-key",
+        model="dall-e-3",
+        prompt="Legacy image draft",
+    )
+
+    assert result.content == b"dalle-image"
+    assert session.posts[0]["json"]["response_format"] == "b64_json"
 
 
 def test_openrouter_media_client_parses_image_data_url():

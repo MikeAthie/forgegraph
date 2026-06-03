@@ -32,6 +32,7 @@ from application.services.company_access import has_company_access
 from application.services.deployment_orchestration import (
     DeploymentOrchestrationError,
     list_deployment_state,
+    load_deployment_policy,
     prepare_deployment_for_whiteboard,
     request_tool_execution_for_channel,
 )
@@ -41,7 +42,18 @@ from application.services.performance_orchestration import (
     create_performance_report,
     evaluate_performance,
     list_performance_state,
+    load_performance_policy,
     start_performance_review_for_whiteboard,
+)
+from application.services.product_operations import (
+    TERMINAL_OPERATION_STATUSES,
+    ProductOperationError,
+    begin_product_operation,
+    block_product_operation,
+    complete_product_operation,
+    fail_product_operation,
+    get_product_operation_for_user,
+    operation_payload,
 )
 from application.services.rbac import has_min_role
 from application.services.strategy_orchestration import (
@@ -52,8 +64,8 @@ from application.services.strategy_orchestration import (
     planning_state_payload,
     start_planning_for_whiteboard,
     start_strategy_for_whiteboard,
-    synthesize_planning,
     strategy_state_payload,
+    synthesize_planning,
     synthesize_strategy,
 )
 from application.services.whiteboard_boards import (
@@ -140,6 +152,24 @@ class WhiteboardDetailView(APIView):
         except ValidationError as exc:
             return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
         return success_response({"whiteboard": whiteboard_payload(updated, user=user)})
+
+
+class WhiteboardOperationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, whiteboard_id: UUID, operation_id: UUID) -> Response:
+        user = cast(User, request.user)
+        whiteboard = get_whiteboard_for_user(user=user, whiteboard_id=whiteboard_id)
+        if whiteboard is None:
+            return _not_found("Work whiteboard was not found.")
+        operation = get_product_operation_for_user(
+            user=user,
+            whiteboard=whiteboard,
+            operation_id=str(operation_id),
+        )
+        if operation is None:
+            return _not_found("Product operation was not found.")
+        return success_response({"operation": operation_payload(operation)})
 
 
 class WhiteboardBoardView(APIView):
@@ -232,7 +262,9 @@ class WhiteboardBoardCardView(APIView):
         except ValidationError as exc:
             return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
         whiteboard.refresh_from_db()
-        response = success_response({"board": build_whiteboard_board_snapshot(whiteboard, user=user)})
+        response = success_response(
+            {"board": build_whiteboard_board_snapshot(whiteboard, user=user)}
+        )
         return _annotate_board_idempotency(response, card, idempotency_key)
 
 
@@ -265,7 +297,9 @@ class WhiteboardBoardCardEvidenceView(APIView):
         except ValidationError as exc:
             return _validation_error(exc.message_dict if hasattr(exc, "message_dict") else exc)
         whiteboard.refresh_from_db()
-        response = success_response({"board": build_whiteboard_board_snapshot(whiteboard, user=user)})
+        response = success_response(
+            {"board": build_whiteboard_board_snapshot(whiteboard, user=user)}
+        )
         return _annotate_board_idempotency(response, card, idempotency_key)
 
 
@@ -482,17 +516,33 @@ class WhiteboardPhaseStartView(APIView):
         if whiteboard is None:
             return _not_found("Work whiteboard was not found.")
         try:
-            contract = start_phase_for_whiteboard(
-                user=user, whiteboard=whiteboard, phase_id=phase_id
+            operation, created = begin_product_operation(
+                user=user,
+                whiteboard=whiteboard,
+                kind="phase_start",
+                target_type="phase_contract",
+                target_id=phase_id,
+                idempotency_key=_idempotency_key(request, {}),
+                metadata={"phase_id": phase_id},
             )
+        except ProductOperationError as exc:
+            return _operation_error(exc)
+        try:
+            if created or operation.status not in TERMINAL_OPERATION_STATUSES:
+                start_phase_for_whiteboard(user=user, whiteboard=whiteboard, phase_id=phase_id)
+                complete_product_operation(operation)
+            contract = get_phase_contract(user=user, whiteboard=whiteboard, phase_id=phase_id)
         except WorkstreamGateError as exc:
+            _finish_operation_for_error(operation, code=exc.code, message=exc.message)
             return _phase_error(exc)
         whiteboard.refresh_from_db()
         return success_response(
-            {
-                "whiteboard_phase_contract": contract,
-                "whiteboard": whiteboard_payload(whiteboard, user=user),
-            }
+            _operation_envelope(
+                operation,
+                accepted=created,
+                whiteboard_phase_contract=contract,
+                whiteboard=whiteboard_payload(whiteboard, user=user),
+            )
         )
 
 
@@ -505,16 +555,33 @@ class WhiteboardPhaseSynthesizeView(APIView):
         if whiteboard is None:
             return _not_found("Work whiteboard was not found.")
         try:
-            synthesize_phase_outputs(user=user, whiteboard=whiteboard, phase_id=phase_id)
+            operation, created = begin_product_operation(
+                user=user,
+                whiteboard=whiteboard,
+                kind="phase_synthesize",
+                target_type="phase_contract",
+                target_id=phase_id,
+                idempotency_key=_idempotency_key(request, {}),
+                metadata={"phase_id": phase_id},
+            )
+        except ProductOperationError as exc:
+            return _operation_error(exc)
+        try:
+            if created or operation.status not in TERMINAL_OPERATION_STATUSES:
+                synthesize_phase_outputs(user=user, whiteboard=whiteboard, phase_id=phase_id)
+                complete_product_operation(operation)
             contract = get_phase_contract(user=user, whiteboard=whiteboard, phase_id=phase_id)
         except WorkstreamGateError as exc:
+            _finish_operation_for_error(operation, code=exc.code, message=exc.message)
             return _phase_error(exc)
         whiteboard.refresh_from_db()
         return success_response(
-            {
-                "whiteboard_phase_contract": contract,
-                "whiteboard": whiteboard_payload(whiteboard, user=user),
-            }
+            _operation_envelope(
+                operation,
+                accepted=created,
+                whiteboard_phase_contract=contract,
+                whiteboard=whiteboard_payload(whiteboard, user=user),
+            )
         )
 
 
@@ -573,22 +640,41 @@ class WhiteboardPhaseEvaluateView(APIView):
             or {}
         )
         try:
-            evaluation = evaluate_gate(
+            operation, created = begin_product_operation(
                 user=user,
                 whiteboard=whiteboard,
-                phase_id=phase_id,
-                scorecard=scorecard,
+                kind="phase_gate_evaluate",
+                target_type="phase_contract",
+                target_id=phase_id,
+                idempotency_key=_idempotency_key(request, dict(serializer.validated_data)),
+                metadata={"phase_id": phase_id},
             )
+        except ProductOperationError as exc:
+            return _operation_error(exc)
+        try:
+            evaluation_id = str(_operation_metadata_value(operation, "evaluation_id"))
+            if created or operation.status not in TERMINAL_OPERATION_STATUSES:
+                evaluation = evaluate_gate(
+                    user=user,
+                    whiteboard=whiteboard,
+                    phase_id=phase_id,
+                    scorecard=scorecard,
+                )
+                evaluation_id = str(evaluation.id)
+                complete_product_operation(operation, metadata={"evaluation_id": evaluation_id})
             contract = get_phase_contract(user=user, whiteboard=whiteboard, phase_id=phase_id)
         except WorkstreamGateError as exc:
+            _finish_operation_for_error(operation, code=exc.code, message=exc.message)
             return _phase_error(exc)
         whiteboard.refresh_from_db()
         return success_response(
-            {
-                "evaluation_id": str(evaluation.id),
-                "whiteboard_phase_contract": contract,
-                "whiteboard": whiteboard_payload(whiteboard, user=user),
-            }
+            _operation_envelope(
+                operation,
+                accepted=created,
+                evaluation_id=evaluation_id,
+                whiteboard_phase_contract=contract,
+                whiteboard=whiteboard_payload(whiteboard, user=user),
+            )
         )
 
 
@@ -618,20 +704,46 @@ class WhiteboardDeploymentPrepareView(APIView):
         serializer = WhiteboardDeploymentPrepareSerializer(data=request.data)
         if not serializer.is_valid():
             return _validation_error(serializer.errors)
+        policy_id = str(serializer.validated_data.get("policy_id") or "")
         try:
-            contract = prepare_deployment_for_whiteboard(
+            policy = load_deployment_policy(whiteboard=whiteboard, policy_id=policy_id)
+            operation, created = begin_product_operation(
                 user=user,
                 whiteboard=whiteboard,
-                policy_id=str(serializer.validated_data.get("policy_id") or ""),
+                kind="deployment_prepare",
+                target_type="deployment_contract",
+                target_id=str(policy["policy_id"]),
+                idempotency_key=_idempotency_key(request, dict(serializer.validated_data)),
+                metadata={"policy_id": str(policy["policy_id"])},
+            )
+        except ProductOperationError as exc:
+            return _operation_error(exc)
+        except DeploymentOrchestrationError as exc:
+            return _deployment_error(exc)
+        try:
+            if created or operation.status not in TERMINAL_OPERATION_STATUSES:
+                prepare_deployment_for_whiteboard(
+                    user=user,
+                    whiteboard=whiteboard,
+                    policy_id=policy_id,
+                )
+                complete_product_operation(operation)
+            contract = list_deployment_state(
+                user=user,
+                whiteboard=whiteboard,
+                policy_id=str(policy["policy_id"]),
             )
         except DeploymentOrchestrationError as exc:
+            _finish_operation_for_error(operation, code=exc.code, message=exc.message)
             return _deployment_error(exc)
         whiteboard.refresh_from_db()
         return success_response(
-            {
-                "deployment_contract": contract,
-                "whiteboard": whiteboard_payload(whiteboard, user=user),
-            }
+            _operation_envelope(
+                operation,
+                accepted=created,
+                deployment_contract=contract,
+                whiteboard=whiteboard_payload(whiteboard, user=user),
+            )
         )
 
 
@@ -694,22 +806,48 @@ class WhiteboardPerformanceStartView(APIView):
         serializer = WhiteboardPerformanceStartSerializer(data=request.data)
         if not serializer.is_valid():
             return _validation_error(serializer.errors)
+        policy_id = str(serializer.validated_data.get("policy_id") or "")
         try:
-            contract = start_performance_review_for_whiteboard(
+            policy = load_performance_policy(whiteboard=whiteboard, policy_id=policy_id)
+            operation, created = begin_product_operation(
                 user=user,
                 whiteboard=whiteboard,
-                policy_id=str(serializer.validated_data.get("policy_id") or ""),
-                period_start=serializer.validated_data.get("period_start"),
-                period_end=serializer.validated_data.get("period_end"),
+                kind="performance_start",
+                target_type="performance_contract",
+                target_id=str(policy["policy_id"]),
+                idempotency_key=_idempotency_key(request, dict(serializer.validated_data)),
+                metadata={"policy_id": str(policy["policy_id"])},
+            )
+        except ProductOperationError as exc:
+            return _operation_error(exc)
+        except PerformanceOrchestrationError as exc:
+            return _performance_error(exc)
+        try:
+            if created or operation.status not in TERMINAL_OPERATION_STATUSES:
+                start_performance_review_for_whiteboard(
+                    user=user,
+                    whiteboard=whiteboard,
+                    policy_id=policy_id,
+                    period_start=serializer.validated_data.get("period_start"),
+                    period_end=serializer.validated_data.get("period_end"),
+                )
+                complete_product_operation(operation)
+            contract = list_performance_state(
+                user=user,
+                whiteboard=whiteboard,
+                policy_id=str(policy["policy_id"]),
             )
         except PerformanceOrchestrationError as exc:
+            _finish_operation_for_error(operation, code=exc.code, message=exc.message)
             return _performance_error(exc)
         whiteboard.refresh_from_db()
         return success_response(
-            {
-                "performance_contract": contract,
-                "whiteboard": whiteboard_payload(whiteboard, user=user),
-            }
+            _operation_envelope(
+                operation,
+                accepted=created,
+                performance_contract=contract,
+                whiteboard=whiteboard_payload(whiteboard, user=user),
+            )
         )
 
 
@@ -724,20 +862,46 @@ class WhiteboardPerformanceReportView(APIView):
         serializer = WhiteboardPerformanceReportSerializer(data=request.data)
         if not serializer.is_valid():
             return _validation_error(serializer.errors)
+        policy_id = str(serializer.validated_data.get("policy_id") or "")
         try:
-            contract = create_performance_report(
+            policy = load_performance_policy(whiteboard=whiteboard, policy_id=policy_id)
+            operation, created = begin_product_operation(
                 user=user,
                 whiteboard=whiteboard,
-                policy_id=str(serializer.validated_data.get("policy_id") or ""),
+                kind="performance_report",
+                target_type="performance_contract",
+                target_id=str(policy["policy_id"]),
+                idempotency_key=_idempotency_key(request, dict(serializer.validated_data)),
+                metadata={"policy_id": str(policy["policy_id"])},
+            )
+        except ProductOperationError as exc:
+            return _operation_error(exc)
+        except PerformanceOrchestrationError as exc:
+            return _performance_error(exc)
+        try:
+            if created or operation.status not in TERMINAL_OPERATION_STATUSES:
+                create_performance_report(
+                    user=user,
+                    whiteboard=whiteboard,
+                    policy_id=policy_id,
+                )
+                complete_product_operation(operation)
+            contract = list_performance_state(
+                user=user,
+                whiteboard=whiteboard,
+                policy_id=str(policy["policy_id"]),
             )
         except PerformanceOrchestrationError as exc:
+            _finish_operation_for_error(operation, code=exc.code, message=exc.message)
             return _performance_error(exc)
         whiteboard.refresh_from_db()
         return success_response(
-            {
-                "performance_contract": contract,
-                "whiteboard": whiteboard_payload(whiteboard, user=user),
-            }
+            _operation_envelope(
+                operation,
+                accepted=created,
+                performance_contract=contract,
+                whiteboard=whiteboard_payload(whiteboard, user=user),
+            )
         )
 
 
@@ -757,23 +921,50 @@ class WhiteboardPerformanceEvaluateView(APIView):
             or serializer.validated_data.get("scores")
             or {}
         )
+        policy_id = str(serializer.validated_data.get("policy_id") or "")
         try:
-            evaluation = evaluate_performance(
+            policy = load_performance_policy(whiteboard=whiteboard, policy_id=policy_id)
+            operation, created = begin_product_operation(
                 user=user,
                 whiteboard=whiteboard,
-                policy_id=str(serializer.validated_data.get("policy_id") or ""),
-                scorecard=scorecard,
+                kind="performance_evaluate",
+                target_type="performance_contract",
+                target_id=str(policy["policy_id"]),
+                idempotency_key=_idempotency_key(request, dict(serializer.validated_data)),
+                metadata={"policy_id": str(policy["policy_id"])},
             )
-            contract = list_performance_state(user=user, whiteboard=whiteboard)
+        except ProductOperationError as exc:
+            return _operation_error(exc)
         except PerformanceOrchestrationError as exc:
+            return _performance_error(exc)
+        try:
+            evaluation_id = str(_operation_metadata_value(operation, "evaluation_id"))
+            if created or operation.status not in TERMINAL_OPERATION_STATUSES:
+                evaluation = evaluate_performance(
+                    user=user,
+                    whiteboard=whiteboard,
+                    policy_id=policy_id,
+                    scorecard=scorecard,
+                )
+                evaluation_id = str(evaluation.id)
+                complete_product_operation(operation, metadata={"evaluation_id": evaluation_id})
+            contract = list_performance_state(
+                user=user,
+                whiteboard=whiteboard,
+                policy_id=str(policy["policy_id"]),
+            )
+        except PerformanceOrchestrationError as exc:
+            _finish_operation_for_error(operation, code=exc.code, message=exc.message)
             return _performance_error(exc)
         whiteboard.refresh_from_db()
         return success_response(
-            {
-                "evaluation_id": str(evaluation.id),
-                "performance_contract": contract,
-                "whiteboard": whiteboard_payload(whiteboard, user=user),
-            }
+            _operation_envelope(
+                operation,
+                accepted=created,
+                evaluation_id=evaluation_id,
+                performance_contract=contract,
+                whiteboard=whiteboard_payload(whiteboard, user=user),
+            )
         )
 
 
@@ -800,6 +991,59 @@ def _idempotency_key(request: Request, data: dict[str, Any]) -> str:
         or request.META.get("HTTP_IDEMPOTENCY_KEY")
         or data.get("idempotency_key")
         or ""
+    )
+
+
+def _operation_envelope(
+    operation: Any,
+    *,
+    accepted: bool,
+    **payload: Any,
+) -> dict[str, Any]:
+    return {
+        "accepted": accepted,
+        "operation": operation_payload(operation),
+        **payload,
+    }
+
+
+def _operation_metadata_value(operation: Any, key: str) -> Any:
+    metadata = getattr(operation, "metadata_json", None)
+    if not isinstance(metadata, dict):
+        return ""
+    return metadata.get(key) or ""
+
+
+def _finish_operation_for_error(operation: Any, *, code: str, message: str) -> None:
+    if str(code).lower() in _BLOCKED_OPERATION_ERROR_CODES or any(
+        marker in str(code).lower()
+        for marker in ("blocked", "approval", "required", "not_ready", "dependency")
+    ):
+        block_product_operation(operation, error_code=code, error_message=message)
+        return
+    fail_product_operation(operation, error_code=code, error_message=message)
+
+
+_BLOCKED_OPERATION_ERROR_CODES = {
+    "phase_synthesis_incomplete",
+    "deployment_status_required",
+    "deployment_approval_required",
+    "performance_deployment_required",
+    "performance_report_required",
+}
+
+
+def _operation_error(exc: ProductOperationError) -> Response:
+    status_code = (
+        http_status.HTTP_403_FORBIDDEN
+        if exc.code == "permission_denied"
+        else http_status.HTTP_400_BAD_REQUEST
+    )
+    return error_response(
+        exc.code.upper(),
+        exc.message,
+        status=status_code,
+        details=exc.details,
     )
 
 

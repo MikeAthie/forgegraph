@@ -90,6 +90,88 @@ func TestOpenRouterClientUsesOpenAICompatibleChatCompletions(t *testing.T) {
 	}
 }
 
+func TestOpenAIClientUsesMaxCompletionTokensForGPT5Family(t *testing.T) {
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"choices": [{
+				"message": {"content": "OK"},
+				"finish_reason": "stop"
+			}],
+			"model": "gpt-5.4-mini-2026-03-17",
+			"usage": {"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7}
+		}`))
+	}))
+	defer server.Close()
+	t.Setenv("OPENAI_BASE_URL", server.URL)
+
+	_, err := NewOpenAIClientWithKey("openai-key").Complete(
+		context.Background(),
+		&executor.LLMRequest{
+			Provider:  "openai",
+			Prompt:    "hello",
+			Model:     "gpt-5.4-mini",
+			MaxTokens: 32,
+			LLMMode:   "system",
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if gotPayload["max_completion_tokens"] != float64(32) {
+		t.Fatalf("max_completion_tokens = %#v", gotPayload["max_completion_tokens"])
+	}
+	if _, exists := gotPayload["max_tokens"]; exists {
+		t.Fatalf("max_tokens should be omitted for GPT-5 family, payload=%#v", gotPayload)
+	}
+}
+
+func TestOpenAIClientKeepsMaxTokensForGPT41Family(t *testing.T) {
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"choices": [{
+				"message": {"content": "OK"},
+				"finish_reason": "stop"
+			}],
+			"model": "gpt-4.1-mini-2025-04-14",
+			"usage": {"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7}
+		}`))
+	}))
+	defer server.Close()
+	t.Setenv("OPENAI_BASE_URL", server.URL)
+
+	_, err := NewOpenAIClientWithKey("openai-key").Complete(
+		context.Background(),
+		&executor.LLMRequest{
+			Provider:  "openai",
+			Prompt:    "hello",
+			Model:     "gpt-4.1-mini",
+			MaxTokens: 32,
+			LLMMode:   "system",
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if gotPayload["max_tokens"] != float64(32) {
+		t.Fatalf("max_tokens = %#v", gotPayload["max_tokens"])
+	}
+	if _, exists := gotPayload["max_completion_tokens"]; exists {
+		t.Fatalf("max_completion_tokens should be omitted for GPT-4.1 family, payload=%#v", gotPayload)
+	}
+}
+
 func TestOpenRouterClientReportsNumericErrorCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

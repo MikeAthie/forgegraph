@@ -12,6 +12,7 @@ from adapters.api.whiteboards.views import (
     WhiteboardDeploymentPrepareView,
     WhiteboardDetailView,
     WhiteboardListView,
+    WhiteboardOperationDetailView,
     WhiteboardPerformanceDetailView,
     WhiteboardPerformanceEvaluateView,
     WhiteboardPerformanceReportView,
@@ -55,6 +56,11 @@ urlpatterns = [
     ),
     path(
         "whiteboards/<uuid:whiteboard_id>", WhiteboardDetailView.as_view(), name="whiteboard-detail"
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/operations/<uuid:operation_id>",
+        WhiteboardOperationDetailView.as_view(),
+        name="whiteboard-operation-detail",
     ),
     path(
         "whiteboards/<uuid:whiteboard_id>/deployment",

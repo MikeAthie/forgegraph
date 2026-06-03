@@ -26,6 +26,7 @@ def _runtime_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     env.update(_read_env_example())
     env["DJANGO_SETTINGS_MODULE"] = "config.settings"
     env["FORGEGRAPH_ENV_FILE"] = ""
+    env["OPERATING_MODEL_PACKS_DIR"] = str(BACKEND_DIR.parent / "operating_model_packs")
     if extra:
         env.update(extra)
     return env
@@ -142,3 +143,19 @@ def test_enabled_kafka_requires_managed_broker_security_settings() -> None:
 
     assert result.returncode != 0
     assert "COMMUNICATION_KAFKA_SECURITY_PROTOCOL must be SSL or SASL_SSL" in result.stderr
+
+
+def test_enabled_whiteboard_board_kafka_requires_managed_broker_security_settings() -> None:
+    result = _run_validate_runtime_env(
+        _runtime_env(
+            {
+                "WHITEBOARD_BOARD_KAFKA_ENABLED": "true",
+                "WHITEBOARD_BOARD_KAFKA_BOOTSTRAP_SERVERS": "managed.kafka:9092",
+                "WHITEBOARD_BOARD_KAFKA_TOPIC": "forgegraph.whiteboard.board.events.v1",
+                "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL": "PLAINTEXT",
+            }
+        )
+    )
+
+    assert result.returncode != 0
+    assert "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL must be SSL or SASL_SSL" in result.stderr

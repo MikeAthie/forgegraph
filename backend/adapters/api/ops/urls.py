@@ -8,6 +8,8 @@ from adapters.api.ops.views import (
     OpsEventSpoolView,
     OpsProjectionLagView,
     OpsRuntimeIntentLagView,
+    OpsSnapshotRecoveryDrillView,
+    OpsTransportEvidenceView,
 )
 
 urlpatterns = [
@@ -28,6 +30,16 @@ urlpatterns = [
         name="ops-dead-letter-resolve",
     ),
     path("projection-lag", OpsProjectionLagView.as_view(), name="ops-projection-lag"),
+    path(
+        "transport-evidence",
+        OpsTransportEvidenceView.as_view(),
+        name="ops-transport-evidence",
+    ),
+    path(
+        "snapshot-recovery-drill",
+        OpsSnapshotRecoveryDrillView.as_view(),
+        name="ops-snapshot-recovery-drill",
+    ),
     path("event-spool", OpsEventSpoolView.as_view(), name="ops-event-spool"),
     path("runtime-intent-lag", OpsRuntimeIntentLagView.as_view(), name="ops-runtime-intent-lag"),
 ]

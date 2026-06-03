@@ -139,7 +139,7 @@ class MediaGenerationCreateView(APIView):
         credential = APIKey.objects.filter(
             id=serializer.validated_data["credential_id"],
             organization_id=company.organization_id,
-            provider__in=["google", "openrouter"],
+            provider__in=["google", "openrouter", "openai"],
         ).first()
         if credential is None:
             return _not_found("Media generation credential was not found for this company.")

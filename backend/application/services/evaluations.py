@@ -25,6 +25,21 @@ from infrastructure.orm.models import (
 )
 
 REVIEW_BOARD_SCORECARD_SCHEMA = "consulting_review_board_v1"
+ATLAS_RUBRIC_SCORECARD_SCHEMA = "atlas_rubric_scorecard_v1"
+ATLAS_RUBRIC_JUDGE_KINDS = {"department", "process", "overall"}
+ATLAS_RUBRIC_DECISIONS = {
+    "sellable",
+    "sellable_with_minor_revisions",
+    "needs_revision",
+    "blocked",
+}
+ATLAS_RUBRIC_IMPROVEMENT_PRIMITIVES = {
+    "OperationRecommendation",
+    "CompanySignal",
+    "MetricSnapshot",
+    "StateProjection",
+    "WorkArtifact",
+}
 REVIEW_BOARD_SECTIONS = {
     "atlas": [
         "Diagnostic depth",
@@ -187,6 +202,18 @@ def _run_submitted_scorecard(
     inputs: dict[str, Any],
 ) -> EvaluationRun:
     submitted = _dict_value(inputs.get("submitted_scorecard"))
+    schema_version = str(submitted.get("schema_version") or "").strip()
+    if schema_version == ATLAS_RUBRIC_SCORECARD_SCHEMA:
+        return _run_atlas_rubric_scorecard(
+            company=company,
+            user=user,
+            profile_id=profile_id,
+            program=program,
+            asset=asset,
+            asset_version=asset_version,
+            input_refs=input_refs,
+            raw_scorecard=submitted,
+        )
     scorecard = _submitted_scorecard(submitted)
     status = _submitted_scorecard_status(scorecard)
     grade = _grade(scorecard["overall_average"] * 20)
@@ -282,6 +309,163 @@ def _run_submitted_scorecard(
         },
     )
     return evaluation
+
+
+def _run_atlas_rubric_scorecard(
+    *,
+    company: Graph,
+    user: User,
+    profile_id: str,
+    program: CompanyProgram | None,
+    asset: Asset | None,
+    asset_version: AssetVersion | None,
+    input_refs: list[Any],
+    raw_scorecard: dict[str, Any],
+) -> EvaluationRun:
+    scorecard = _submitted_atlas_rubric_scorecard(raw_scorecard)
+    status = _atlas_rubric_scorecard_status(scorecard)
+    grade = _grade(scorecard["overall_average"] * 20)
+    findings = _atlas_rubric_scorecard_findings(scorecard)
+    effective_version = asset_version or (canonical_version(asset) if asset is not None else None)
+
+    result_json = {
+        "engine": "submitted_atlas_rubric_scorecard",
+        "schema_version": ATLAS_RUBRIC_SCORECARD_SCHEMA,
+        "judge_kind": scorecard["judge_kind"],
+        "subject_id": scorecard["subject_id"],
+        "subject_label": scorecard["subject_label"],
+        "decision": scorecard["decision"],
+        "hard_fail": scorecard["hard_fail"],
+        "overall_average": scorecard["overall_average"],
+        "criteria": scorecard["criteria"],
+        "top_strengths": scorecard["top_strengths"],
+        "required_improvements": scorecard["required_improvements"],
+        "improvement_plan": scorecard["improvement_plan"],
+        "sellability_gate": _atlas_rubric_sellability_gate(scorecard),
+    }
+    evaluation = EvaluationRun.objects.create(
+        organization=cast(Any, company.organization),
+        company=company,
+        program=program,
+        asset=asset,
+        asset_version=effective_version,
+        profile=None,
+        profile_key=profile_id,
+        status=status,
+        score=scorecard["overall_average"],
+        grade=grade,
+        input_refs_json=input_refs,
+        result_json=result_json,
+        created_by=user,
+        evaluated_at=timezone.now(),
+    )
+    for item in findings:
+        EvaluationFinding.objects.create(
+            organization=cast(Any, company.organization),
+            company=company,
+            evaluation=evaluation,
+            severity=item["severity"],
+            issue_type=item["issue_type"],
+            message=item["message"],
+            evidence_refs_json=item["evidence_refs"],
+            suggested_fix=item["suggested_fix"],
+            blocking=item["blocking"],
+        )
+    EvaluationScorecard.objects.create(
+        organization=cast(Any, company.organization),
+        company=company,
+        evaluation=evaluation,
+        dimensions_json={
+            "engine": "submitted_atlas_rubric_scorecard",
+            "schema_version": ATLAS_RUBRIC_SCORECARD_SCHEMA,
+            "judge_kind": scorecard["judge_kind"],
+            "subject_id": scorecard["subject_id"],
+            "subject_label": scorecard["subject_label"],
+            "decision": scorecard["decision"],
+            "hard_fail": scorecard["hard_fail"],
+            "overall_average": scorecard["overall_average"],
+            "criteria": scorecard["criteria"],
+            "top_strengths": scorecard["top_strengths"],
+            "required_improvements": scorecard["required_improvements"],
+            "improvement_plan": scorecard["improvement_plan"],
+            "sellability_gate": _atlas_rubric_sellability_gate(scorecard),
+        },
+        composite_score=scorecard["overall_average"],
+        grade=grade,
+    )
+    improvement_signals = _create_atlas_rubric_improvement_signals(
+        company=company,
+        user=user,
+        evaluation=evaluation,
+        scorecard=scorecard,
+    )
+    if improvement_signals:
+        evaluation.result_json = {
+            **evaluation.result_json,
+            "signal_ids": [str(signal.id) for signal in improvement_signals],
+        }
+        evaluation.save(update_fields=["result_json"])
+    record_audit_log(
+        actor=user,
+        tenant_id=str(company.organization_id),
+        action="evaluation.run",
+        resource_type="evaluation",
+        resource_id=str(evaluation.id),
+        metadata={
+            "company_id": str(company.id),
+            "profile_id": profile_id,
+            "status": status,
+            "engine": "submitted_atlas_rubric_scorecard",
+            "schema_version": ATLAS_RUBRIC_SCORECARD_SCHEMA,
+            "judge_kind": scorecard["judge_kind"],
+        },
+    )
+    return evaluation
+
+
+def _create_atlas_rubric_improvement_signals(
+    *,
+    company: Graph,
+    user: User,
+    evaluation: EvaluationRun,
+    scorecard: dict[str, Any],
+) -> list[CompanySignal]:
+    if bool(scorecard["hard_fail"]) or scorecard["decision"] == "blocked":
+        return []
+    signals: list[CompanySignal] = []
+    for index, item in enumerate(scorecard["improvement_plan"]):
+        primitive = str(item.get("primitive") or "")
+        if primitive not in {"CompanySignal", "OperationRecommendation"}:
+            continue
+        signal = create_company_signal(
+            company=company,
+            actor=user,
+            signal_type="manual",
+            signal_kind="feedback",
+            domain_context="atlas_quality_judge",
+            source="atlas_rubric_scorecard",
+            external_key=f"atlas_rubric:{evaluation.id}:{index}",
+            title=str(item.get("title") or "Atlas quality improvement"),
+            summary=str(item.get("rationale") or ""),
+            metadata={
+                "evaluation_id": str(evaluation.id),
+                "schema_version": ATLAS_RUBRIC_SCORECARD_SCHEMA,
+                "judge_kind": scorecard["judge_kind"],
+                "subject_id": scorecard["subject_id"],
+                "subject_label": scorecard["subject_label"],
+                "primitive": primitive,
+                "target": item.get("target"),
+                "priority": item.get("priority"),
+                "decision": scorecard["decision"],
+                "overall_average": scorecard["overall_average"],
+                "evidence_refs": item.get("evidence_refs", []),
+            },
+        )
+        if evaluation.operation_id and signal.operation_id != evaluation.operation_id:
+            signal.operation_id = evaluation.operation_id
+            signal.save(update_fields=["operation", "updated_at"])
+        signals.append(signal)
+    return signals
 
 
 def _create_review_board_improvement_signals(
@@ -593,6 +777,248 @@ def _submitted_scorecard(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _submitted_atlas_rubric_scorecard(raw: dict[str, Any]) -> dict[str, Any]:
+    if str(raw.get("schema_version") or "").strip() != ATLAS_RUBRIC_SCORECARD_SCHEMA:
+        _raise_submitted_scorecard_error(
+            "schema_version",
+            f"Atlas rubric scorecards must use {ATLAS_RUBRIC_SCORECARD_SCHEMA}.",
+        )
+    judge_kind = _submitted_text(raw.get("judge_kind"), max_length=40)
+    if judge_kind not in ATLAS_RUBRIC_JUDGE_KINDS:
+        _raise_submitted_scorecard_error(
+            "judge_kind",
+            "judge_kind must be department, process, or overall.",
+        )
+    subject_id = _submitted_text(raw.get("subject_id"), max_length=160)
+    subject_label = _submitted_text(raw.get("subject_label"), max_length=200)
+    if not subject_id:
+        _raise_submitted_scorecard_error("subject_id", "subject_id is required.")
+    if not subject_label:
+        _raise_submitted_scorecard_error("subject_label", "subject_label is required.")
+
+    raw_criteria = raw.get("criteria")
+    if not isinstance(raw_criteria, list) or len(raw_criteria) != 5:
+        _raise_submitted_scorecard_error(
+            "criteria",
+            "Atlas rubric scorecards must include exactly five scored criteria.",
+        )
+    criteria = [
+        _submitted_atlas_rubric_criterion(item, index=index)
+        for index, item in enumerate(raw_criteria)
+    ]
+    overall_average = _rounded_average([float(item["score"]) for item in criteria])
+    submitted_overall = _number_value(raw.get("overall_average"))
+    if submitted_overall is None:
+        _raise_submitted_scorecard_error("overall_average", "overall_average is required.")
+    if abs(float(submitted_overall or 0) - overall_average) > 0.15:
+        _raise_submitted_scorecard_error(
+            "overall_average",
+            "overall_average must match the server-computed criterion average.",
+        )
+
+    raw_decision = _submitted_text(raw.get("decision"), max_length=80)
+    if raw_decision not in ATLAS_RUBRIC_DECISIONS:
+        _raise_submitted_scorecard_error(
+            "decision",
+            "decision must be sellable, sellable_with_minor_revisions, needs_revision, or blocked.",
+        )
+    hard_fail = bool(raw.get("hard_fail") is True)
+    top_strengths = _submitted_text_list(raw.get("top_strengths"), max_items=8, max_length=500)
+    required_improvements = _submitted_text_list(
+        raw.get("required_improvements"),
+        max_items=12,
+        max_length=700,
+    )
+    if not required_improvements:
+        _raise_submitted_scorecard_error(
+            "required_improvements",
+            "At least one required improvement is required.",
+        )
+    improvement_plan = _submitted_atlas_rubric_improvement_plan(
+        raw.get("improvement_plan"),
+        subject_label=subject_label,
+    )
+    decision = _submitted_atlas_rubric_decision(
+        raw_decision=raw_decision,
+        hard_fail=hard_fail,
+        overall_average=overall_average,
+        criteria=criteria,
+    )
+    return {
+        "schema_version": ATLAS_RUBRIC_SCORECARD_SCHEMA,
+        "judge_kind": judge_kind,
+        "subject_id": subject_id,
+        "subject_label": subject_label,
+        "decision": decision,
+        "hard_fail": hard_fail,
+        "overall_average": overall_average,
+        "criteria": criteria,
+        "top_strengths": top_strengths,
+        "required_improvements": required_improvements,
+        "improvement_plan": improvement_plan,
+    }
+
+
+def _submitted_atlas_rubric_criterion(value: Any, *, index: int) -> dict[str, Any]:
+    raw = _dict_value(value)
+    field = f"criteria.{index}"
+    key = _submitted_text(raw.get("key"), max_length=120)
+    label = _submitted_text(raw.get("label") or raw.get("area"), max_length=160)
+    if not key:
+        _raise_submitted_scorecard_error(f"{field}.key", "Criterion key is required.")
+    if not label:
+        _raise_submitted_scorecard_error(f"{field}.label", "Criterion label is required.")
+    score = _number_value(raw.get("score"))
+    if score is None or score < 1 or score > 5:
+        _raise_submitted_scorecard_error(
+            f"{field}.score",
+            "Score must be a number between 1 and 5.",
+        )
+    rationale = _submitted_text(raw.get("rationale"), max_length=1200)
+    improvement = _submitted_text(raw.get("improvement"), max_length=1200)
+    if not rationale:
+        _raise_submitted_scorecard_error(
+            f"{field}.rationale",
+            "Criterion rationale is required.",
+        )
+    if not improvement:
+        _raise_submitted_scorecard_error(
+            f"{field}.improvement",
+            "Criterion improvement is required.",
+        )
+    evidence_refs = _submitted_evidence_refs(raw.get("evidence_refs"), field=f"{field}.evidence_refs")
+    if not evidence_refs:
+        _raise_submitted_scorecard_error(
+            f"{field}.evidence_refs",
+            "Criterion evidence_refs must include at least one reference.",
+        )
+    return {
+        "key": key,
+        "label": label,
+        "score": round(float(score), 2),
+        "critical": bool(raw.get("critical") is True),
+        "rationale": rationale,
+        "improvement": improvement,
+        "evidence_refs": evidence_refs,
+    }
+
+
+def _submitted_atlas_rubric_improvement_plan(
+    value: Any,
+    *,
+    subject_label: str,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
+        _raise_submitted_scorecard_error(
+            "improvement_plan",
+            "Atlas rubric scorecards must include at least one improvement plan item.",
+        )
+    improvements = []
+    for index, item in enumerate(value[:20]):
+        raw = _dict_value(item)
+        primitive = _submitted_text(raw.get("primitive"), max_length=80)
+        if primitive not in ATLAS_RUBRIC_IMPROVEMENT_PRIMITIVES:
+            _raise_submitted_scorecard_error(
+                f"improvement_plan.{index}.primitive",
+                "Improvement primitive must be a generic ForgeGraph primitive.",
+            )
+        title = _submitted_text(raw.get("title"), max_length=255)
+        rationale = _submitted_text(raw.get("rationale"), max_length=1200)
+        if not title:
+            _raise_submitted_scorecard_error(
+                f"improvement_plan.{index}.title",
+                "Improvement title is required.",
+            )
+        if not rationale:
+            _raise_submitted_scorecard_error(
+                f"improvement_plan.{index}.rationale",
+                "Improvement rationale is required.",
+            )
+        priority = _submitted_text(raw.get("priority"), max_length=20).lower()
+        if priority not in {"low", "medium", "high"}:
+            priority = "medium"
+        improvements.append(
+            {
+                "target": _submitted_text(raw.get("target") or subject_label, max_length=200),
+                "primitive": primitive,
+                "title": title,
+                "priority": priority,
+                "rationale": rationale,
+                "evidence_refs": _submitted_evidence_refs(
+                    raw.get("evidence_refs"),
+                    field=f"improvement_plan.{index}.evidence_refs",
+                    required=False,
+                ),
+            }
+        )
+    return improvements
+
+
+def _submitted_evidence_refs(
+    value: Any,
+    *,
+    field: str,
+    required: bool = True,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        if required:
+            _raise_submitted_scorecard_error(field, "evidence_refs must be a list.")
+        return []
+    refs: list[dict[str, Any]] = []
+    for index, item in enumerate(value[:20]):
+        sanitized = _submitted_evidence_ref(item)
+        if sanitized:
+            refs.append(sanitized)
+        elif required:
+            _raise_submitted_scorecard_error(
+                f"{field}.{index}",
+                "Each evidence reference must contain at least one scalar value.",
+            )
+    return refs
+
+
+def _submitted_evidence_ref(item: Any) -> dict[str, Any]:
+    if isinstance(item, str):
+        ref_id = _submitted_text(item, max_length=240)
+        return {"type": "evidence_ref", "id": ref_id} if ref_id else {}
+    raw = _dict_value(item)
+    if not raw:
+        return {}
+    return _sanitize_evidence_ref_dict(raw)
+
+
+def _sanitize_evidence_ref_dict(raw: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, raw_value in list(raw.items())[:12]:
+        clean_key = _submitted_text(key, max_length=80)
+        if not clean_key:
+            continue
+        if isinstance(raw_value, bool):
+            sanitized[clean_key] = raw_value
+        elif isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool):
+            sanitized[clean_key] = raw_value
+        else:
+            sanitized[clean_key] = _submitted_text(raw_value, max_length=500)
+    return sanitized
+
+
+def _submitted_atlas_rubric_decision(
+    *,
+    raw_decision: str,
+    hard_fail: bool,
+    overall_average: float,
+    criteria: list[dict[str, Any]],
+) -> str:
+    min_score = _atlas_rubric_min_score({"criteria": criteria})
+    if hard_fail or raw_decision == "blocked" or overall_average < 3.0 or _atlas_rubric_has_critical_score_one(criteria):
+        return "blocked"
+    if raw_decision == "sellable" and overall_average >= 4.2 and min_score >= 3:
+        return "sellable"
+    if raw_decision in {"sellable", "sellable_with_minor_revisions"} and overall_average >= 3.5 and min_score >= 3:
+        return "sellable_with_minor_revisions"
+    return "needs_revision"
+
+
 def _submitted_decision(value: Any) -> str:
     decision = str(value or "").strip().lower()
     if decision in {"client_ready", "revision_required", "fail"}:
@@ -754,6 +1180,59 @@ def _submitted_scorecard_status(scorecard: dict[str, Any]) -> str:
     return "WARN"
 
 
+def _atlas_rubric_scorecard_status(scorecard: dict[str, Any]) -> str:
+    if (
+        bool(scorecard["hard_fail"])
+        or scorecard["decision"] == "blocked"
+        or float(scorecard["overall_average"]) < 3.0
+        or _atlas_rubric_has_critical_score_one(scorecard["criteria"])
+    ):
+        return "BLOCK"
+    if (
+        scorecard["decision"] in {"sellable", "sellable_with_minor_revisions"}
+        and float(scorecard["overall_average"]) >= 4.2
+        and _atlas_rubric_min_score(scorecard) >= 3
+        and not _atlas_rubric_has_critical_score_below_three(scorecard["criteria"])
+    ):
+        return "PASS"
+    return "WARN"
+
+
+def _atlas_rubric_scorecard_findings(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
+    issues = _atlas_rubric_issue_messages(scorecard)
+    hard_fail = bool(scorecard["hard_fail"]) or scorecard["decision"] == "blocked"
+    if not issues and hard_fail:
+        issues = [
+            {
+                "message": f"The Atlas {scorecard['judge_kind']} judge marked {scorecard['subject_label']} as blocked.",
+                "suggested_fix": "Revise the Atlas output and rerun the judge before treating it as paid-ready evidence.",
+                "evidence_refs": [{"type": "atlas_rubric", "subject_id": scorecard["subject_id"]}],
+            }
+        ]
+    findings = []
+    for index, issue in enumerate(issues):
+        findings.append(
+            {
+                "severity": "CRITICAL" if hard_fail else "WARNING",
+                "issue_type": "atlas_rubric_scorecard_issue",
+                "message": issue["message"],
+                "suggested_fix": issue["suggested_fix"],
+                "blocking": hard_fail,
+                "evidence_refs": issue.get(
+                    "evidence_refs",
+                    [
+                        {
+                            "type": "atlas_rubric",
+                            "subject_id": scorecard["subject_id"],
+                            "index": index,
+                        }
+                    ],
+                ),
+            }
+        )
+    return findings
+
+
 def _submitted_scorecard_findings(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
     issues = _review_board_issue_messages(scorecard)
     hard_fail = bool(scorecard["hard_fail"]) or scorecard["decision"] == "fail"
@@ -818,6 +1297,84 @@ def _review_board_readiness_level(*, decision: str, overall_average: float) -> s
     if overall_average >= 4.2:
         return "strong_with_minor_revisions"
     return "needs_revision"
+
+
+def _atlas_rubric_sellability_gate(scorecard: dict[str, Any]) -> dict[str, Any]:
+    min_score = _atlas_rubric_min_score(scorecard)
+    critical_below_three = _atlas_rubric_has_critical_score_below_three(scorecard["criteria"])
+    pass_gate = (
+        scorecard["decision"] in {"sellable", "sellable_with_minor_revisions"}
+        and float(scorecard["overall_average"]) >= 4.2
+        and min_score >= 3
+        and not critical_below_three
+        and not bool(scorecard["hard_fail"])
+    )
+    return {
+        "passed": pass_gate,
+        "threshold_overall_average": 4.2,
+        "minimum_criterion_score": min_score,
+        "critical_criterion_below_three": critical_below_three,
+        "decision": scorecard["decision"],
+    }
+
+
+def _atlas_rubric_min_score(scorecard: dict[str, Any]) -> float:
+    criteria = scorecard.get("criteria") if isinstance(scorecard, dict) else None
+    if not isinstance(criteria, list) or not criteria:
+        return 0.0
+    return min(float(item["score"]) for item in criteria)
+
+
+def _atlas_rubric_has_critical_score_one(criteria: list[dict[str, Any]]) -> bool:
+    return any(bool(item.get("critical")) and float(item["score"]) <= 1 for item in criteria)
+
+
+def _atlas_rubric_has_critical_score_below_three(criteria: list[dict[str, Any]]) -> bool:
+    return any(bool(item.get("critical")) and float(item["score"]) < 3 for item in criteria)
+
+
+def _atlas_rubric_issue_messages(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
+    messages = []
+    for item in scorecard["criteria"]:
+        if float(item["score"]) <= 3:
+            messages.append(
+                {
+                    "message": (
+                        f"{scorecard['subject_label']} criterion "
+                        f"'{item['label']}' scored {item['score']}."
+                    ),
+                    "suggested_fix": item["improvement"],
+                    "evidence_refs": item.get("evidence_refs", []),
+                }
+            )
+    for improvement in scorecard["required_improvements"]:
+        messages.append(
+            {
+                "message": f"{scorecard['subject_label']} needs improvement: {improvement}",
+                "suggested_fix": improvement,
+                "evidence_refs": [
+                    {
+                        "type": "atlas_rubric_required_improvement",
+                        "subject_id": scorecard["subject_id"],
+                    }
+                ],
+            }
+        )
+    if bool(scorecard["hard_fail"]):
+        messages.insert(
+            0,
+            {
+                "message": f"{scorecard['subject_label']} was marked as a hard fail.",
+                "suggested_fix": "Address the hard-fail condition before customer delivery.",
+                "evidence_refs": [
+                    {
+                        "type": "atlas_rubric_hard_fail",
+                        "subject_id": scorecard["subject_id"],
+                    }
+                ],
+            },
+        )
+    return messages[:20]
 
 
 def _has_critical_review_board_score_one(sections: dict[str, dict[str, Any]]) -> bool:

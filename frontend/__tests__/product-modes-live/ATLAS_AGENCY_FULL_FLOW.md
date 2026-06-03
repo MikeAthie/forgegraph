@@ -28,30 +28,32 @@ The test proves that `Legacy Eyewear` can submit a customer request, an ATLAS op
 
 ## UI-First Steps
 
-Phase 9B moved the main operator-facing transitions onto real UI surfaces:
+P1 moves the primary operator-facing Atlas run onto real UI surfaces:
 
 - Legacy creates the initial request through `CommunicationPanel`.
 - ATLAS routes the request through the communication message `Route request` action.
+- ATLAS configures pack connector availability through the company operating-model workspace.
 - The test asserts no whiteboard exists before routing and exactly one exists after routing.
+- ATLAS enriches onboarding context through the structured `WhiteboardPanel` editor.
 - ATLAS marks onboarding ready through `WhiteboardPanel`.
 - ATLAS starts the integrated agency phase through generic phase buttons in `WhiteboardPanel`.
+- ATLAS completes primary-run workstreams, phase synthesis, and gate evaluation through `WhiteboardPanel`.
 - ATLAS resolves the whiteboard/gate approval through the approvals UI.
 - ATLAS prepares deployment through `WhiteboardPanel`.
 - ATLAS starts the performance review through `WhiteboardPanel`.
+- ATLAS generates the performance report and evaluation through `WhiteboardPanel`.
 
 The UI renders phase, deployment, and performance labels from policy/config contracts. The generic components do not hardcode ATLAS phase names, channel names, metric names, or gate criteria.
 
 ## Helper-Assisted Steps
 
-The live spec attaches a `helperAssistedSteps` array to the Playwright result so every remaining non-UI step is explicit. These steps remain helper-assisted because the honest product UI does not exist yet:
+The live spec attaches a `helperAssistedSteps` array to the Playwright result so every remaining non-UI step is explicit. These steps remain helper-assisted because the honest product UI does not exist yet or because they are direct verification reads:
 
-- Connector availability setup uses backend API because connector-management UI is not available yet.
-- Onboarding field enrichment uses backend API because structured whiteboard field editing is not exposed in the company workspace yet.
-- Workstream completion, synthesis, and gate scoring use backend API because production workstream authoring/evaluation UI is not available yet.
-- Performance report and evaluation use backend API because report/evaluation controls are not exposed in the whiteboard panel yet.
+- Follow-up memory uplift uses backend communication and phase APIs until guided follow-up campaign authoring and memory-review UI exist.
 - Isolation and durable-state checks use backend API to verify DB-owned state directly.
+- Evidence collection uses backend API reads to attach durable IDs, revisions, and operation state.
 
-Helper usage is limited to setup, missing operator surfaces, deterministic gate/report production, and direct verification. It is not used to fake customer-facing UI or external deployment success.
+Helper usage is not used to fake customer-facing UI, primary-run work production, approvals, deployment success, or external connector success.
 
 ## Evidence Attachment
 
@@ -64,6 +66,8 @@ The spec attaches `atlas-agency-full-flow-evidence` as JSON in the Playwright ou
 - approval result
 - deployment status, executed channels, and blocked channels
 - performance status, metric snapshot id, report run id, evaluation id, and routing record ids
+- memory readiness and follow-up memory-uplift evidence
+- release score summary
 - `helperAssistedSteps`
 - captured generic API route list
 - whether communication Kafka was enabled
@@ -180,20 +184,17 @@ A passing run should show:
 
 ## Current Known Limitations
 
-- Connector availability setup is backend-assisted because there is no connector-management UI.
-- Structured onboarding field enrichment is backend-assisted.
-- Workstream production, synthesis, and gate scoring are backend-assisted.
-- Performance report generation and evaluation are backend-assisted.
+- Follow-up memory uplift is still helper-assisted because there is no guided follow-up authoring or memory-review UI.
 - There is no real WhatsApp, social provider-publish, or landing-page deployment in this live acceptance path.
 - Social deployment can use generic sandbox/manual evidence when policy enables it; it must not claim provider publish without a provider call.
-- There is no fully UI-driven workstream production or gate scoring surface yet.
+- Workstream authoring remains a pragmatic v1 form, not a rich artifact editor.
+- Gate evaluation and performance evaluation use default scorecards from backend-owned policy criteria.
 - Kafka-enabled live transport validation is optional and not part of the default live run.
 
 ## Next Maturity Steps
 
-- Add UI for workstream completion and artifact submission.
-- Add UI for phase synthesis and gate evaluation.
-- Add UI for structured whiteboard field editing.
+- Add guided follow-up authoring and memory-review UI.
+- Replace compact workstream forms with richer artifact submission and review.
 - Add real connector integrations for approved deployment channels.
 - Add a Kafka-enabled live variant with receipt and dedupe evidence.
 - Add performance optimization UI for report review and routed optimization work.

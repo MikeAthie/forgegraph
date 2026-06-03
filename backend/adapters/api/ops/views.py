@@ -20,6 +20,7 @@ from application.services.ops_permissions import (
     OPS_DEAD_LETTER_READ,
     OPS_DEAD_LETTER_REPLAY,
     OPS_PROJECTION_READ,
+    OPS_SNAPSHOT_RECOVERY_DRILL,
     has_ops_permission,
 )
 from application.services.os_projections import projection_metadata
@@ -40,6 +41,13 @@ from application.services.runtime_write_intents import (
     build_runtime_intent_redis_client,
     decode_runtime_intent_message,
 )
+from application.services.snapshot_recovery_drills import (
+    run_checkpoint_recovery_drill,
+    run_whiteboard_snapshot_recovery_drill,
+)
+from application.services.whiteboard_board_kafka import (
+    whiteboard_board_kafka_transport_evidence,
+)
 from application.workers.process_os_projection_events import process_pending_projection_events
 from infrastructure.orm.models import (
     AuditLog,
@@ -54,6 +62,7 @@ from infrastructure.orm.models import (
     RuntimeIntentOutcome,
     TaskDeadLetterRecord,
     User,
+    WorkWhiteboard,
 )
 
 ACTIVE_EVENT_DEAD_LETTER_STATUSES = {"active", "replay_requested"}
@@ -566,6 +575,190 @@ class OpsProjectionLagView(APIView):
                     _event_dead_letter_summary(item) for item in active_dead_letters
                 ],
             }
+        )
+
+
+class OpsTransportEvidenceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        allowed = _require_ops_permission(request, OPS_PROJECTION_READ)
+        if isinstance(allowed, Response):
+            return allowed
+        _, organization = allowed
+
+        transport = str(request.query_params.get("transport") or "").strip()
+        if transport != "whiteboard_board_kafka":
+            return error_response(
+                "UNSUPPORTED_TRANSPORT",
+                "Only whiteboard_board_kafka transport evidence is available.",
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+        whiteboard_id = str(request.query_params.get("whiteboard_id") or "").strip()
+        if whiteboard_id:
+            try:
+                UUID(whiteboard_id)
+            except ValueError:
+                return error_response(
+                    "INVALID_WHITEBOARD_ID",
+                    "whiteboard_id must be a UUID.",
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+        company_id = str(request.query_params.get("company_id") or "").strip()
+        if company_id:
+            try:
+                UUID(company_id)
+            except ValueError:
+                return error_response(
+                    "INVALID_COMPANY_ID",
+                    "company_id must be a UUID.",
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+
+        return success_response(
+            {
+                "transport_evidence": whiteboard_board_kafka_transport_evidence(
+                    organization=organization,
+                    whiteboard_id=whiteboard_id,
+                    company_id=company_id,
+                )
+            }
+        )
+
+
+class OpsSnapshotRecoveryDrillView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        allowed = _require_ops_permission(request, OPS_SNAPSHOT_RECOVERY_DRILL)
+        if isinstance(allowed, Response):
+            return allowed
+        _, organization = allowed
+        context, context_error = _action_context(
+            request=request,
+            organization=organization,
+            action="ops.snapshot_recovery_drill",
+            require_key=True,
+        )
+        if context_error is not None:
+            return context_error
+        try:
+            replayed_response = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replayed_response is not None:
+            return replayed_response
+
+        payload = _snapshot_recovery_payload(request=request, organization=organization)
+        if isinstance(payload, Response):
+            return payload
+        response = success_response({"snapshot_recovery": payload["snapshot_recovery"]})
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="snapshot_recovery_drill",
+            resource_id=str(payload["resource_id"]),
+        )
+
+
+def _snapshot_recovery_payload(
+    *,
+    request: Request,
+    organization: Organization,
+) -> dict[str, Any] | Response:
+    whiteboard = _snapshot_recovery_whiteboard(request=request, organization=organization)
+    if isinstance(whiteboard, Response):
+        return whiteboard
+    evidence: dict[str, Any] = {"whiteboard": run_whiteboard_snapshot_recovery_drill(whiteboard.id)}
+    run = _optional_snapshot_recovery_run(request=request, organization=organization)
+    if isinstance(run, Response):
+        return run
+    if run is not None:
+        evidence["run_checkpoint"] = run_checkpoint_recovery_drill(run.id)
+    return {
+        "resource_id": str(whiteboard.id),
+        "snapshot_recovery": {
+            "available": bool(evidence["whiteboard"].get("available")),
+            "authoritative_state_source": "backend_db",
+            "cache_role": "cache_transport_only",
+            "engine_durable_ownership": False,
+            **evidence,
+        },
+    }
+
+
+def _snapshot_recovery_whiteboard(
+    *,
+    request: Request,
+    organization: Organization,
+) -> WorkWhiteboard | Response:
+    whiteboard_uuid = _uuid_from_request_data(
+        request,
+        field="whiteboard_id",
+        required=True,
+        invalid_code="INVALID_WHITEBOARD_ID",
+    )
+    if isinstance(whiteboard_uuid, Response):
+        return whiteboard_uuid
+    whiteboard = WorkWhiteboard.objects.filter(
+        organization=organization,
+        id=whiteboard_uuid,
+    ).first()
+    if whiteboard is None:
+        return error_response(
+            "NOT_FOUND",
+            "Whiteboard was not found.",
+            status=drf_status.HTTP_404_NOT_FOUND,
+        )
+    return whiteboard
+
+
+def _optional_snapshot_recovery_run(
+    *,
+    request: Request,
+    organization: Organization,
+) -> Run | None | Response:
+    run_uuid = _uuid_from_request_data(
+        request,
+        field="run_id",
+        required=False,
+        invalid_code="INVALID_RUN_ID",
+    )
+    if isinstance(run_uuid, Response) or run_uuid is None:
+        return run_uuid
+    run = Run.objects.filter(organization=organization, id=run_uuid).first()
+    if run is None:
+        return error_response(
+            "NOT_FOUND",
+            "Run was not found.",
+            status=drf_status.HTTP_404_NOT_FOUND,
+        )
+    return run
+
+
+def _uuid_from_request_data(
+    request: Request,
+    *,
+    field: str,
+    required: bool,
+    invalid_code: str,
+) -> UUID | None | Response:
+    value = str(request.data.get(field) or "").strip()
+    if not value:
+        if not required:
+            return None
+        return error_response(
+            "VALIDATION_ERROR",
+            f"{field} is required.",
+            status=drf_status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        return UUID(value)
+    except ValueError:
+        return error_response(
+            invalid_code,
+            f"{field} must be a UUID.",
+            status=drf_status.HTTP_400_BAD_REQUEST,
         )
 
 

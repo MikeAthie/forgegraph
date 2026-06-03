@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { StatusBadge } from "@/components/os/operations-ui";
-import { Button, Spinner } from "@/components/ui";
+import { Button, Input, Spinner, Textarea } from "@/components/ui";
 import { whiteboardRepository } from "@/domain/repositories";
 import { translateProductError } from "@/domain/errors";
 import type {
@@ -24,8 +24,9 @@ import type {
   WorkWhiteboardDeploymentContractDTO,
   WorkWhiteboardPerformanceContractDTO,
   WorkWhiteboardPhaseContractDTO,
+  WorkWhiteboardPhaseWorkstreamDTO,
 } from "@/lib/api";
-import { showError } from "@/lib/toast";
+import { showError, showSuccess } from "@/lib/toast";
 
 type WhiteboardPanelProps = {
   companyId: string;
@@ -49,6 +50,22 @@ type WhiteboardPanelAction =
   | { type: "board-load-error"; error: string }
   | { type: "refresh-start" }
   | { type: "refresh-finish" };
+
+type WhiteboardContextDraft = {
+  objective: string;
+  budgetLimit: string;
+  timeline: string;
+  constraintsJson: string;
+  stakeholderContextJson: string;
+  resourceContextJson: string;
+  deliveryContextJson: string;
+  assumptionsText: string;
+};
+
+type WorkstreamDraft = {
+  summary: string;
+  contextJson: string;
+};
 
 const initialState: WhiteboardPanelState = {
   whiteboards: [],
@@ -112,11 +129,15 @@ function stakeholderContext(whiteboard: WorkWhiteboardDTO): Record<string, unkno
 }
 
 function resourceContext(whiteboard: WorkWhiteboardDTO): Record<string, unknown> {
-  return Object.keys(whiteboard.resource_context ?? {}).length ? whiteboard.resource_context : whiteboard.product_context;
+  return Object.keys(whiteboard.resource_context ?? {}).length
+    ? whiteboard.resource_context
+    : whiteboard.product_context;
 }
 
 function deliveryContext(whiteboard: WorkWhiteboardDTO): Record<string, unknown> {
-  return Object.keys(whiteboard.delivery_context ?? {}).length ? whiteboard.delivery_context : whiteboard.channel_context;
+  return Object.keys(whiteboard.delivery_context ?? {}).length
+    ? whiteboard.delivery_context
+    : whiteboard.channel_context;
 }
 
 function openContextFields(whiteboard: WorkWhiteboardDTO): string[] {
@@ -157,6 +178,94 @@ function reviewLabel(card: WorkWhiteboardBoardCardDTO): string | null {
   return "Department review required";
 }
 
+function prettyJson(value: unknown): string {
+  if (!value || (typeof value === "object" && !Array.isArray(value) && !Object.keys(value).length)) {
+    return "{}";
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function contextDraftFromWhiteboard(whiteboard: WorkWhiteboardDTO | null): WhiteboardContextDraft {
+  if (!whiteboard) {
+    return {
+      objective: "",
+      budgetLimit: "",
+      timeline: "",
+      constraintsJson: "{}",
+      stakeholderContextJson: "{}",
+      resourceContextJson: "{}",
+      deliveryContextJson: "{}",
+      assumptionsText: "",
+    };
+  }
+  return {
+    objective: whiteboard.objective || "",
+    budgetLimit: whiteboard.budget_limit || "",
+    timeline: whiteboard.timeline || "",
+    constraintsJson: prettyJson(whiteboard.constraints ?? {}),
+    stakeholderContextJson: prettyJson(stakeholderContext(whiteboard)),
+    resourceContextJson: prettyJson(resourceContext(whiteboard)),
+    deliveryContextJson: prettyJson(deliveryContext(whiteboard)),
+    assumptionsText: Array.isArray(whiteboard.assumptions) ? whiteboard.assumptions.map(String).join("\n") : "",
+  };
+}
+
+function parseJsonObjectInput(value: string, label: string): Record<string, unknown> {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return {};
+  }
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object.`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function parseAssumptionsInput(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function defaultWorkstreamDraft(workstream: WorkWhiteboardPhaseWorkstreamDTO): WorkstreamDraft {
+  return {
+    summary: `${workstream.name || labelForField(workstream.id)} completed for this whiteboard.`,
+    contextJson: "{}",
+  };
+}
+
+function isWorkstreamCompletable(workstream: WorkWhiteboardPhaseWorkstreamDTO): boolean {
+  return (
+    workstream.status !== "completed" &&
+    workstream.status !== "blocked" &&
+    workstream.dependency_state?.status !== "blocked"
+  );
+}
+
+function defaultPhaseScorecard(phase: WorkWhiteboardPhaseContractDTO): Record<string, unknown> {
+  const scorecard: Record<string, unknown> = {};
+  for (const criterion of phase.gate?.criteria ?? []) {
+    const key = String(criterion.key ?? "");
+    if (!key) {
+      continue;
+    }
+    const valueType = String(criterion.value_type ?? "");
+    const expected = criterion.expected;
+    if (Array.isArray(expected) && expected.length) {
+      scorecard[key] = expected[0];
+    } else if (valueType === "enum") {
+      scorecard[key] = "pass";
+    } else if (typeof criterion.threshold === "number") {
+      scorecard[key] = criterion.threshold;
+    } else {
+      scorecard[key] = 100;
+    }
+  }
+  return scorecard;
+}
+
 export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { whiteboards, board, boardLoading, loading, refreshing, error } = state;
@@ -164,6 +273,13 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
   const activePhase = useMemo(() => activeWhiteboard?.phase_contracts?.[0] ?? null, [activeWhiteboard]);
   const activeDeployment = useMemo(() => activeWhiteboard?.deployment_contract ?? null, [activeWhiteboard]);
   const activePerformance = useMemo(() => activeWhiteboard?.performance_contract ?? null, [activeWhiteboard]);
+  const [contextExpanded, setContextExpanded] = useState(false);
+  const [contextDraft, setContextDraft] = useState<WhiteboardContextDraft>(() => contextDraftFromWhiteboard(null));
+  const [workstreamDrafts, setWorkstreamDrafts] = useState<Record<string, WorkstreamDraft>>({});
+
+  useEffect(() => {
+    setContextDraft(contextDraftFromWhiteboard(activeWhiteboard));
+  }, [activeWhiteboard?.id, activeWhiteboard?.updated_at]);
 
   const loadWhiteboards = useCallback(async () => {
     dispatch({ type: "load-start" });
@@ -254,6 +370,148 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
     }
   };
 
+  const updateContextDraft = (patch: Partial<WhiteboardContextDraft>) => {
+    setContextDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const saveContext = async () => {
+    if (!activeWhiteboard || refreshing) {
+      return;
+    }
+    dispatch({ type: "refresh-start" });
+    try {
+      const updated = await whiteboardRepository.patch(activeWhiteboard.id, {
+        objective: contextDraft.objective,
+        budget_limit: contextDraft.budgetLimit,
+        timeline: contextDraft.timeline,
+        constraints: parseJsonObjectInput(contextDraft.constraintsJson, "Constraints"),
+        stakeholder_context: parseJsonObjectInput(contextDraft.stakeholderContextJson, "Stakeholder context"),
+        resource_context: parseJsonObjectInput(contextDraft.resourceContextJson, "Resource context"),
+        delivery_context: parseJsonObjectInput(contextDraft.deliveryContextJson, "Delivery context"),
+        assumptions: parseAssumptionsInput(contextDraft.assumptionsText),
+      });
+      dispatch({
+        type: "load-success",
+        whiteboards: [updated, ...whiteboards.filter((whiteboard) => whiteboard.id !== updated.id)],
+      });
+      setContextExpanded(false);
+      showSuccess("Whiteboard context saved", "The planning context was persisted in the backend.");
+    } catch (updateError: unknown) {
+      const message =
+        updateError instanceof Error ? updateError.message : translateProductError(updateError, "company");
+      showError("Context not saved", message);
+      dispatch({ type: "load-error", error: message });
+    } finally {
+      dispatch({ type: "refresh-finish" });
+    }
+  };
+
+  const updateWorkstreamDraft = (workstream: WorkWhiteboardPhaseWorkstreamDTO, patch: Partial<WorkstreamDraft>) => {
+    setWorkstreamDrafts((current) => ({
+      ...current,
+      [workstream.id]: { ...(current[workstream.id] ?? defaultWorkstreamDraft(workstream)), ...patch },
+    }));
+  };
+
+  const completeWorkstream = async (
+    phase: WorkWhiteboardPhaseContractDTO,
+    workstream: WorkWhiteboardPhaseWorkstreamDTO,
+  ) => {
+    if (!activeWhiteboard || refreshing || !isWorkstreamCompletable(workstream)) {
+      return;
+    }
+    const draft = workstreamDrafts[workstream.id] ?? defaultWorkstreamDraft(workstream);
+    dispatch({ type: "refresh-start" });
+    try {
+      const result = await whiteboardRepository.completeWorkstream(activeWhiteboard.id, phase.phase_id, workstream.id, {
+        result: {
+          summary: draft.summary,
+          context: parseJsonObjectInput(draft.contextJson, "Workstream context"),
+        },
+      });
+      const updated = result.whiteboard ?? {
+        ...activeWhiteboard,
+        phase_contracts: activeWhiteboard.phase_contracts?.map((contract) =>
+          contract.phase_id === phase.phase_id ? result.whiteboard_phase_contract : contract,
+        ),
+      };
+      dispatch({
+        type: "load-success",
+        whiteboards: [updated, ...whiteboards.filter((whiteboard) => whiteboard.id !== updated.id)],
+      });
+      showSuccess("Workstream completed", workstream.name || labelForField(workstream.id));
+      await loadBoard();
+    } catch (updateError: unknown) {
+      const message =
+        updateError instanceof Error ? updateError.message : translateProductError(updateError, "company");
+      showError("Workstream not completed", message);
+      dispatch({ type: "load-error", error: message });
+    } finally {
+      dispatch({ type: "refresh-finish" });
+    }
+  };
+
+  const synthesizePhase = async (phase: WorkWhiteboardPhaseContractDTO) => {
+    if (!activeWhiteboard || refreshing) {
+      return;
+    }
+    dispatch({ type: "refresh-start" });
+    try {
+      const result = await whiteboardRepository.synthesizePhase(activeWhiteboard.id, phase.phase_id);
+      const updated = result.whiteboard ?? {
+        ...activeWhiteboard,
+        phase_contracts: activeWhiteboard.phase_contracts?.map((contract) =>
+          contract.phase_id === phase.phase_id ? result.whiteboard_phase_contract : contract,
+        ),
+      };
+      dispatch({
+        type: "load-success",
+        whiteboards: [updated, ...whiteboards.filter((whiteboard) => whiteboard.id !== updated.id)],
+      });
+      showSuccess("Phase synthesized", phase.phase_name || labelForField(phase.phase_id));
+      await loadBoard();
+    } catch (updateError: unknown) {
+      const message = translateProductError(updateError, "company");
+      showError("Phase not synthesized", message);
+      dispatch({ type: "load-error", error: message });
+    } finally {
+      dispatch({ type: "refresh-finish" });
+    }
+  };
+
+  const evaluatePhase = async (phase: WorkWhiteboardPhaseContractDTO) => {
+    if (!activeWhiteboard || refreshing) {
+      return;
+    }
+    dispatch({ type: "refresh-start" });
+    try {
+      const result = await whiteboardRepository.evaluatePhase(activeWhiteboard.id, phase.phase_id, {
+        scorecard: defaultPhaseScorecard(phase),
+      });
+      const updated = result.whiteboard ?? {
+        ...activeWhiteboard,
+        phase_contracts: activeWhiteboard.phase_contracts?.map((contract) =>
+          contract.phase_id === phase.phase_id ? result.whiteboard_phase_contract : contract,
+        ),
+      };
+      dispatch({
+        type: "load-success",
+        whiteboards: [updated, ...whiteboards.filter((whiteboard) => whiteboard.id !== updated.id)],
+      });
+      showSuccess(
+        "Gate evaluated",
+        labelForField(String(result.whiteboard_phase_contract.current_state.gate?.result ?? "pending")),
+      );
+      await loadBoard();
+    } catch (updateError: unknown) {
+      const message = translateProductError(updateError, "company");
+      showError("Gate not evaluated", message);
+      dispatch({ type: "load-error", error: message });
+    } finally {
+      dispatch({ type: "refresh-finish" });
+    }
+  };
+
   const prepareDeployment = async () => {
     if (!activeWhiteboard || refreshing) {
       return;
@@ -296,6 +554,71 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
     } catch (updateError: unknown) {
       const message = translateProductError(updateError, "company");
       showError("Performance review not started", message);
+      dispatch({ type: "load-error", error: message });
+    } finally {
+      dispatch({ type: "refresh-finish" });
+    }
+  };
+
+  const reportPerformance = async () => {
+    if (!activeWhiteboard || !activePerformance || refreshing) {
+      return;
+    }
+    dispatch({ type: "refresh-start" });
+    try {
+      const result = await whiteboardRepository.reportPerformance(activeWhiteboard.id, activePerformance.policy_id);
+      const updated = result.whiteboard ?? {
+        ...activeWhiteboard,
+        performance_contract: result.performance_contract,
+      };
+      dispatch({
+        type: "load-success",
+        whiteboards: [updated, ...whiteboards.filter((whiteboard) => whiteboard.id !== updated.id)],
+      });
+      showSuccess(
+        "Performance report recorded",
+        result.performance_contract.current_state.report_run_id || "Report ready",
+      );
+      await loadBoard();
+    } catch (updateError: unknown) {
+      const message = translateProductError(updateError, "company");
+      showError("Performance report not recorded", message);
+      dispatch({ type: "load-error", error: message });
+    } finally {
+      dispatch({ type: "refresh-finish" });
+    }
+  };
+
+  const evaluatePerformance = async () => {
+    if (!activeWhiteboard || !activePerformance || refreshing) {
+      return;
+    }
+    dispatch({ type: "refresh-start" });
+    try {
+      const result = await whiteboardRepository.evaluatePerformance(activeWhiteboard.id, {
+        policy_id: activePerformance.policy_id,
+        scorecard: {
+          channel_signal_quality: 85,
+          execution_completeness: 88,
+          optimization_confidence: 82,
+        },
+      });
+      const updated = result.whiteboard ?? {
+        ...activeWhiteboard,
+        performance_contract: result.performance_contract,
+      };
+      dispatch({
+        type: "load-success",
+        whiteboards: [updated, ...whiteboards.filter((whiteboard) => whiteboard.id !== updated.id)],
+      });
+      showSuccess(
+        "Performance evaluation recorded",
+        result.evaluation_id || result.performance_contract.current_state.evaluation_id || "Evaluation ready",
+      );
+      await loadBoard();
+    } catch (updateError: unknown) {
+      const message = translateProductError(updateError, "company");
+      showError("Performance evaluation not recorded", message);
       dispatch({ type: "load-error", error: message });
     } finally {
       dispatch({ type: "refresh-finish" });
@@ -460,9 +783,23 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
 
           <div className="grid gap-3 md:grid-cols-2">
             <section data-testid="whiteboard-known-fields">
-              <div className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
-                <ListChecks className="size-4" />
-                <p className="text-sm font-semibold">Work Context</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+                  <ListChecks className="size-4" />
+                  <p className="text-sm font-semibold">Work Context</p>
+                </div>
+                {activeWhiteboard.can_update ? (
+                  <Button
+                    data-testid="whiteboard-context-edit-toggle"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setContextExpanded((current) => !current)}
+                    disabled={refreshing}
+                  >
+                    <ListChecks className="size-4" />
+                    {contextExpanded ? "Close" : "Edit context"}
+                  </Button>
+                ) : null}
               </div>
               <div className="mt-2 space-y-2 text-xs text-zinc-600 dark:text-zinc-300">
                 <FieldValue label="Objective" value={activeWhiteboard.objective || "Not captured"} />
@@ -470,6 +807,106 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                 <FieldValue label="Resources" value={jsonSummary(resourceContext(activeWhiteboard))} />
                 <FieldValue label="Delivery" value={jsonSummary(deliveryContext(activeWhiteboard))} />
               </div>
+              {contextExpanded ? (
+                <div
+                  data-testid="whiteboard-context-editor"
+                  className="mt-3 space-y-3 rounded-[0.75rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
+                >
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                      Objective
+                      <Input
+                        data-testid="whiteboard-context-objective"
+                        value={contextDraft.objective}
+                        onChange={(event) => updateContextDraft({ objective: event.target.value })}
+                        disabled={refreshing}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                      Budget
+                      <Input
+                        data-testid="whiteboard-context-budget"
+                        value={contextDraft.budgetLimit}
+                        onChange={(event) => updateContextDraft({ budgetLimit: event.target.value })}
+                        disabled={refreshing}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                      Timeline
+                      <Input
+                        data-testid="whiteboard-context-timeline"
+                        value={contextDraft.timeline}
+                        onChange={(event) => updateContextDraft({ timeline: event.target.value })}
+                        disabled={refreshing}
+                      />
+                    </label>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                      Constraints JSON
+                      <Textarea
+                        data-testid="whiteboard-context-constraints"
+                        rows={5}
+                        value={contextDraft.constraintsJson}
+                        onChange={(event) => updateContextDraft({ constraintsJson: event.target.value })}
+                        disabled={refreshing}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                      Stakeholders JSON
+                      <Textarea
+                        data-testid="whiteboard-context-stakeholders"
+                        rows={5}
+                        value={contextDraft.stakeholderContextJson}
+                        onChange={(event) => updateContextDraft({ stakeholderContextJson: event.target.value })}
+                        disabled={refreshing}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                      Resources JSON
+                      <Textarea
+                        data-testid="whiteboard-context-resources"
+                        rows={5}
+                        value={contextDraft.resourceContextJson}
+                        onChange={(event) => updateContextDraft({ resourceContextJson: event.target.value })}
+                        disabled={refreshing}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                      Delivery JSON
+                      <Textarea
+                        data-testid="whiteboard-context-delivery"
+                        rows={5}
+                        value={contextDraft.deliveryContextJson}
+                        onChange={(event) => updateContextDraft({ deliveryContextJson: event.target.value })}
+                        disabled={refreshing}
+                      />
+                    </label>
+                  </div>
+                  <label className="block space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    Assumptions
+                    <Textarea
+                      data-testid="whiteboard-context-assumptions"
+                      rows={4}
+                      value={contextDraft.assumptionsText}
+                      onChange={(event) => updateContextDraft({ assumptionsText: event.target.value })}
+                      disabled={refreshing}
+                    />
+                  </label>
+                  <div className="flex justify-end">
+                    <Button
+                      data-testid="whiteboard-context-save-button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void saveContext()}
+                      disabled={refreshing}
+                    >
+                      {refreshing ? <Spinner size="sm" /> : <CheckCircle2 className="size-4" />}
+                      Save context
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </section>
             <section data-testid="whiteboard-missing-fields">
               <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Open Context</p>
@@ -556,7 +993,10 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                     label="Goal"
                     value={board.project.ultimate_goal || board.project.title || "Not captured"}
                   />
-                  <FieldValue label="Work Status" value={labelForField(board.project.work_status || board.project.status)} />
+                  <FieldValue
+                    label="Work Status"
+                    value={labelForField(board.project.work_status || board.project.status)}
+                  />
                   <FieldValue
                     label="Risk"
                     value={board.project.risk_blocker_summary || "No active blockers recorded."}
@@ -776,46 +1216,109 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                             Start phase
                           </Button>
                         ) : null}
+                        {activeWhiteboard.can_update && phase.allowed_actions.includes("synthesize") ? (
+                          <Button
+                            data-testid={`whiteboard-phase-synthesize-${phase.phase_id}`}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void synthesizePhase(phase)}
+                            disabled={refreshing}
+                          >
+                            {refreshing ? <Spinner size="sm" /> : <ClipboardList className="size-4" />}
+                            Synthesize
+                          </Button>
+                        ) : null}
+                        {activeWhiteboard.can_update && phase.allowed_actions.includes("evaluate") ? (
+                          <Button
+                            data-testid={`whiteboard-phase-evaluate-${phase.phase_id}`}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void evaluatePhase(phase)}
+                            disabled={refreshing}
+                          >
+                            {refreshing ? <Spinner size="sm" /> : <CheckCircle2 className="size-4" />}
+                            Evaluate
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                     <div data-testid="whiteboard-phase-workstreams" className="mt-3 grid gap-2 md:grid-cols-2">
                       {phase.workstreams.length ? (
-                        phase.workstreams.map((workstream) => (
-                          <div
-                            key={workstream.id}
-                            className="flex min-w-0 items-start justify-between gap-3 border-b border-zinc-900/8 py-2 text-xs dark:border-white/8"
-                          >
-                            <div className="min-w-0">
-                              <span className="block truncate font-medium text-zinc-800 dark:text-zinc-100">
-                                {workstream.name || labelForField(workstream.id)}
-                              </span>
-                              {workstream.dependency_state?.status === "blocked" ? (
-                                <span
-                                  data-testid={`whiteboard-phase-workstream-${workstream.id}-dependency-state`}
-                                  className="mt-1 block truncate text-zinc-500 dark:text-zinc-400"
-                                >
-                                  {workstream.dependency_state.blocker_reason || "Waiting for dependencies."}
-                                </span>
-                              ) : workstream.dependency_state?.status === "provisional" ? (
-                                <span
-                                  data-testid={`whiteboard-phase-workstream-${workstream.id}-dependency-state`}
-                                  className="mt-1 block truncate text-zinc-500 dark:text-zinc-400"
-                                >
-                                  Provisional
-                                </span>
+                        phase.workstreams.map((workstream) => {
+                          const draft = workstreamDrafts[workstream.id] ?? defaultWorkstreamDraft(workstream);
+                          const canSubmit = isWorkstreamCompletable(workstream);
+                          return (
+                            <div
+                              key={workstream.id}
+                              data-testid={`whiteboard-phase-workstream-${workstream.id}`}
+                              className="min-w-0 rounded-[0.75rem] border border-zinc-900/8 bg-white/70 p-3 text-xs dark:border-white/8 dark:bg-white/5"
+                            >
+                              <div className="flex min-w-0 items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <span className="block truncate font-medium text-zinc-800 dark:text-zinc-100">
+                                    {workstream.name || labelForField(workstream.id)}
+                                  </span>
+                                  {workstream.dependency_state?.status === "blocked" ? (
+                                    <span
+                                      data-testid={`whiteboard-phase-workstream-${workstream.id}-dependency-state`}
+                                      className="mt-1 block break-words text-zinc-500 dark:text-zinc-400"
+                                    >
+                                      {workstream.dependency_state.blocker_reason || "Waiting for dependencies."}
+                                    </span>
+                                  ) : workstream.dependency_state?.status === "provisional" ? (
+                                    <span
+                                      data-testid={`whiteboard-phase-workstream-${workstream.id}-dependency-state`}
+                                      className="mt-1 block truncate text-zinc-500 dark:text-zinc-400"
+                                    >
+                                      Provisional
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                                  {workstream.dependencies?.length ? (
+                                    <StatusBadge
+                                      status={workstream.dependency_state?.status ?? "ready"}
+                                      label={`${workstream.dependencies.length} deps`}
+                                    />
+                                  ) : null}
+                                  <StatusBadge status={workstream.status} label={labelForField(workstream.status)} />
+                                </div>
+                              </div>
+                              {workstream.status !== "completed" && activeWhiteboard.can_update ? (
+                                <div className="mt-3 space-y-2">
+                                  <Textarea
+                                    data-testid={`whiteboard-phase-workstream-${workstream.id}-summary`}
+                                    rows={3}
+                                    value={draft.summary}
+                                    onChange={(event) =>
+                                      updateWorkstreamDraft(workstream, { summary: event.target.value })
+                                    }
+                                    disabled={refreshing || !canSubmit}
+                                  />
+                                  <Textarea
+                                    data-testid={`whiteboard-phase-workstream-${workstream.id}-context`}
+                                    rows={4}
+                                    value={draft.contextJson}
+                                    onChange={(event) =>
+                                      updateWorkstreamDraft(workstream, { contextJson: event.target.value })
+                                    }
+                                    disabled={refreshing || !canSubmit}
+                                  />
+                                  <Button
+                                    data-testid={`whiteboard-phase-workstream-${workstream.id}-complete`}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => void completeWorkstream(phase, workstream)}
+                                    disabled={refreshing || !canSubmit}
+                                  >
+                                    {refreshing ? <Spinner size="sm" /> : <CheckCircle2 className="size-4" />}
+                                    Complete workstream
+                                  </Button>
+                                </div>
                               ) : null}
                             </div>
-                            <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                              {workstream.dependencies?.length ? (
-                                <StatusBadge
-                                  status={workstream.dependency_state?.status ?? "ready"}
-                                  label={`${workstream.dependencies.length} deps`}
-                                />
-                              ) : null}
-                              <StatusBadge status={workstream.status} label={labelForField(workstream.status)} />
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <p className="text-xs text-zinc-500 dark:text-zinc-400">No workstreams configured.</p>
                       )}
@@ -913,7 +1416,33 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                   <Activity className="size-4" />
                   <p className="text-sm font-semibold">Performance Review</p>
                 </div>
-                <StatusBadge status={activePerformance.status} label={performanceStatusLabel(activePerformance)} />
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <StatusBadge status={activePerformance.status} label={performanceStatusLabel(activePerformance)} />
+                  {activeWhiteboard.can_update && activePerformance.allowed_actions.includes("report") ? (
+                    <Button
+                      data-testid="whiteboard-performance-report-button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void reportPerformance()}
+                      disabled={refreshing}
+                    >
+                      {refreshing ? <Spinner size="sm" /> : <ClipboardList className="size-4" />}
+                      Report
+                    </Button>
+                  ) : null}
+                  {activeWhiteboard.can_update && activePerformance.allowed_actions.includes("evaluate") ? (
+                    <Button
+                      data-testid="whiteboard-performance-evaluate-button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void evaluatePerformance()}
+                      disabled={refreshing}
+                    >
+                      {refreshing ? <Spinner size="sm" /> : <CheckCircle2 className="size-4" />}
+                      Evaluate
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <div data-testid="whiteboard-performance-sources" className="mt-3 grid gap-2 md:grid-cols-2">
                 {activePerformance.sources.length ? (

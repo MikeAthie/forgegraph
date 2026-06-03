@@ -30,6 +30,9 @@ export type OperatingModelPackVM = {
   companyTypeLabel: string;
   description: string;
   checksum: string;
+  files?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+  publicConfig?: Record<string, unknown>;
   role?: string;
   status?: string;
   namespace?: string;
@@ -384,6 +387,9 @@ export const toOperatingModelPackVM = (
   companyTypeLabel: pack.company_type_label ?? "Company",
   description: "description" in pack ? pack.description : "",
   checksum: pack.checksum,
+  files: "files" in pack ? pack.files : undefined,
+  config: "config" in pack ? pack.config : undefined,
+  publicConfig: "public_config" in pack ? pack.public_config : undefined,
   role: "role" in pack ? pack.role : undefined,
   status: "status" in pack ? pack.status : undefined,
   namespace: "namespace" in pack ? pack.namespace : undefined,

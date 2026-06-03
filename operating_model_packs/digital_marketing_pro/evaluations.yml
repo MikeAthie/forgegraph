@@ -376,6 +376,201 @@ profiles:
             - atlas.buyer_persona_definition
             - dmp.crm_mapping
             - atlas.retention_strategy
+  - id: digital_marketing_pro.v1.judge.department.strategy_research
+    label: Atlas Department Judge - Strategy & Research
+    mode: atlas_department_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: department
+      subject_id: strategy_research
+      subject_label: Strategy & Research
+      criteria:
+        - problem_framing
+        - evidence_discipline
+        - targeting_positioning
+        - constraint_use
+        - downstream_usefulness
+  - id: digital_marketing_pro.v1.judge.department.brand_content
+    label: Atlas Department Judge - Brand & Content
+    mode: atlas_department_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: department
+      subject_id: brand_content
+      subject_label: Brand & Content
+      criteria:
+        - message_clarity
+        - brand_fit
+        - channel_ready_assets
+        - claim_discipline
+        - creative_specificity
+  - id: digital_marketing_pro.v1.judge.department.channel_execution
+    label: Atlas Department Judge - Channel Execution
+    mode: atlas_department_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: department
+      subject_id: channel_execution
+      subject_label: Channel Execution
+      criteria:
+        - launch_readiness
+        - sequencing
+        - connector_honesty
+        - approval_compliance
+        - operational_feasibility
+  - id: digital_marketing_pro.v1.judge.department.crm_lifecycle
+    label: Atlas Department Judge - CRM & Lifecycle
+    mode: atlas_department_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: department
+      subject_id: crm_lifecycle
+      subject_label: CRM & Lifecycle
+      criteria:
+        - segmentation_logic
+        - consent_customer_safety
+        - handoff_clarity
+        - lifecycle_usefulness
+        - measurement_tie_in
+  - id: digital_marketing_pro.v1.judge.department.analytics_performance
+    label: Atlas Department Judge - Analytics & Performance
+    mode: atlas_department_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: department
+      subject_id: analytics_performance
+      subject_label: Analytics & Performance
+      criteria:
+        - kpi_quality
+        - baseline_target_clarity
+        - attribution_realism
+        - insight_to_action_loop
+        - optimization_specificity
+  - id: digital_marketing_pro.v1.judge.department.qa_compliance
+    label: Atlas Department Judge - QA & Compliance
+    mode: atlas_department_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: department
+      subject_id: qa_compliance
+      subject_label: QA & Compliance
+      criteria:
+        - claim_verification
+        - risk_identification
+        - gate_enforcement
+        - client_safety
+        - blocker_specificity
+  - id: digital_marketing_pro.v1.judge.department.client_approval_ops
+    label: Atlas Department Judge - Client/Approval Ops
+    mode: atlas_department_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: department
+      subject_id: client_approval_ops
+      subject_label: Client/Approval Ops
+      criteria:
+        - brief_completeness
+        - stakeholder_clarity
+        - approval_traceability
+        - dependency_management
+        - client_ready_communication
+  - id: digital_marketing_pro.v1.judge.process.memory_usefulness
+    label: Atlas Process Judge - Memory Usefulness
+    mode: atlas_process_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: process
+      subject_id: memory_usefulness
+      subject_label: Memory Usefulness
+      criteria:
+        - prior_learning_reuse
+        - rejected_claim_avoidance
+        - approval_constraint_reuse
+        - traceable_memory_refs
+        - follow_up_usefulness
+  - id: digital_marketing_pro.v1.judge.process.whiteboard_usefulness
+    label: Atlas Process Judge - Whiteboard Usefulness
+    mode: atlas_process_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: process
+      subject_id: whiteboard_usefulness
+      subject_label: Whiteboard Usefulness For Agents
+      criteria:
+        - agent_context_clarity
+        - dependency_visibility
+        - artifact_traceability
+        - backend_readability
+        - decision_support
+  - id: digital_marketing_pro.v1.judge.process.snapshot_recovery
+    label: Atlas Process Judge - Snapshot Recovery
+    mode: atlas_process_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: process
+      subject_id: snapshot_recovery
+      subject_label: Snapshot Recovery
+      criteria:
+        - cache_breakage_detection
+        - rebuild_from_db_truth
+        - stale_attempt_rejection
+        - missing_checkpoint_fail_closed
+        - no_engine_durable_ownership
+  - id: digital_marketing_pro.v1.judge.process.connector_tool_honesty
+    label: Atlas Process Judge - Connector/Tool Honesty
+    mode: atlas_process_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: process
+      subject_id: connector_tool_honesty
+      subject_label: Connector/Tool Honesty
+      criteria:
+        - sandbox_receipt_truth
+        - missing_connector_blockers
+        - no_fake_success
+        - connector_scope_clarity
+        - tool_evidence_traceability
+  - id: digital_marketing_pro.v1.judge.process.operation_reliability
+    label: Atlas Process Judge - Operation/Reliability Evidence
+    mode: atlas_process_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: process
+      subject_id: operation_reliability
+      subject_label: Operation/Reliability Evidence
+      criteria:
+        - terminal_operation_status
+        - contract_revision_evidence
+        - durable_reread_evidence
+        - isolation_evidence
+        - route_invariant_evidence
+  - id: digital_marketing_pro.v1.judge.overall.sellability
+    label: Atlas Overall Judge - Paid Readiness
+    mode: atlas_overall_judge
+    rubric:
+      engine: submitted_atlas_rubric_scorecard_v1
+      schema_version: atlas_rubric_scorecard_v1
+      judge_kind: overall
+      subject_id: overall_sellability
+      subject_label: Overall Paid Readiness
+      criteria:
+        - strategy_coherence
+        - compliance_safety
+        - execution_readiness
+        - client_clarity
+        - measurement_readiness
 thresholds:
   pass_min_score: 80
   warn_min_score: 40
