@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState, type SetStateAction } from "react";
 import {
   BookCheck,
   ClipboardCheck,
@@ -208,7 +208,42 @@ function firstInstalledPack(
     archivedAt: installation.archivedAt,
     configRevisionCount: installation.configRevisionCount,
     namespaceClaimCount: installation.namespaceClaimCount,
+    config: installation.config,
+    publicConfig: installation.publicConfig,
   };
+}
+
+function labelForIdentifier(value: string): string {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function connectorCandidatesFromPack(pack: OperatingModelPackVM | null): string[] {
+  const connectors = new Set<string>();
+  collectRequiredConnectors(pack?.files ?? {}, connectors);
+  return Array.from(connectors).sort();
+}
+
+function collectRequiredConnectors(value: unknown, connectors: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectRequiredConnectors(item, connectors);
+    }
+    return;
+  }
+  if (!value || typeof value !== "object") {
+    return;
+  }
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (key === "required_connector" && typeof item === "string" && item.trim()) {
+      connectors.add(item.trim());
+    }
+    collectRequiredConnectors(item, connectors);
+  }
+}
+
+function availableConnectorsFromPack(pack: OperatingModelPackVM | null): string[] {
+  const value = (pack?.publicConfig ?? pack?.config ?? {}).available_connectors;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function titleFromTemplate(template: string, companyName: string, fallback: string) {
@@ -1396,6 +1431,28 @@ function useOperatingModelWorkspaceController({ companyId, companyName }: Operat
     }
   };
 
+  const updateAvailableConnectors = async (availableConnectors: string[]) => {
+    if (!activePack?.installationId) {
+      showError("Connector setup unavailable", "Install an operating model pack before configuring connectors.");
+      return;
+    }
+    setBusyAction("connectors:update");
+    try {
+      await operatingModelRepository.updateAvailableConnectors({
+        companyId,
+        installationId: activePack.installationId,
+        currentConfig: activePack.config ?? activePack.publicConfig ?? {},
+        availableConnectors,
+      });
+      showSuccess("Connector availability saved", `${availableConnectors.length} connector signals configured.`);
+      await refresh();
+    } catch (connectorError: unknown) {
+      showError("Connector setup failed", translateProductError(connectorError, "company"));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const currentProjection = projections[0] ?? null;
   const serviceHistoryProjection = serviceHistoryProjections[0] ?? null;
 
@@ -1476,6 +1533,7 @@ function useOperatingModelWorkspaceController({ companyId, companyName }: Operat
     launchRecommendedOperation,
     evaluatePolicy,
     executeConnectorRehearsal,
+    updateAvailableConnectors,
     setSelectedModuleId,
     setSelectedProgramId,
     setAssertionKind,
@@ -1567,6 +1625,7 @@ function OperatingModelPackColumn({ controller }: { controller: OperatingModelCo
         </div>
       </div>
       <PackDashboardPanel controller={controller} />
+      <ConnectorAvailabilityPanel controller={controller} />
       {controller.activePack ? <PackServiceModelPanel pack={controller.activePack} /> : null}
       <CapabilityModulesPanel controller={controller} />
       <OperationTemplatesPanel controller={controller} />
@@ -1592,6 +1651,86 @@ function PackDashboardPanel({ controller }: { controller: OperatingModelControll
             {panel.label}
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function ConnectorAvailabilityPanel({ controller }: { controller: OperatingModelController }) {
+  const candidates = useMemo(() => connectorCandidatesFromPack(controller.activePack), [controller.activePack]);
+  const persistedAvailable = useMemo(() => availableConnectorsFromPack(controller.activePack), [controller.activePack]);
+  const [selected, setSelected] = useState<string[]>(persistedAvailable);
+
+  useEffect(() => {
+    setSelected(persistedAvailable);
+  }, [persistedAvailable]);
+
+  if (!controller.activePack?.installationId || !candidates.length) {
+    return null;
+  }
+
+  const selectedSet = new Set(selected);
+  const toggleConnector = (connectorId: string) => {
+    setSelected((items) =>
+      items.includes(connectorId) ? items.filter((item) => item !== connectorId) : [...items, connectorId].sort(),
+    );
+  };
+  const applySandboxCore = () => {
+    const core = ["email_connector", "social_connector", "analytics_connector"];
+    setSelected(candidates.filter((connectorId) => core.includes(connectorId)));
+  };
+  const saving = controller.busyAction === "connectors:update";
+
+  return (
+    <div
+      data-testid="connector-management-panel"
+      className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+          <Wrench className="size-4" />
+          <p className="text-sm font-semibold">Connector Availability</p>
+        </div>
+        <StatusBadge status="configured" label={`${selected.length}/${candidates.length}`} />
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {candidates.map((connectorId) => (
+          <label
+            key={connectorId}
+            data-testid={`connector-option-${connectorId}`}
+            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-[0.85rem] border border-zinc-900/8 bg-white/70 px-3 py-2 text-xs text-zinc-700 dark:border-white/8 dark:bg-white/5 dark:text-zinc-200"
+          >
+            <input
+              data-testid={`connector-toggle-${connectorId}`}
+              type="checkbox"
+              className="size-4 accent-zinc-950 dark:accent-zinc-100"
+              checked={selectedSet.has(connectorId)}
+              onChange={() => toggleConnector(connectorId)}
+            />
+            <span className="min-w-0 truncate">{labelForIdentifier(connectorId)}</span>
+          </label>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          data-testid="connector-sandbox-core-preset"
+          variant="outline"
+          size="sm"
+          onClick={applySandboxCore}
+          disabled={saving}
+        >
+          <ShieldCheck className="size-4" />
+          Sandbox core
+        </Button>
+        <Button
+          data-testid="connector-save-button"
+          size="sm"
+          onClick={() => void controller.updateAvailableConnectors(selected)}
+          disabled={saving}
+        >
+          {saving ? <Spinner size="xs" className="mr-2" /> : <ClipboardCheck className="size-4" />}
+          Save availability
+        </Button>
       </div>
     </div>
   );

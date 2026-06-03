@@ -30,15 +30,16 @@ type OpenAIClient struct {
 
 // OpenAI API request/response structures
 type openAIRequest struct {
-	Model          string                `json:"model"`
-	Messages       []openAIMessage       `json:"messages"`
-	Temperature    float64               `json:"temperature,omitempty"`
-	MaxTokens      int                   `json:"max_tokens,omitempty"`
-	Stream         bool                  `json:"stream,omitempty"`
-	StreamOptions  *openAIStreamOptions  `json:"stream_options,omitempty"`
-	Tools          []openAITool          `json:"tools,omitempty"`
-	ToolChoice     any                   `json:"tool_choice,omitempty"`
-	ResponseFormat *openAIResponseFormat `json:"response_format,omitempty"`
+	Model               string                `json:"model"`
+	Messages            []openAIMessage       `json:"messages"`
+	Temperature         float64               `json:"temperature,omitempty"`
+	MaxTokens           int                   `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int                   `json:"max_completion_tokens,omitempty"`
+	Stream              bool                  `json:"stream,omitempty"`
+	StreamOptions       *openAIStreamOptions  `json:"stream_options,omitempty"`
+	Tools               []openAITool          `json:"tools,omitempty"`
+	ToolChoice          any                   `json:"tool_choice,omitempty"`
+	ResponseFormat      *openAIResponseFormat `json:"response_format,omitempty"`
 }
 
 type openAIStreamOptions struct {
@@ -219,6 +220,28 @@ func (c *OpenAIClient) providerName() string {
 	return strings.ToLower(strings.TrimSpace(c.provider))
 }
 
+func applyOpenAITokenLimit(request *openAIRequest, provider string, model string, maxTokens int) {
+	if request == nil || maxTokens <= 0 {
+		return
+	}
+	if openAIModelUsesMaxCompletionTokens(provider, model) {
+		request.MaxCompletionTokens = maxTokens
+		return
+	}
+	request.MaxTokens = maxTokens
+}
+
+func openAIModelUsesMaxCompletionTokens(provider string, model string) bool {
+	if strings.ToLower(strings.TrimSpace(provider)) != "openai" {
+		return false
+	}
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	return strings.HasPrefix(normalized, "gpt-5") ||
+		strings.HasPrefix(normalized, "o1") ||
+		strings.HasPrefix(normalized, "o3") ||
+		strings.HasPrefix(normalized, "o4")
+}
+
 func (c *OpenAIClient) defaultModel() string {
 	if c.providerName() == "openrouter" {
 		return resolveOpenRouterModel()
@@ -284,8 +307,8 @@ func (c *OpenAIClient) Complete(ctx context.Context, request *executor.LLMReques
 		Model:       model,
 		Messages:    messages,
 		Temperature: request.Temperature,
-		MaxTokens:   request.MaxTokens,
 	}
+	applyOpenAITokenLimit(&apiReq, provider, model, request.MaxTokens)
 	if len(request.Tools) > 0 {
 		apiReq.Tools = buildOpenAITools(request.Tools)
 		if toolChoice := strings.TrimSpace(request.ToolChoice); toolChoice != "" {
@@ -499,11 +522,11 @@ func (c *OpenAIClient) StreamComplete(
 		Model:          model,
 		Messages:       messages,
 		Temperature:    request.Temperature,
-		MaxTokens:      request.MaxTokens,
 		Stream:         true,
 		StreamOptions:  &openAIStreamOptions{IncludeUsage: true},
 		ResponseFormat: nil,
 	}
+	applyOpenAITokenLimit(&apiReq, provider, model, request.MaxTokens)
 	if len(request.Tools) > 0 {
 		apiReq.Tools = buildOpenAITools(request.Tools)
 		if toolChoice := strings.TrimSpace(request.ToolChoice); toolChoice != "" {

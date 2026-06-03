@@ -264,9 +264,7 @@ class WorkWhiteboard(models.Model):
             models.Index(
                 fields=["company", "status", "updated_at"], name="whiteboard_comp_status_idx"
             ),
-            models.Index(
-                fields=["company", "work_status"], name="whiteboard_comp_work_stat_idx"
-            ),
+            models.Index(fields=["company", "work_status"], name="whiteboard_comp_work_stat_idx"),
             models.Index(fields=["communication_thread"], name="whiteboard_thread_idx"),
             models.Index(fields=["source_message"], name="whiteboard_source_msg_idx"),
             models.Index(fields=["service_engagement"], name="whiteboard_service_idx"),
@@ -294,6 +292,104 @@ class WorkWhiteboard(models.Model):
         if self.completion_score < 0 or self.completion_score > 100:
             raise ValidationError(
                 {"completion_score": "Completion score must be between 0 and 100."}
+            )
+
+
+class ProductOperation(models.Model):
+    """Durable lifecycle record for a whiteboard-scoped product action."""
+
+    STATUS_ACCEPTED = "accepted"
+    STATUS_RUNNING = "running"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+    STATUS_BLOCKED = "blocked"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_ACCEPTED, "Accepted"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_BLOCKED, "Blocked"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="product_operations",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="product_operations",
+    )
+    whiteboard = models.ForeignKey(
+        WorkWhiteboard,
+        on_delete=models.CASCADE,
+        related_name="operations",
+    )
+    kind = models.CharField(max_length=80)
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default=STATUS_ACCEPTED)
+    target_type = models.CharField(max_length=80)
+    target_id = models.CharField(max_length=200, blank=True, default="")
+    idempotency_key = models.CharField(max_length=255, blank=True, default="")
+    contract_revision_at_accept = models.PositiveIntegerField(default=0)
+    contract_revision_at_completion = models.PositiveIntegerField(default=0)
+    error_code = models.CharField(max_length=120, blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_product_operations",
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "product_operations"
+        indexes = [
+            models.Index(
+                fields=["organization", "company", "whiteboard", "created_at"],
+                name="prod_op_scope_created_idx",
+            ),
+            models.Index(
+                fields=["whiteboard", "status", "created_at"], name="prod_op_wb_status_idx"
+            ),
+            models.Index(
+                fields=["whiteboard", "target_type", "target_id"], name="prod_op_wb_target_idx"
+            ),
+            models.Index(fields=["idempotency_key"], name="prod_op_idem_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["whiteboard", "kind", "target_type", "target_id", "idempotency_key"],
+                condition=Q(idempotency_key__gt=""),
+                name="uniq_prod_op_wb_kind_target_idem",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.whiteboard is not None:
+            _validate_company_scope(
+                "whiteboard", self.whiteboard, self.organization_id, self.company_id
+            )
+        if self.contract_revision_at_completion and (
+            self.contract_revision_at_completion < self.contract_revision_at_accept
+        ):
+            raise ValidationError(
+                {
+                    "contract_revision_at_completion": (
+                        "Completion revision cannot be lower than acceptance revision."
+                    )
+                }
             )
 
 

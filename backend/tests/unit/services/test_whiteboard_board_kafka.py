@@ -6,15 +6,19 @@ from uuid import uuid4
 
 import pytest
 from django.core.cache import cache
+from tests.helpers.organizations import required_company_organization
 
 from application.services.domain_event_outbox import publish_due_outbox_events
 from application.services.whiteboard_board_kafka import (
     WhiteboardBoardKafkaOutboxPublisher,
     build_whiteboard_board_kafka_payload,
+    build_whiteboard_board_kafka_readiness_payload,
     consume_whiteboard_board_kafka_events,
     handle_whiteboard_board_kafka_event,
     handle_whiteboard_board_kafka_message,
+    whiteboard_board_kafka_config,
     whiteboard_board_kafka_key,
+    whiteboard_board_kafka_transport_evidence,
 )
 from application.services.whiteboard_boards import (
     create_whiteboard_card,
@@ -35,7 +39,6 @@ from infrastructure.orm.models import (
     User,
     WorkWhiteboard,
 )
-from tests.helpers.organizations import required_company_organization
 
 pytestmark = pytest.mark.django_db
 
@@ -117,6 +120,24 @@ class _Consumer:
 
     def close(self) -> None:
         return
+
+
+class _TopicMetadata:
+    error = None
+
+
+class _ClusterMetadata:
+    def __init__(self, topic: str) -> None:
+        self.topics = {topic: _TopicMetadata()}
+
+
+class _AdminClient:
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config = config
+
+    def list_topics(self, *, topic: str, timeout: float) -> _ClusterMetadata:
+        _ = timeout
+        return _ClusterMetadata(topic)
 
 
 def _user(org: Organization, email: str, role: str = "member") -> User:
@@ -233,6 +254,42 @@ def test_board_kafka_publisher_uses_whiteboard_id_partition_key() -> None:
     assert sent_payload["event_id"] == str(outbox.id)
 
 
+def test_board_kafka_config_supports_tls_sasl_settings(settings) -> None:
+    settings.WHITEBOARD_BOARD_KAFKA_BOOTSTRAP_SERVERS = "managed.kafka:9092"
+    settings.WHITEBOARD_BOARD_KAFKA_CLIENT_ID = "board-client"
+    settings.WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL = "SASL_SSL"
+    settings.WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM = "PLAIN"
+    settings.WHITEBOARD_BOARD_KAFKA_SASL_USERNAME = "atlas-user"
+    settings.WHITEBOARD_BOARD_KAFKA_SASL_PASSWORD = "atlas-secret"
+
+    config = whiteboard_board_kafka_config()
+
+    assert config["bootstrap.servers"] == "managed.kafka:9092"
+    assert config["client.id"] == "board-client"
+    assert config["security.protocol"] == "SASL_SSL"
+    assert config["sasl.mechanism"] == "PLAIN"
+    assert config["sasl.username"] == "atlas-user"
+    assert config["sasl.password"] == "atlas-secret"
+
+
+def test_board_kafka_readiness_reports_admin_metadata_and_backlog(settings) -> None:
+    settings.WHITEBOARD_BOARD_KAFKA_ENABLED = True
+    settings.WHITEBOARD_BOARD_KAFKA_BOOTSTRAP_SERVERS = "managed.kafka:9092"
+    settings.WHITEBOARD_BOARD_KAFKA_TOPIC = "forgegraph.whiteboard.board.events.v1"
+    settings.WHITEBOARD_BOARD_KAFKA_OUTBOX_BACKLOG_READY_THRESHOLD = 1000
+    _whiteboard, _card, _outbox = _create_card_and_outbox()
+
+    payload = build_whiteboard_board_kafka_readiness_payload(
+        admin_client_factory=_AdminClient
+    )
+
+    assert payload["ready"] is True
+    assert payload["broker_ready"] is True
+    assert payload["topic_ready"] is True
+    assert payload["backlog"] == 1
+    assert payload["backlog_ready"] is True
+
+
 def test_board_kafka_consumer_records_receipts_and_refreshes_redis_without_mutating_db_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -252,6 +309,36 @@ def test_board_kafka_consumer_records_receipts_and_refreshes_redis_without_mutat
     assert duplicate.duplicate is True
     assert CommunicationEventReceipt.objects.filter(consumer_group="board-test").count() == 1
     assert cache.get(whiteboard_board_snapshot_key(whiteboard))
+    assert card.status == "queued"
+
+
+def test_board_kafka_transport_evidence_is_observability_only(
+    monkeypatch: pytest.MonkeyPatch,
+    settings,
+) -> None:
+    cache.clear()
+    settings.WHITEBOARD_BOARD_KAFKA_ENABLED = True
+    settings.WHITEBOARD_BOARD_KAFKA_CONSUMER_GROUP = "board-evidence"
+    monkeypatch.setattr(
+        "application.services.whiteboard_boards._use_cache_snapshot_store", lambda: True
+    )
+    whiteboard, card, outbox = _create_card_and_outbox()
+    payload = build_whiteboard_board_kafka_payload(outbox)
+    payload["new_status"] = "completed"
+
+    result = handle_whiteboard_board_kafka_event(payload, consumer_group="board-evidence")
+    card.refresh_from_db()
+    evidence = whiteboard_board_kafka_transport_evidence(
+        organization=whiteboard.organization,
+        whiteboard_id=str(whiteboard.id),
+        company_id=str(whiteboard.company_id),
+    )
+
+    assert result.handled is True
+    assert evidence["authoritative_state_source"] == "backend_db"
+    assert evidence["outbox"]["pending"] == 1
+    assert evidence["receipts"]["handled"] == 1
+    assert evidence["dead_letters"]["active_count"] == 0
     assert card.status == "queued"
 
 

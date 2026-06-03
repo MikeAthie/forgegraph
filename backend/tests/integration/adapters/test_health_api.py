@@ -78,6 +78,37 @@ def test_root_readiness_endpoint_includes_runtime_transport_when_required(api_cl
     RUNTIME_TOOL_SECRET="runtime-tool-secret",
     FRONTEND_URL="http://localhost:3000",
     READINESS_REQUIRE_ENGINE=False,
+    READINESS_REQUIRE_WHITEBOARD_BOARD_KAFKA=True,
+    FORGEGRAPH_ALLOW_INSECURE_TRANSPORT=True,
+)
+def test_root_readiness_endpoint_includes_whiteboard_board_kafka_when_required(api_client):
+    with patch(
+        "adapters.api.health.readiness.build_whiteboard_board_kafka_readiness_payload",
+        return_value={
+            "ready": True,
+            "enabled": True,
+            "topic": "forgegraph.whiteboard.board.events.v1",
+            "broker_ready": True,
+            "topic_ready": True,
+            "backlog": 0,
+            "backlog_threshold": 1000,
+            "backlog_ready": True,
+            "latency_ms": 1,
+            "error": "",
+        },
+    ):
+        response = api_client.get("/ready")
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["checks"]["whiteboard_board_kafka"]["ready"] is True
+
+
+@override_settings(
+    ENGINE_CALLBACK_SECRET="test-secret",
+    RUNTIME_TOOL_SECRET="runtime-tool-secret",
+    FRONTEND_URL="http://localhost:3000",
+    READINESS_REQUIRE_ENGINE=False,
     READINESS_REQUIRE_RUNTIME_TRANSPORT=True,
     FORGEGRAPH_ALLOW_INSECURE_TRANSPORT=True,
     SLO_QUEUE_MAX_DEPTH=10,

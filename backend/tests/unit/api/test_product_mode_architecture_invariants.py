@@ -325,6 +325,105 @@ def _submitted_review_board_scorecard(
     }
 
 
+def _submitted_atlas_rubric_scorecard(
+    *,
+    score: float = 4.3,
+    decision: str = "sellable",
+    judge_kind: str = "department",
+    subject_id: str = "strategy_research",
+    subject_label: str = "Strategy & Research",
+    hard_fail: bool = False,
+    primitive: str = "CompanySignal",
+) -> dict[str, Any]:
+    criteria = [
+        {
+            "key": "problem_framing",
+            "label": "Problem framing",
+            "score": score,
+            "critical": True,
+            "rationale": "The judge cites durable whiteboard, approval, and operation evidence.",
+            "improvement": "Make the framing more specific to the approved operating constraints.",
+            "evidence_refs": [
+                {"type": "work_whiteboard", "id": "whiteboard-1"},
+                {"type": "product_operation", "id": "operation-1"},
+            ],
+        },
+        {
+            "key": "evidence_discipline",
+            "label": "Evidence discipline",
+            "score": score,
+            "rationale": "Evidence references are tied to backend-owned generic primitives.",
+            "improvement": "Attach more precise artifact revisions to each claim.",
+            "evidence_refs": [{"type": "work_artifact", "id": "artifact-1"}],
+        },
+        {
+            "key": "targeting_positioning",
+            "label": "Targeting and positioning",
+            "score": score,
+            "rationale": "The target audience and positioning stay inside the company boundary.",
+            "improvement": "Separate approved audience hypotheses from unvalidated assumptions.",
+            "evidence_refs": [{"type": "state_projection", "id": "projection-1"}],
+        },
+        {
+            "key": "constraint_use",
+            "label": "Constraint use",
+            "score": score,
+            "rationale": "The judge considers inventory, connector, and approval constraints.",
+            "improvement": "Turn every hard blocker into a visible generic next step.",
+            "evidence_refs": [{"type": "company_signal", "id": "signal-1"}],
+        },
+        {
+            "key": "downstream_usefulness",
+            "label": "Downstream usefulness",
+            "score": score,
+            "rationale": "The output can guide later workstreams without adding vertical state.",
+            "improvement": "Add a concise handoff summary for downstream workstreams.",
+            "evidence_refs": [{"type": "metric_snapshot", "id": "metric-1"}],
+        },
+    ]
+    overall_average = round(sum(float(item["score"]) for item in criteria) / len(criteria), 2)
+    return {
+        "schema_version": "atlas_rubric_scorecard_v1",
+        "judge_kind": judge_kind,
+        "subject_id": subject_id,
+        "subject_label": subject_label,
+        "decision": decision,
+        "hard_fail": hard_fail,
+        "overall_average": overall_average,
+        "criteria": criteria,
+        "top_strengths": [
+            "Uses backend-owned Atlas agency evidence.",
+            "Keeps quality judging separate from deterministic system assertions.",
+        ],
+        "required_improvements": [
+            "Tighten the client-facing evidence bundle before paid delivery.",
+            "Convert low-confidence items into generic backend-owned follow-up primitives.",
+        ],
+        "improvement_plan": [
+            {
+                "target": subject_label,
+                "primitive": primitive,
+                "title": "Create a paid-readiness improvement signal",
+                "priority": "high",
+                "rationale": "Atlas should persist judge feedback as an actionable generic primitive.",
+                "evidence_refs": [{"type": "evaluation_subject", "id": subject_id}],
+            },
+            {
+                "target": subject_label,
+                "primitive": "OperationRecommendation",
+                "title": "Prepare the next operation recommendation",
+                "priority": "medium",
+                "rationale": "The next operation should close the largest judged quality gap.",
+                "evidence_refs": [{"type": "evaluation_subject", "id": subject_id}],
+            },
+        ],
+        "judge_prompt": "internal prompt must not persist",
+        "internal_reasoning": "private chain-of-thought must not persist",
+        "evidence_bundle": {"private": "must not persist"},
+        "raw_judge_output": {"private": "raw judge output must not persist"},
+    }
+
+
 def _run_submitted_scorecard(
     client: APIClient,
     company: Graph,
@@ -969,6 +1068,135 @@ def test_review_board_scorecard_rejects_unearned_perfect_scores(authenticated_cl
     assert "perfect section average requires exceptional rationale" in str(
         payload["error"]["details"]
     )
+
+
+def test_atlas_rubric_scorecard_persists_sanitized_generic_evidence(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    evaluation = _run_submitted_scorecard(
+        authenticated_client,
+        company,
+        _submitted_atlas_rubric_scorecard(),
+        key="atlas-rubric-quality-judge-pass",
+    )
+
+    assert evaluation["status"] == "PASS"
+    assert evaluation["score"] == 4.3
+    assert evaluation["result"]["schema_version"] == "atlas_rubric_scorecard_v1"
+    assert evaluation["result"]["engine"] == "submitted_atlas_rubric_scorecard"
+    assert evaluation["result"]["judge_kind"] == "department"
+    assert evaluation["result"]["subject_id"] == "strategy_research"
+    assert evaluation["result"]["decision"] == "sellable"
+    assert evaluation["result"]["sellability_gate"]["passed"] is True
+    assert len(evaluation["result"]["criteria"]) == 5
+    assert evaluation["result"]["criteria"][0]["evidence_refs"]
+    assert evaluation["result"]["improvement_plan"][0]["primitive"] == "CompanySignal"
+    assert "judge_prompt" not in str(evaluation)
+
+    persisted = EvaluationRun.objects.get(id=evaluation["id"])
+    scorecard = EvaluationScorecard.objects.get(evaluation=persisted)
+    assert scorecard.composite_score == 4.3
+    assert scorecard.dimensions_json["schema_version"] == "atlas_rubric_scorecard_v1"
+    assert scorecard.dimensions_json["subject_label"] == "Strategy & Research"
+    assert len(scorecard.dimensions_json["criteria"]) == 5
+    assert "raw judge output" not in str(scorecard.dimensions_json).lower()
+
+    signal_ids = persisted.result_json["signal_ids"]
+    signals = CompanySignal.objects.filter(company=company, source="atlas_rubric_scorecard")
+    assert signals.count() == 2
+    assert {str(signal.id) for signal in signals} == set(signal_ids)
+    assert {signal.metadata_json["primitive"] for signal in signals} == {
+        "CompanySignal",
+        "OperationRecommendation",
+    }
+    assert all(signal.metadata_json["schema_version"] == "atlas_rubric_scorecard_v1" for signal in signals)
+
+
+def test_atlas_rubric_scorecard_reports_low_quality_without_faking_sellability(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    evaluation = _run_submitted_scorecard(
+        authenticated_client,
+        company,
+        _submitted_atlas_rubric_scorecard(score=3.4, decision="sellable"),
+        key="atlas-rubric-quality-judge-warn",
+    )
+
+    assert evaluation["status"] == "WARN"
+    assert evaluation["score"] == 3.4
+    assert evaluation["result"]["decision"] == "needs_revision"
+    assert evaluation["result"]["sellability_gate"]["passed"] is False
+    assert evaluation["findings"]
+    assert all(item["blocking"] is False for item in evaluation["findings"])
+    persisted = EvaluationRun.objects.get(id=evaluation["id"])
+    assert persisted.result_json["signal_ids"]
+
+
+def test_atlas_rubric_scorecard_hard_fail_blocks_without_improvement_signals(
+    authenticated_client,
+    user,
+):
+    company = _company(user)
+
+    evaluation = _run_submitted_scorecard(
+        authenticated_client,
+        company,
+        _submitted_atlas_rubric_scorecard(
+            score=4.4,
+            decision="blocked",
+            hard_fail=True,
+        ),
+        key="atlas-rubric-quality-judge-block",
+    )
+
+    assert evaluation["status"] == "BLOCK"
+    assert evaluation["result"]["decision"] == "blocked"
+    assert evaluation["findings"][0]["severity"] == "CRITICAL"
+    assert evaluation["findings"][0]["blocking"] is True
+    assert not CompanySignal.objects.filter(company=company, source="atlas_rubric_scorecard").exists()
+
+
+@pytest.mark.parametrize(
+    ("mutator", "expected"),
+    [
+        (lambda scorecard: scorecard["criteria"].pop(), "exactly five scored criteria"),
+        (lambda scorecard: scorecard["criteria"][0].__setitem__("score", 6), "between 1 and 5"),
+        (lambda scorecard: scorecard.__setitem__("overall_average", 1), "server-computed criterion average"),
+        (lambda scorecard: scorecard.__setitem__("required_improvements", []), "At least one required improvement"),
+        (
+            lambda scorecard: scorecard["improvement_plan"][0].__setitem__("primitive", "MarketingCampaign"),
+            "generic ForgeGraph primitive",
+        ),
+        (
+            lambda scorecard: scorecard["criteria"][0].__setitem__("evidence_refs", []),
+            "at least one reference",
+        ),
+    ],
+)
+def test_atlas_rubric_scorecard_rejects_invalid_judge_payloads(
+    authenticated_client,
+    user,
+    mutator,
+    expected,
+):
+    company = _company(user)
+    scorecard = _submitted_atlas_rubric_scorecard()
+    mutator(scorecard)
+
+    payload = _run_invalid_submitted_scorecard(
+        authenticated_client,
+        company,
+        scorecard,
+        key=f"atlas-rubric-invalid-{uuid4().hex}",
+    )
+
+    assert expected in str(payload["error"]["details"])
 
 
 def test_customer_can_read_quality_summary_without_judge_internals(api_client, user):

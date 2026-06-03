@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from django.utils import timezone
 
+from application.services.memory_observation_service import MemoryObservationService
 from application.services.strategy_report_builder import (
     ReportTraceabilityError,
     generate_strategy_report,
@@ -175,6 +176,111 @@ def test_generate_strategy_report_builds_client_markdown_from_traceable_state(us
         "risks_tradeoffs",
         "recommendations",
     }
+
+
+def test_generate_strategy_report_reuses_prior_run_memory_for_follow_up(user) -> None:
+    company, prior_operation = _create_completed_legacy_operation(user)
+    organization = user.default_organization
+    assert organization is not None
+    service = MemoryObservationService()
+    prior_memory = service.create_observation(
+        tenant_id=organization.id,
+        graph_id=company.id,
+        run_id=prior_operation.id,
+        type="case",
+        title="Legacy rejected WhatsApp claim",
+        content=(
+            "Prior approved learning: keep appointment proof central, avoid unverified "
+            "WhatsApp exclusivity claims, and stay within configured email/social sandbox "
+            "connectors unless additional connectors are approved."
+        ),
+        scope="graph",
+        topic_key="legacy-follow-up-approval-learning",
+    )
+
+    context = service.get_context(
+        tenant_id=organization.id,
+        graph_id=company.id,
+        query="Legacy follow-up WhatsApp appointment proof",
+        limit=5,
+    )
+
+    assert prior_memory.id in {memory.id for memory in context.observations}
+
+    follow_up = Run.objects.create(
+        owner=user,
+        organization=organization,
+        graph_version=prior_operation.graph_version,
+        status="succeeded",
+        started_at=timezone.now(),
+        ended_at=timezone.now(),
+        input_json={
+            "operation_name": "Campaign Architecture Follow-up",
+            "operation_brief": "Improve the second Legacy campaign using approved learnings.",
+        },
+        output_json={
+            "positioning": "Keep Legacy as appointment-led quiet luxury eyewear.",
+            "target_audience": ["VIP eyewear buyers in Mexico City"],
+            "approach": "Reuse appointment proof and configured email/social sandbox channels.",
+            "constraints": [
+                "Do not use unverified WhatsApp exclusivity claims",
+                "Use configured email/social sandbox connectors only",
+            ],
+            "execution_plan": {
+                "channels": ["email", "social retargeting", "appointment concierge follow-up"],
+                "timeline": "Four-week follow-up campaign before channel expansion.",
+            },
+            "risks": ["Unsupported connector claims would weaken client trust."],
+            "recommendations": [
+                "Approve the follow-up only after the connector list is confirmed.",
+                "Keep appointment proof in the lead message.",
+            ],
+            "decision_traces": [
+                {
+                    "decision": "Keep the follow-up appointment-led.",
+                    "alternatives": ["WhatsApp exclusivity claim", "paid-first broad reach"],
+                    "constraints": [
+                        "Use configured connectors only",
+                        "Preserve approved appointment proof",
+                    ],
+                    "departments": ["Strategy", "Compliance", "Performance Marketing"],
+                    "rationale": "The prior approved learning reduced compliance risk.",
+                    "rejected": ["unverified WhatsApp exclusivity claim"],
+                }
+            ],
+            "iteration_deltas": [
+                {
+                    "what_changed": "Follow-up messaging kept appointment proof and removed the exclusivity claim.",
+                    "why_changed": "Prior approved learning showed the claim was not safe to repeat.",
+                    "trigger": "second-run memory review",
+                    "department": "Compliance",
+                }
+            ],
+            "memory_attributions": [
+                {
+                    "memory_title": prior_memory.title,
+                    "changed_reasoning": (
+                        "Prior approved learning kept appointment proof central and avoided "
+                        "the rejected WhatsApp exclusivity claim."
+                    ),
+                }
+            ],
+        },
+    )
+
+    artifact = generate_strategy_report(str(company.id), str(follow_up.id))
+    content = artifact.content.lower()
+
+    assert "prior experience" in content
+    assert "appointment proof" in content
+    assert "unverified whatsapp exclusivity claim" in content
+    assert str(prior_memory.id) in {
+        source["id"]
+        for sources in artifact.traceability.values()
+        for source in sources
+        if source["kind"] == "memory"
+    }
+    assert "memory" not in content
 
 
 def test_generate_strategy_report_supports_html_and_pdf_formats(user) -> None:

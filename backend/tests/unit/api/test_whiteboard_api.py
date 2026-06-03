@@ -189,6 +189,24 @@ def _deployment_projection(whiteboard: WorkWhiteboard, *, status: str = "prepare
     )
 
 
+def _assert_operation_payload(
+    payload: dict[str, object],
+    *,
+    kind: str,
+    target_type: str,
+    target_id: str,
+) -> dict[str, object]:
+    assert payload["accepted"] is True
+    operation = cast(dict[str, object], payload["operation"])
+    assert operation["id"]
+    assert operation["kind"] == kind
+    assert operation["status"] == "completed"
+    assert operation["target_type"] == target_type
+    assert operation["target_id"] == target_id
+    assert cast(int, operation["contract_revision_at_completion"]) > 0
+    return operation
+
+
 def _whiteboard(org: Organization, company: Graph, owner: User) -> WorkWhiteboard:
     _ = org
     thread = create_thread(
@@ -448,9 +466,18 @@ def test_viewer_can_read_safe_phase_contract_but_cannot_start_phase(api_client) 
     assert viewer_contract["allowed_actions"] == []
     assert viewer_start_response.status_code == 403
     assert start_response.status_code == 200
-    contract = start_response.json()["data"]["whiteboard_phase_contract"]
+    start_payload = start_response.json()["data"]
+    operation = _assert_operation_payload(
+        start_payload,
+        kind="phase_start",
+        target_type="phase_contract",
+        target_id=phase_id,
+    )
+    contract = start_payload["whiteboard_phase_contract"]
     assert len(contract["workstreams"]) == 1
-    assert start_response.json()["data"]["whiteboard"]["status"] == WorkWhiteboard.STATUS_IN_CONTENT
+    assert contract["contract_revision"] == operation["contract_revision_at_completion"]
+    assert contract["last_operation_id"] == operation["id"]
+    assert start_payload["whiteboard"]["status"] == WorkWhiteboard.STATUS_IN_CONTENT
     assert detail_response.status_code == 200
     assert (
         detail_response.json()["data"]["whiteboard_phase_contract"]["current_state"][
@@ -483,6 +510,55 @@ def test_viewer_can_read_deployment_contract_but_cannot_prepare(api_client) -> N
     assert contract["allowed_actions"] == []
     assert "tool_id" not in contract["channels"][0]
     assert prepare_response.status_code == 403
+
+
+def test_operator_prepare_deployment_returns_operation_envelope_and_scoped_lookup(
+    api_client,
+) -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "whiteboard-deploy-operation-owner@example.com", "owner")
+    other_user = _user(org, "whiteboard-deploy-operation-other@example.com", "viewer")
+    company = _company(org, owner)
+    other_company = _company(org, owner, name="Other Client")
+    _assign(org, company, owner, "member")
+    _assign(org, other_company, other_user, "viewer")
+    policy = non_marketing_deployment_policy()
+    _install_deployment_policy(company, policy)
+    whiteboard = _whiteboard(org, company, owner)
+    whiteboard.status = WorkWhiteboard.STATUS_IN_APPROVAL
+    whiteboard.save(update_fields=["status", "updated_at"])
+
+    api_client.force_authenticate(user=owner)
+    response = api_client.post(
+        f"/api/whiteboards/{whiteboard.id}/deployment/prepare",
+        data={},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deployment-prepare-operation",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    operation = _assert_operation_payload(
+        payload,
+        kind="deployment_prepare",
+        target_type="deployment_contract",
+        target_id=str(policy["policy_id"]),
+    )
+    contract = payload["deployment_contract"]
+    assert contract["contract_revision"] == operation["contract_revision_at_completion"]
+    assert contract["last_operation_id"] == operation["id"]
+    assert contract["completed_count"] == 1
+    lookup_response = api_client.get(
+        f"/api/whiteboards/{whiteboard.id}/operations/{operation['id']}"
+    )
+    assert lookup_response.status_code == 200
+    assert lookup_response.json()["data"]["operation"]["id"] == operation["id"]
+
+    api_client.force_authenticate(user=other_user)
+    denied_response = api_client.get(
+        f"/api/whiteboards/{whiteboard.id}/operations/{operation['id']}"
+    )
+    assert denied_response.status_code == 404
 
 
 def test_other_client_cannot_get_whiteboard_deployment(api_client) -> None:
@@ -552,13 +628,45 @@ def test_operator_can_start_report_and_evaluate_performance(api_client) -> None:
     )
 
     assert start_response.status_code == 200
-    assert start_response.json()["data"]["performance_contract"]["current_state"][
-        "metric_snapshot_id"
-    ]
+    start_payload = start_response.json()["data"]
+    start_operation = _assert_operation_payload(
+        start_payload,
+        kind="performance_start",
+        target_type="performance_contract",
+        target_id=str(policy["policy_id"]),
+    )
+    assert (
+        start_payload["performance_contract"]["contract_revision"]
+        == start_operation["contract_revision_at_completion"]
+    )
+    assert start_payload["performance_contract"]["current_state"]["metric_snapshot_id"]
     assert report_response.status_code == 200
-    assert report_response.json()["data"]["performance_contract"]["current_state"]["report_run_id"]
+    report_payload = report_response.json()["data"]
+    report_operation = _assert_operation_payload(
+        report_payload,
+        kind="performance_report",
+        target_type="performance_contract",
+        target_id=str(policy["policy_id"]),
+    )
+    assert (
+        report_payload["performance_contract"]["contract_revision"]
+        == report_operation["contract_revision_at_completion"]
+    )
+    assert report_payload["performance_contract"]["current_state"]["report_run_id"]
     assert eval_response.status_code == 200
-    assert eval_response.json()["data"]["performance_contract"]["current_state"]["evaluation_id"]
+    eval_payload = eval_response.json()["data"]
+    eval_operation = _assert_operation_payload(
+        eval_payload,
+        kind="performance_evaluate",
+        target_type="performance_contract",
+        target_id=str(policy["policy_id"]),
+    )
+    assert (
+        eval_payload["performance_contract"]["contract_revision"]
+        == eval_operation["contract_revision_at_completion"]
+    )
+    assert eval_payload["performance_contract"]["last_operation_id"] == eval_operation["id"]
+    assert eval_payload["performance_contract"]["current_state"]["evaluation_id"]
 
 
 def test_other_client_cannot_get_whiteboard_performance(api_client) -> None:
@@ -613,7 +721,29 @@ def test_phase_synthesize_and_evaluate_uses_pack_defined_gate(api_client) -> Non
 
     assert synth_response.status_code == 200
     assert eval_response.status_code == 200
+    synth_payload = synth_response.json()["data"]
+    synth_operation = _assert_operation_payload(
+        synth_payload,
+        kind="phase_synthesize",
+        target_type="phase_contract",
+        target_id=phase_id,
+    )
     payload = eval_response.json()["data"]
+    eval_operation = _assert_operation_payload(
+        payload,
+        kind="phase_gate_evaluate",
+        target_type="phase_contract",
+        target_id=phase_id,
+    )
+    assert (
+        synth_payload["whiteboard_phase_contract"]["contract_revision"]
+        == synth_operation["contract_revision_at_completion"]
+    )
+    assert (
+        payload["whiteboard_phase_contract"]["contract_revision"]
+        == eval_operation["contract_revision_at_completion"]
+    )
+    assert payload["whiteboard_phase_contract"]["last_operation_id"] == eval_operation["id"]
     assert payload["whiteboard"]["status"] == WorkWhiteboard.STATUS_IN_APPROVAL
     assert payload["whiteboard_phase_contract"]["gate"]["latest_evaluation"]["status"] == "PASS"
     assert payload["whiteboard_phase_contract"]["current_state"]["gate"]["result"] == "pass"
