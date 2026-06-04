@@ -22,9 +22,17 @@ from adapters.api.company_ops.serializers import (
     CompanySignalQualifySerializer,
     ProcurementDraftCreateSerializer,
     PublicationDraftCreateSerializer,
+    ReportingCadencePlanUpsertSerializer,
+    ReportingCadenceRunGenerateSerializer,
 )
 from adapters.api.responses import error_response, success_response
 from application.services.agency_account_health import build_agency_account_health_snapshot
+from application.services.agency_reporting_cadence import (
+    generate_reporting_cadence_run,
+    reporting_cadence_plan_payload,
+    reporting_cadence_run_payload,
+    upsert_reporting_cadence_plan,
+)
 from application.services.atlas_onboarding import (
     AtlasOnboardingError,
     build_atlas_onboarding_contract,
@@ -58,12 +66,14 @@ from application.services.processed_commands import (
     replay_processed_command,
 )
 from infrastructure.orm.models import (
+    AtlasReportingCadencePlan,
     CommerceProcurementDraft,
     CompanyOperationObjective,
     CompanyOpportunity,
     CompanySignal,
     Graph,
     PublicationDraft,
+    ServiceEngagement,
     User,
 )
 
@@ -156,6 +166,138 @@ class AtlasOnboardingView(APIView):
             response=response,
             resource_type="service_engagement",
             resource_id=str(engagement.id),
+        )
+
+
+class ReportingCadencePlansView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        company_or_response = _company_from_query(request, minimum_role="viewer")
+        if isinstance(company_or_response, Response):
+            return company_or_response
+        company = company_or_response
+        plans = (
+            AtlasReportingCadencePlan.objects.filter(company=company)
+            .select_related("engagement", "last_run")
+            .order_by("cadence_type")
+        )
+        return success_response(
+            {
+                "company_id": str(company.id),
+                "reporting_cadence_plans": [reporting_cadence_plan_payload(plan) for plan in plans],
+            }
+        )
+
+    def post(self, request: Request) -> Response:
+        serializer = ReportingCadencePlanUpsertSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        company_or_response = _company_from_body(
+            request,
+            serializer.validated_data["company_id"],
+            minimum_role="member",
+        )
+        if isinstance(company_or_response, Response):
+            return company_or_response
+        company = company_or_response
+        context, error = _command_context(
+            request=request,
+            company=company,
+            action="company_ops.reporting_cadence.plan_upsert",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
+
+        engagement = _reporting_engagement_for_company(
+            company,
+            serializer.validated_data.get("engagement_id"),
+        )
+        if isinstance(engagement, Response):
+            return engagement
+        try:
+            plan = upsert_reporting_cadence_plan(
+                company=company,
+                cadence_type=str(serializer.validated_data["cadence_type"]),
+                actor=cast(User, request.user),
+                next_due_on=serializer.validated_data.get("next_due_on"),
+                engagement=engagement,
+                status=str(serializer.validated_data.get("status") or "active"),
+                anchor_date=serializer.validated_data.get("anchor_date"),
+                metadata=cast(dict[str, Any], serializer.validated_data.get("metadata") or {}),
+            )
+        except ValueError as exc:
+            return error_response(
+                "REPORTING_CADENCE_INVALID",
+                str(exc),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        response = success_response(
+            {"reporting_cadence_plan": reporting_cadence_plan_payload(plan)},
+            status=http_status.HTTP_201_CREATED,
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="atlas_reporting_cadence_plan",
+            resource_id=str(plan.id),
+        )
+
+
+class ReportingCadenceRunGenerateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, plan_id: UUID) -> Response:
+        serializer = ReportingCadenceRunGenerateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        plan_or_response = _reporting_plan_for_user(request, plan_id, minimum_role="member")
+        if isinstance(plan_or_response, Response):
+            return plan_or_response
+        plan = plan_or_response
+        context, error = _command_context(
+            request=request,
+            company=plan.company,
+            action=f"company_ops.reporting_cadence.run_generate:{plan_id}",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
+
+        try:
+            run = generate_reporting_cadence_run(
+                plan=plan,
+                actor=cast(User, request.user),
+                idempotency_key=idempotency_key_from_request(request),
+                period_start=serializer.validated_data.get("period_start"),
+                period_end=serializer.validated_data.get("period_end"),
+            )
+        except ValueError as exc:
+            return error_response(
+                "REPORTING_CADENCE_INVALID",
+                str(exc),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        response = success_response(
+            {"reporting_cadence_run": reporting_cadence_run_payload(run)},
+            status=http_status.HTTP_201_CREATED,
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="atlas_reporting_cadence_run",
+            resource_id=str(run.id),
         )
 
 
@@ -684,6 +826,40 @@ def _company_from_body(request: Request, company_id: Any, *, minimum_role: str) 
     if not has_company_access(user, company, minimum_role=minimum_role):
         return _forbidden("You do not have permission to use company operations.")
     return company
+
+
+def _reporting_engagement_for_company(
+    company: Graph,
+    engagement_id: Any | None,
+) -> ServiceEngagement | Response | None:
+    if not engagement_id:
+        return None
+    engagement = ServiceEngagement.objects.filter(id=engagement_id, company=company).first()
+    if engagement is None:
+        return _not_found("Service engagement was not found for this company.")
+    return engagement
+
+
+def _reporting_plan_for_user(
+    request: Request,
+    plan_id: UUID,
+    *,
+    minimum_role: str,
+) -> AtlasReportingCadencePlan | Response:
+    user = cast(User, request.user)
+    plan = (
+        AtlasReportingCadencePlan.objects.select_related("company", "company__organization")
+        .filter(
+            id=plan_id,
+            company__in=accessible_company_queryset(user, minimum_role=minimum_role),
+        )
+        .first()
+    )
+    if plan is None:
+        return _not_found("Reporting cadence plan was not found.")
+    if not has_company_access(user, plan.company, minimum_role=minimum_role):
+        return _forbidden("You do not have permission to use this reporting cadence plan.")
+    return plan
 
 
 def _signal_for_user(

@@ -749,6 +749,160 @@ class AtlasLaunchCheckpoint(models.Model):
         return f"{self.attempt_id} #{self.sequence} ({self.status})"
 
 
+class AtlasReportingCadencePlan(models.Model):
+    """Backend-owned schedule contract for recurring Atlas proof-of-value reporting."""
+
+    CADENCE_TYPE_CHOICES = [
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+        ("qbr", "Quarterly Business Review"),
+    ]
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("paused", "Paused"),
+        ("archived", "Archived"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="atlas_reporting_cadence_plans",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="atlas_reporting_cadence_plans",
+    )
+    engagement = models.ForeignKey(
+        ServiceEngagement,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="atlas_reporting_cadence_plans",
+    )
+    cadence_type = models.CharField(max_length=16, choices=CADENCE_TYPE_CHOICES)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="active")
+    anchor_date = models.DateField(null=True, blank=True)
+    next_due_on = models.DateField()
+    last_run = models.ForeignKey(
+        "AtlasReportingCadenceRun",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    proof_template_id = models.CharField(
+        max_length=160,
+        blank=True,
+        default="atlas.proof_of_value",
+    )
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_atlas_reporting_cadence_plans",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "atlas_reporting_cadence_plans"
+        ordering = ["company", "cadence_type"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "cadence_type"],
+                name="atlas_report_plan_comp_type_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="atlas_report_plan_org_st_idx"),
+            models.Index(fields=["company", "cadence_type"], name="atlas_report_plan_type_idx"),
+            models.Index(fields=["company", "next_due_on"], name="atlas_report_plan_due_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.company_id} {self.cadence_type} ({self.status})"
+
+
+class AtlasReportingCadenceRun(models.Model):
+    """Durable generated proof-of-value report snapshot for one cadence occurrence."""
+
+    STATUS_CHOICES = [
+        ("generated", "Generated"),
+        ("failed", "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="atlas_reporting_cadence_runs",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="atlas_reporting_cadence_runs",
+    )
+    plan = models.ForeignKey(
+        AtlasReportingCadencePlan,
+        on_delete=models.CASCADE,
+        related_name="runs",
+    )
+    report_run = models.ForeignKey(
+        "ReportRun",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="atlas_reporting_cadence_runs",
+    )
+    cadence_type = models.CharField(
+        max_length=16,
+        choices=AtlasReportingCadencePlan.CADENCE_TYPE_CHOICES,
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="generated")
+    idempotency_key = models.CharField(max_length=255)
+    source_key = models.CharField(max_length=255, blank=True, default="")
+    due_on = models.DateField()
+    period_start = models.DateField()
+    period_end = models.DateField()
+    proof_snapshot_json = models.JSONField(default=dict, blank=True)
+    source_refs_json = models.JSONField(default=list, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_atlas_reporting_cadence_runs",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "atlas_reporting_cadence_runs"
+        ordering = ["-period_end", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plan", "idempotency_key"],
+                name="atlas_report_run_plan_idem_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["plan", "due_on"],
+                name="atlas_report_run_plan_due_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "created_at"], name="atlas_report_run_org_cr_idx"),
+            models.Index(fields=["company", "cadence_type"], name="atlas_report_run_type_idx"),
+            models.Index(fields=["company", "period_end"], name="atlas_report_run_period_idx"),
+            models.Index(fields=["plan", "created_at"], name="atlas_report_run_plan_cr_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.company_id} {self.cadence_type} {self.period_start} - {self.period_end}"
+
+
 class CompanyProgram(models.Model):
     """Pack-defined multi-stage company program such as an engagement."""
 
