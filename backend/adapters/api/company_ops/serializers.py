@@ -7,6 +7,7 @@ from typing import Any
 
 from rest_framework import serializers
 
+from application.services.atlas_onboarding import forbidden_key, safe_metadata
 from application.services.company_ops import OPERATION_TEMPLATES
 from infrastructure.orm.models import (
     CompanyOperationObjective,
@@ -17,6 +18,83 @@ from infrastructure.orm.models import (
 
 class CompanyOpsCompanyQuerySerializer(serializers.Serializer[Any]):
     company_id = serializers.UUIDField()
+
+
+class AtlasOnboardingIntakeSerializer(serializers.Serializer[Any]):
+    company_id = serializers.UUIDField()
+    client_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    contact_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    contact_email = serializers.EmailField(required=False, allow_blank=True, max_length=255)
+    website_url = serializers.URLField(required=False, allow_blank=True, max_length=500)
+    business_summary = serializers.CharField(required=False, allow_blank=True, max_length=5000)
+    goals = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, max_length=500),
+        required=False,
+    )
+    target_audience = serializers.JSONField(required=False)
+    brand_voice = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+    constraints = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, max_length=500),
+        required=False,
+    )
+    approved_channels = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, max_length=64),
+        required=False,
+    )
+    blocked_channels = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, max_length=64),
+        required=False,
+    )
+    success_metrics = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, max_length=255),
+        required=False,
+    )
+    budget_range = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    timeline = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    service_slug = serializers.SlugField(required=False, allow_blank=True, max_length=160)
+    service_package = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    notes = serializers.CharField(required=False, allow_blank=True, max_length=5000)
+    source = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    metadata = serializers.JSONField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        initial = self.initial_data if isinstance(self.initial_data, dict) else {}
+        allowed_fields = set(self.fields)
+        unknown_fields = sorted(str(key) for key in initial if key not in allowed_fields)
+        if unknown_fields:
+            errors = {}
+            for field in unknown_fields:
+                if forbidden_key(field):
+                    errors[field] = ["Credential-like fields are forbidden."]
+                else:
+                    errors[field] = ["Unknown fields are not accepted by this contract."]
+            raise serializers.ValidationError(errors)
+        normalized = dict(attrs)
+        for field in (
+            "client_name",
+            "contact_name",
+            "website_url",
+            "business_summary",
+            "brand_voice",
+            "budget_range",
+            "timeline",
+            "service_slug",
+            "service_package",
+            "notes",
+            "source",
+        ):
+            if field in normalized:
+                normalized[field] = str(normalized.get(field) or "").strip()
+        if "contact_email" in normalized:
+            normalized["contact_email"] = (
+                str(normalized.get("contact_email") or "").strip().lower()
+            )
+        if "metadata" in normalized:
+            raw_metadata = normalized.get("metadata")
+            normalized["metadata"] = (
+                safe_metadata(raw_metadata) if isinstance(raw_metadata, dict) else {}
+            )
+        return normalized
 
 
 class CompanySignalCreateSerializer(serializers.Serializer[Any]):

@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 
 from adapters.api.company_ops.serializers import (
     ApprovalRequestSerializer,
+    AtlasOnboardingIntakeSerializer,
     CompanyOperationLaunchSerializer,
     CompanyOperationObjectiveEvaluationSerializer,
     CompanyOpportunityStatusSerializer,
@@ -24,6 +25,11 @@ from adapters.api.company_ops.serializers import (
 )
 from adapters.api.responses import error_response, success_response
 from application.services.agency_account_health import build_agency_account_health_snapshot
+from application.services.atlas_onboarding import (
+    AtlasOnboardingError,
+    build_atlas_onboarding_contract,
+    upsert_atlas_onboarding_engagement,
+)
 from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.company_ops import (
     CompanyOpsError,
@@ -81,6 +87,75 @@ class AgencyHealthView(APIView):
             return company_or_response
         return success_response(
             {"agency_health": build_agency_account_health_snapshot(company_or_response)}
+        )
+
+
+class AtlasOnboardingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        company_or_response = _company_from_query(request, minimum_role="viewer")
+        if isinstance(company_or_response, Response):
+            return company_or_response
+        return success_response(
+            {"atlas_onboarding": build_atlas_onboarding_contract(company_or_response)}
+        )
+
+    def post(self, request: Request) -> Response:
+        serializer = AtlasOnboardingIntakeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        company_or_response = _company_from_body(
+            request,
+            serializer.validated_data["company_id"],
+            minimum_role="member",
+        )
+        if isinstance(company_or_response, Response):
+            return company_or_response
+        company = company_or_response
+        context, error = _command_context(
+            request=request,
+            company=company,
+            action="company_ops.atlas_onboarding.upsert",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
+
+        intake_updates = dict(serializer.validated_data)
+        intake_updates.pop("company_id", None)
+        operator_metadata = (
+            cast(dict[str, Any], intake_updates.pop("metadata") or {})
+            if "metadata" in intake_updates
+            else None
+        )
+        try:
+            engagement, created = upsert_atlas_onboarding_engagement(
+                company=company,
+                actor=cast(User, request.user),
+                intake_updates=intake_updates,
+                operator_metadata=operator_metadata,
+            )
+        except AtlasOnboardingError as exc:
+            return error_response(
+                exc.code.upper(),
+                exc.message,
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        response = success_response(
+            {"atlas_onboarding": build_atlas_onboarding_contract(company)},
+            status=http_status.HTTP_201_CREATED if created else http_status.HTTP_200_OK,
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="service_engagement",
+            resource_id=str(engagement.id),
         )
 
 
