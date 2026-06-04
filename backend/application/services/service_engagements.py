@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from infrastructure.orm.models import (
     Asset,
+    AssetVersion,
     Graph,
     ReportRun,
     ServiceCatalogItem,
@@ -94,6 +95,7 @@ def service_engagement_payload(
 
 
 def service_deliverable_payload(deliverable: ServiceDeliverable) -> dict[str, Any]:
+    latest_version = _latest_asset_version(deliverable)
     return {
         "id": str(deliverable.id),
         "organization_id": str(deliverable.organization_id),
@@ -107,11 +109,50 @@ def service_deliverable_payload(deliverable: ServiceDeliverable) -> dict[str, An
         "artifact_id": str(deliverable.artifact_id) if deliverable.artifact_id else None,
         "report_run_id": str(deliverable.report_run_id) if deliverable.report_run_id else None,
         "summary": deliverable.summary,
+        "metadata": _safe_metadata(deliverable.metadata_json or {}),
+        "latest_asset_version_id": str(latest_version.id) if latest_version else None,
+        "latest_asset_version_uri": latest_version.content_uri if latest_version else None,
+        "latest_asset_version_mime_type": latest_version.mime_type if latest_version else None,
         "created_by_id": str(deliverable.created_by_id) if deliverable.created_by_id else None,
         "delivered_at": deliverable.delivered_at.isoformat() if deliverable.delivered_at else None,
         "created_at": deliverable.created_at.isoformat(),
         "updated_at": deliverable.updated_at.isoformat(),
     }
+
+
+def _latest_asset_version(deliverable: ServiceDeliverable) -> AssetVersion | None:
+    if deliverable.artifact_id is None:
+        return None
+    return (
+        AssetVersion.objects.filter(asset_id=deliverable.artifact_id)
+        .order_by("-version_number")
+        .first()
+    )
+
+
+def _safe_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    blocked_tokens = ("private", "secret", "token", "credential", "password", "api_key")
+    safe: dict[str, Any] = {}
+    for key, value in metadata.items():
+        key_text = str(key)
+        if any(token in key_text.lower() for token in blocked_tokens):
+            continue
+        safe[key_text] = _safe_metadata_value(value, blocked_tokens=blocked_tokens)
+    return safe
+
+
+def _safe_metadata_value(value: Any, *, blocked_tokens: tuple[str, ...]) -> Any:
+    if isinstance(value, dict):
+        nested: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if any(token in key_text.lower() for token in blocked_tokens):
+                continue
+            nested[key_text] = _safe_metadata_value(item, blocked_tokens=blocked_tokens)
+        return nested
+    if isinstance(value, list):
+        return [_safe_metadata_value(item, blocked_tokens=blocked_tokens) for item in value]
+    return value
 
 
 def create_service_catalog_item(
