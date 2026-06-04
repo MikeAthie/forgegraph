@@ -132,6 +132,8 @@ def test_assemble_client_brief_creates_asset_version_and_deliverable() -> None:
     assert deliverable.metadata_json["deliverable_type"] == "client_brief"
     assert deliverable.metadata_json["owner_department_slug"] == "client_approval_ops"
     assert deliverable.metadata_json["asset_version_id"] == str(version.id)
+    assert deliverable.metadata_json["quality_gate"]["status"] == "pass"
+    assert deliverable.metadata_json["quality_gate"]["visibility"]["client_safe"] is True
 
 
 def test_single_deliverable_assembly_is_idempotent_when_content_is_unchanged() -> None:
@@ -173,6 +175,7 @@ def test_assemble_atlas_mvp_deliverables_returns_all_types_and_is_idempotent() -
     assert Asset.objects.count() == 10
     assert AssetVersion.objects.count() == 10
     assert ServiceDeliverable.objects.count() == 10
+    assert all("quality_gate" in deliverable.metadata_json for deliverable in first)
 
     package = next(
         deliverable for deliverable in first if deliverable.deliverable_type == "campaign_launch_package"
@@ -285,16 +288,30 @@ def test_service_deliverable_payload_includes_safe_metadata_and_latest_asset_ver
     deliverable.metadata_json = {
         **deliverable.metadata_json,
         "api_key": "secret",
+        "customer_note": "Bearer operator-token",
+        "evidence_link": "https://internal.example/report?token=secret",
+        "internal_context": {"token": "operator-token"},
         "private_note": "operator-only",
     }
     deliverable.save(update_fields=["metadata_json", "updated_at"])
 
     payload = service_deliverable_payload(deliverable)
+    internal_payload = service_deliverable_payload(deliverable, include_internal=True)
 
     assert payload["metadata"]["source"] == "atlas_deliverable_assembly"
     assert payload["metadata"]["deliverable_type"] == "strategy_brief"
     assert "api_key" not in payload["metadata"]
+    assert "customer_note" not in payload["metadata"]
+    assert "evidence_link" not in payload["metadata"]
+    assert "internal_context" not in payload["metadata"]
     assert "private_note" not in payload["metadata"]
+    assert "checks" not in payload["metadata"]["quality_gate"]
+    assert "blockers" not in payload["metadata"]["quality_gate"]
+    assert "warnings" not in payload["metadata"]["quality_gate"]
+    assert internal_payload["metadata"]["quality_gate"]["checks"]
+    assert "customer_note" not in internal_payload["metadata"]
+    assert "evidence_link" not in internal_payload["metadata"]
+    assert "internal_context" not in internal_payload["metadata"]
     assert payload["latest_asset_version_id"] == deliverable.metadata_json["asset_version_id"]
     assert payload["latest_asset_version_uri"].startswith("forgegraph://assets/")
     assert payload["latest_asset_version_mime_type"] == "text/markdown"

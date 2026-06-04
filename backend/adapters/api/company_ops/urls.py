@@ -4,6 +4,7 @@ from django.urls import path
 
 from adapters.api.company_ops.views import (
     AgencyHealthView,
+    AtlasOnboardingView,
     CompanyOperationObjectiveEvaluationView,
     CompanyOperationsLaunchView,
     CompanyOpportunitiesView,
@@ -20,6 +21,11 @@ from adapters.api.company_ops.views import (
 urlpatterns = [
     path("overview", CompanyOpsOverviewView.as_view(), name="company-ops-overview"),
     path("agency-health", AgencyHealthView.as_view(), name="company-ops-agency-health"),
+    path(
+        "atlas-onboarding",
+        AtlasOnboardingView.as_view(),
+        name="company-ops-atlas-onboarding",
+    ),
     path("signals", CompanySignalsView.as_view(), name="company-ops-signals"),
     path(
         "signals/<uuid:signal_id>/qualify",

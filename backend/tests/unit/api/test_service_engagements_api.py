@@ -81,6 +81,27 @@ def _catalog_item(user: User, *, slug: str = "growth-audit") -> ServiceCatalogIt
     )
 
 
+def _engagement(user: User, company: Graph) -> ServiceEngagement:
+    return ServiceEngagement.objects.create(
+        organization=_organization(company),
+        company=company,
+        catalog_item=_catalog_item(user, slug=f"service-{uuid4().hex}"),
+        status="in_progress",
+        customer_status="working",
+        requested_by=user,
+    )
+
+
+def _artifact(company: Graph, *, title: str = "Service artifact") -> Asset:
+    return Asset.objects.create(
+        organization=_organization(company),
+        company=company,
+        title=title,
+        asset_type="deliverable",
+        created_by_type="system",
+    )
+
+
 def _whiteboard(company: Graph, owner: User) -> WorkWhiteboard:
     return WorkWhiteboard.objects.create(
         organization=_organization(company),
@@ -159,6 +180,9 @@ def test_service_catalog_engagement_and_deliverable_facade(authenticated_client,
     deliverable = deliverable_response.data["data"]["deliverable"]
     assert deliverable["artifact_id"] == str(artifact.id)
     assert "private_source_path" not in str(deliverable)
+    assert deliverable["metadata"]["quality_gate"]["status"] == "fail"
+    stored_deliverable = ServiceDeliverable.objects.get(id=deliverable["id"])
+    assert stored_deliverable.metadata_json["quality_gate"]["status"] == "fail"
     assert ServiceEngagement.objects.filter(company=company).count() == 1
     assert ServiceDeliverable.objects.filter(company=company).count() == 1
 
@@ -282,6 +306,223 @@ def test_service_deliverable_can_reference_company_report(authenticated_client, 
 
     assert response.status_code == 201
     assert response.data["data"]["deliverable"]["report_run_id"] == str(report.id)
+
+
+def test_service_deliverable_action_mark_ready_runs_quality_gate(authenticated_client, user):
+    company = _company(user, "Lifecycle Ready Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Launch report",
+        deliverable_type="report",
+        status="draft",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Ready for customer review.",
+        metadata_json={"source_refs": {"whiteboard": "wb_123"}},
+        created_by=user,
+    )
+
+    response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "mark_ready"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    payload = response.data["data"]["deliverable"]
+    deliverable.refresh_from_db()
+    assert deliverable.status == "ready"
+    assert payload["status"] == "ready"
+    assert deliverable.metadata_json["quality_gate"]["status"] == "pass"
+    assert payload["metadata"]["quality_gate"]["checks"]
+    assert AuditLog.objects.filter(
+        action="service_deliverable.mark_ready",
+        resource_type="service_deliverable",
+        resource_id=str(deliverable.id),
+    ).exists()
+
+
+def test_service_deliverable_action_submit_for_approval(authenticated_client, user):
+    company = _company(user, "Lifecycle Approval Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Approval Packet",
+        deliverable_type="approval_packet",
+        status="ready",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Approval packet ready for customer review.",
+        metadata_json={"requires_approval": True, "source_refs": {"approval": "packet_123"}},
+        created_by=user,
+    )
+
+    response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "submit_for_approval"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    deliverable.refresh_from_db()
+    engagement.refresh_from_db()
+    assert deliverable.status == "in_review"
+    assert engagement.status == "waiting_on_customer"
+    assert engagement.customer_status == "review_ready"
+
+
+def test_service_deliverable_action_deliver_to_client_sets_delivered_at(
+    authenticated_client, user
+):
+    company = _company(user, "Lifecycle Delivered Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Monthly report",
+        deliverable_type="performance_report",
+        status="ready",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Monthly performance report ready for delivery.",
+        metadata_json={"source_refs": {"performance": {"status": "evaluated"}}},
+        created_by=user,
+    )
+
+    response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "deliver_to_client"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    payload = response.data["data"]["deliverable"]
+    deliverable.refresh_from_db()
+    assert deliverable.status == "delivered"
+    assert deliverable.delivered_at is not None
+    assert payload["status"] == "delivered"
+    assert payload["delivered_at"] is not None
+
+
+def test_service_deliverable_action_deliver_to_client_requires_approval_submission(
+    authenticated_client, user
+):
+    company = _company(user, "Lifecycle Approval Guard Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Approval packet",
+        deliverable_type="approval_packet",
+        status="ready",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Approval packet ready for customer review.",
+        metadata_json={"requires_approval": True, "source_refs": {"approval": "packet_123"}},
+        created_by=user,
+    )
+
+    blocked_response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "deliver_to_client"},
+        format="json",
+    )
+    assert blocked_response.status_code == 400
+    assert blocked_response.data["error"]["code"] == "APPROVAL_REQUIRED"
+    deliverable.refresh_from_db()
+    assert deliverable.status == "ready"
+
+    approval_response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "submit_for_approval"},
+        format="json",
+    )
+    assert approval_response.status_code == 200
+
+    delivery_response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "deliver_to_client"},
+        format="json",
+    )
+    assert delivery_response.status_code == 200
+    deliverable.refresh_from_db()
+    assert deliverable.status == "delivered"
+
+
+def test_service_deliverable_action_accept_only_after_delivered(authenticated_client, user):
+    company = _company(user, "Lifecycle Accepted Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Accepted report",
+        deliverable_type="report",
+        status="ready",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Ready for customer review.",
+        metadata_json={"source_refs": {"whiteboard": "wb_123"}},
+        created_by=user,
+    )
+
+    invalid_response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "accept"},
+        format="json",
+    )
+    assert invalid_response.status_code == 400
+    assert invalid_response.data["error"]["code"] == "INVALID_DELIVERABLE_TRANSITION"
+
+    deliverable.status = "delivered"
+    deliverable.save(update_fields=["status", "updated_at"])
+    response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "accept"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    deliverable.refresh_from_db()
+    assert deliverable.status == "accepted"
+
+
+def test_service_deliverable_action_deliver_to_client_blocks_quality_failures(
+    authenticated_client, user
+):
+    company = _company(user, "Lifecycle Blocked Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Blocked report",
+        deliverable_type="report",
+        status="ready",
+        visibility="customer",
+        summary="Ready wording without an artifact.",
+        metadata_json={"source_refs": {"whiteboard": "wb_123"}},
+        created_by=user,
+    )
+
+    response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "deliver_to_client"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.data["error"]["code"] == "QUALITY_GATE_BLOCKED"
+    deliverable.refresh_from_db()
+    assert deliverable.status == "ready"
+    assert deliverable.delivered_at is None
 
 
 def test_atlas_deliverables_batch_assemble_api(authenticated_client, user):

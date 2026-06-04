@@ -6,7 +6,6 @@ from uuid import uuid4
 
 import pytest
 from django.core.cache import cache
-from tests.helpers.organizations import required_company_organization
 
 from application.services.domain_event_outbox import publish_due_outbox_events
 from application.services.whiteboard_board_kafka import (
@@ -39,6 +38,7 @@ from infrastructure.orm.models import (
     User,
     WorkWhiteboard,
 )
+from tests.helpers.organizations import required_company_organization
 
 pytestmark = pytest.mark.django_db
 
