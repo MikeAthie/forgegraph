@@ -45,7 +45,12 @@ def _company(user: User) -> tuple[Graph, GraphVersion]:
     return company, version
 
 
-def _engagement(company: Graph, user: User) -> ServiceEngagement:
+def _engagement(
+    company: Graph,
+    user: User,
+    *,
+    metadata: dict | None = None,
+) -> ServiceEngagement:
     organization = company.organization
     assert organization is not None
     catalog = ServiceCatalogItem.objects.create(
@@ -61,6 +66,7 @@ def _engagement(company: Graph, user: User) -> ServiceEngagement:
         catalog_item=catalog,
         status="in_progress",
         customer_status="working",
+        metadata_json=metadata or {},
         requested_by=user,
     )
 
@@ -88,6 +94,14 @@ def test_account_health_snapshot_exposes_required_sections_and_unknown_commercia
         status="enabled",
         config_json={"api_key": "secret-api-key", "raw_provider_config": "private"},
     )
+    _engagement(
+        company,
+        user,
+        metadata={
+            "reporting": {"cadences": ["weekly"]},
+            "private_token": "metadata-secret-token",
+        },
+    )
 
     snapshot = build_agency_account_health_snapshot(company)
 
@@ -96,6 +110,8 @@ def test_account_health_snapshot_exposes_required_sections_and_unknown_commercia
         "health",
         "onboarding_items",
         "connector_readiness",
+        "recurring_reporting",
+        "growth_signals",
         "risks",
         "opportunities",
         "next_actions",
@@ -114,6 +130,8 @@ def test_account_health_snapshot_exposes_required_sections_and_unknown_commercia
     assert "secret-api-key" not in rendered
     assert "raw_provider_config" not in rendered
     assert "api_key" not in rendered
+    assert "metadata-secret-token" not in rendered
+    assert "private_token" not in rendered
 
 
 def test_account_health_snapshot_flags_stale_approval_and_recent_report(user) -> None:
@@ -151,6 +169,8 @@ def test_account_health_snapshot_flags_stale_approval_and_recent_report(user) ->
 
     assert "stale_client_approval" in risk_slugs
     assert "recent_performance_report" in opportunity_slugs
+    assert snapshot["recurring_reporting"]["summary"]["status"] in {"healthy", "monitor"}
+    assert snapshot["growth_signals"]["commercial"]["gross_margin"]["status"] == "unknown"
     assert dimensions["reporting"]["score"] >= 80
     assert any(
         action["owner_department_slug"] == "client_approval_ops"

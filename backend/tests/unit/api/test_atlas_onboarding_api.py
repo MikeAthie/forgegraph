@@ -200,9 +200,14 @@ def test_atlas_onboarding_post_omits_credential_like_metadata(
         **_valid_payload(company),
         "metadata": {
             "api_key": "secret-api-key",
+            "authorization": "Bearer authorization-secret",
+            "cookie": "sid=cookie-secret",
+            "session_id": "session-secret",
             "nested": {
                 "password": "do-not-store",
                 "safe_context": "visible",
+                "handoff_note": "Bearer nested-bearer-secret",
+                "audit_values": ["visible-list-value", "Cookie: nested-cookie-secret"],
             },
             "credential_id": "cred-123",
         },
@@ -228,7 +233,23 @@ def test_atlas_onboarding_post_omits_credential_like_metadata(
     )
     assert "safe_context" in rendered_response
     assert "safe_context" in rendered_stored
-    for unsafe in ["secret-api-key", "do-not-store", "credential_id", "api_key", "password"]:
+    assert "visible-list-value" in rendered_response
+    assert "visible-list-value" in rendered_stored
+    for unsafe in [
+        "secret-api-key",
+        "authorization-secret",
+        "cookie-secret",
+        "session-secret",
+        "nested-bearer-secret",
+        "nested-cookie-secret",
+        "do-not-store",
+        "credential_id",
+        "api_key",
+        "authorization",
+        "cookie",
+        "session_id",
+        "password",
+    ]:
         assert unsafe not in rendered_response
         assert unsafe not in rendered_stored
 

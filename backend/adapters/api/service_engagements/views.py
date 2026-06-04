@@ -15,9 +15,11 @@ from rest_framework.views import APIView
 from adapters.api.responses import error_response, success_response
 from adapters.api.service_engagements.serializers import (
     AtlasDeliverableAssembleSerializer,
+    AtlasLaunchReadinessSerializer,
     ServiceCatalogCreateSerializer,
     ServiceCatalogPatchSerializer,
     ServiceCatalogQuerySerializer,
+    ServiceDeliverableActionSerializer,
     ServiceDeliverableCreateSerializer,
     ServiceEngagementCreateSerializer,
     ServiceEngagementPatchSerializer,
@@ -27,12 +29,21 @@ from application.services.agency_deliverables import (
     assemble_atlas_deliverable,
     assemble_atlas_mvp_deliverables,
 )
+from application.services.agency_launch_readiness import CampaignLaunchReadiness
 from application.services.audit_log import record_audit_log
 from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.departments import can_mutate_department_work
+from application.services.processed_commands import (
+    IdempotencyConflict,
+    build_idempotency_context,
+    idempotency_key_from_request,
+    record_processed_command,
+    replay_processed_command,
+)
 from application.services.rbac import has_min_role
 from application.services.service_engagements import (
     ServiceEngagementError,
+    apply_service_deliverable_action,
     create_service_catalog_item,
     create_service_deliverable,
     create_service_engagement,
@@ -219,6 +230,19 @@ class ServiceEngagementListCreateView(APIView):
         )
         if isinstance(assigned_operator, Response):
             return assigned_operator
+        context, error = _command_context(
+            request=request,
+            company=company,
+            action="service_engagement.create",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
         data = dict(serializer.validated_data)
         data["assigned_operator"] = assigned_operator
         try:
@@ -244,9 +268,15 @@ class ServiceEngagementListCreateView(APIView):
             resource_id=str(engagement.id),
             metadata={"company_id": str(company.id), "catalog_item_id": str(catalog_item.id)},
         )
-        return success_response(
+        response = success_response(
             {"engagement": service_engagement_payload(engagement, include_internal=True)},
             status=http_status.HTTP_201_CREATED,
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="service_engagement",
+            resource_id=str(engagement.id),
         )
 
 
@@ -289,6 +319,19 @@ class ServiceEngagementDetailView(APIView):
         if "assigned_operator_id" in data:
             data.pop("assigned_operator_id", None)
             data["assigned_operator"] = assigned_operator
+        context, error = _command_context(
+            request=request,
+            company=engagement.company,
+            action=f"service_engagement.update:{engagement_id}",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
         try:
             engagement = update_service_engagement(engagement=engagement, data=data)
         except IntegrityError:
@@ -305,8 +348,14 @@ class ServiceEngagementDetailView(APIView):
             resource_id=str(engagement.id),
             metadata={"company_id": str(engagement.company_id), "status": engagement.status},
         )
-        return success_response(
+        response = success_response(
             {"engagement": service_engagement_payload(engagement, include_internal=True)}
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="service_engagement",
+            resource_id=str(engagement.id),
         )
 
 
@@ -321,8 +370,14 @@ class ServiceDeliverableListCreateView(APIView):
         queryset = ServiceDeliverable.objects.filter(engagement=engagement).order_by("-updated_at")
         if not has_company_access(user, engagement.company, "member"):
             queryset = queryset.exclude(visibility="internal")
+        include_internal = has_company_access(user, engagement.company, "member")
         return success_response(
-            {"deliverables": [service_deliverable_payload(item) for item in queryset]}
+            {
+                "deliverables": [
+                    service_deliverable_payload(item, include_internal=include_internal)
+                    for item in queryset
+                ]
+            }
         )
 
     def post(self, request: Request, engagement_id: UUID) -> Response:
@@ -347,6 +402,19 @@ class ServiceDeliverableListCreateView(APIView):
         )
         if isinstance(department, Response):
             return department
+        context, error = _command_context(
+            request=request,
+            company=engagement.company,
+            action=f"service_deliverable.create:{engagement_id}",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
         data["artifact"] = artifact
         data["report_run"] = report_run
         data["department"] = department
@@ -369,9 +437,64 @@ class ServiceDeliverableListCreateView(APIView):
                 "engagement_id": str(engagement.id),
             },
         )
-        return success_response(
-            {"deliverable": service_deliverable_payload(deliverable)},
+        response = success_response(
+            {"deliverable": service_deliverable_payload(deliverable, include_internal=True)},
             status=http_status.HTTP_201_CREATED,
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="service_deliverable",
+            resource_id=str(deliverable.id),
+        )
+
+
+class ServiceDeliverableActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, deliverable_id: UUID) -> Response:
+        user = cast(User, request.user)
+        serializer = ServiceDeliverableActionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        deliverable = _deliverable_for_user(user, deliverable_id, minimum_role="member")
+        if deliverable is None:
+            return _not_found("Service deliverable was not found.")
+        action = str(serializer.validated_data["action"])
+        context, error = _command_context(
+            request=request,
+            company=deliverable.company,
+            action=f"service_deliverable.action:{deliverable_id}",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
+        try:
+            deliverable = apply_service_deliverable_action(
+                deliverable=deliverable,
+                action=action,
+                actor=user,
+            )
+        except ServiceEngagementError as exc:
+            return _service_error(exc)
+        response = success_response(
+            {
+                "deliverable": service_deliverable_payload(
+                    deliverable,
+                    include_internal=has_company_access(user, deliverable.company, "member"),
+                )
+            }
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="service_deliverable",
+            resource_id=str(deliverable.id),
         )
 
 
@@ -386,6 +509,19 @@ class AtlasDeliverableAssembleView(APIView):
         whiteboard = _whiteboard_for_user(user, whiteboard_id, minimum_role="member")
         if whiteboard is None:
             return _not_found("Whiteboard was not found.")
+        context, error = _command_context(
+            request=request,
+            company=whiteboard.company,
+            action=f"atlas.deliverables.assemble:{whiteboard_id}",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
 
         deliverable_type = serializer.validated_data.get("deliverable_type")
         with transaction.atomic():
@@ -415,13 +551,79 @@ class AtlasDeliverableAssembleView(APIView):
                 },
             )
 
-        return success_response(
+        response = success_response(
             {
                 "engagement": service_engagement_payload(engagement, include_internal=True),
                 "deliverables": [
-                    service_deliverable_payload(deliverable) for deliverable in deliverables
+                    service_deliverable_payload(deliverable, include_internal=True)
+                    for deliverable in deliverables
                 ],
             }
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="service_deliverable",
+            resource_id=",".join(str(deliverable.id) for deliverable in deliverables),
+        )
+
+
+class AtlasLaunchReadinessView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        serializer = AtlasLaunchReadinessSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        whiteboard = _whiteboard_for_user(user, whiteboard_id, minimum_role="member")
+        if whiteboard is None:
+            return _not_found("Whiteboard was not found.")
+
+        validated = dict(serializer.validated_data)
+        live_mode = (
+            str(validated.get("mode") or "dry_run") == "live"
+            or bool(validated.get("live_mode"))
+            or not bool(validated.get("dry_run", True))
+        )
+        create_receipt = bool(validated.get("create_receipt"))
+        context = None
+        if create_receipt:
+            context, error = _command_context(
+                request=request,
+                company=whiteboard.company,
+                action=f"atlas.launch_readiness.receipt:{whiteboard_id}",
+            )
+            if error is not None:
+                return error
+            try:
+                replay = replay_processed_command(context)
+            except IdempotencyConflict as exc:
+                return _idempotency_conflict_response(exc)
+            if replay is not None:
+                return replay
+        readiness = CampaignLaunchReadiness().evaluate(
+            whiteboard=whiteboard,
+            user=user,
+            live_mode=live_mode,
+            idempotency_key=str(
+                validated.get("idempotency_key") or idempotency_key_from_request(request)
+            ),
+            create_receipt=create_receipt,
+        )
+        receipt = readiness.get("receipt_deliverable")
+        readiness_payload = {
+            key: value for key, value in readiness.items() if key != "receipt_deliverable"
+        }
+        payload: dict[str, Any] = {"readiness": readiness_payload}
+        if isinstance(receipt, dict):
+            payload["receipt_deliverable"] = receipt
+        response = success_response(payload)
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="service_deliverable",
+            resource_id=str(receipt.get("id") if isinstance(receipt, dict) else ""),
         )
 
 
@@ -468,6 +670,22 @@ def _engagement_for_user(
     return (
         ServiceEngagement.objects.filter(id=engagement_id, company__in=companies)
         .select_related("company", "catalog_item", "assigned_operator", "requested_by")
+        .first()
+    )
+
+
+def _deliverable_for_user(
+    user: User,
+    deliverable_id: UUID,
+    *,
+    minimum_role: str,
+) -> ServiceDeliverable | None:
+    companies = accessible_company_queryset(user, minimum_role=minimum_role)
+    return (
+        ServiceDeliverable.objects.filter(id=deliverable_id, company__in=companies)
+        .select_related(
+            "company", "engagement", "engagement__catalog_item", "artifact", "report_run"
+        )
         .first()
     )
 
@@ -564,3 +782,35 @@ def _not_found(message: str) -> Response:
 
 def _forbidden(message: str) -> Response:
     return error_response("FORBIDDEN", message, status=http_status.HTTP_403_FORBIDDEN)
+
+
+def _command_context(
+    *,
+    request: Request,
+    company: Graph,
+    action: str,
+) -> tuple[Any, Response | None]:
+    if not idempotency_key_from_request(request):
+        return None, error_response(
+            "IDEMPOTENCY_KEY_REQUIRED",
+            "Idempotency-Key is required for service engagement mutation commands.",
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+    return (
+        build_idempotency_context(
+            request=request,
+            organization=company.organization,
+            action=action,
+            request_payload=request.data,
+        ),
+        None,
+    )
+
+
+def _idempotency_conflict_response(exc: IdempotencyConflict) -> Response:
+    return error_response(
+        "IDEMPOTENCY_CONFLICT",
+        str(exc),
+        status=http_status.HTTP_409_CONFLICT,
+        details=[{"action": exc.action, "idempotency_key": exc.idempotency_key}],
+    )
