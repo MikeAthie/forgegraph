@@ -86,15 +86,41 @@ class AtlasOnboardingIntakeSerializer(serializers.Serializer[Any]):
             if field in normalized:
                 normalized[field] = str(normalized.get(field) or "").strip()
         if "contact_email" in normalized:
-            normalized["contact_email"] = (
-                str(normalized.get("contact_email") or "").strip().lower()
-            )
+            normalized["contact_email"] = str(normalized.get("contact_email") or "").strip().lower()
         if "metadata" in normalized:
             raw_metadata = normalized.get("metadata")
             normalized["metadata"] = (
                 safe_metadata(raw_metadata) if isinstance(raw_metadata, dict) else {}
             )
         return normalized
+
+
+class ReportingCadencePlanUpsertSerializer(serializers.Serializer[Any]):
+    company_id = serializers.UUIDField()
+    cadence_type = serializers.ChoiceField(choices=["weekly", "monthly", "qbr"])
+    status = serializers.ChoiceField(
+        choices=["active", "paused", "archived"],
+        required=False,
+        default="active",
+    )
+    next_due_on = serializers.DateField(required=False)
+    anchor_date = serializers.DateField(required=False, allow_null=True)
+    engagement_id = serializers.UUIDField(required=False, allow_null=True)
+    metadata = serializers.JSONField(required=False, default=dict)
+
+
+class ReportingCadenceRunGenerateSerializer(serializers.Serializer[Any]):
+    period_start = serializers.DateField(required=False)
+    period_end = serializers.DateField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        start = attrs.get("period_start")
+        end = attrs.get("period_end")
+        if start is not None and end is not None and start > end:
+            raise serializers.ValidationError(
+                {"period_start": ["period_start must be on or before period_end."]}
+            )
+        return attrs
 
 
 class CompanySignalCreateSerializer(serializers.Serializer[Any]):

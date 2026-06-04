@@ -16,6 +16,8 @@ from adapters.api.company_ops.views import (
     ProcurementDraftsView,
     PublicationDraftApprovalView,
     PublicationDraftsView,
+    ReportingCadencePlansView,
+    ReportingCadenceRunGenerateView,
 )
 
 urlpatterns = [
@@ -25,6 +27,16 @@ urlpatterns = [
         "atlas-onboarding",
         AtlasOnboardingView.as_view(),
         name="company-ops-atlas-onboarding",
+    ),
+    path(
+        "reporting-cadences",
+        ReportingCadencePlansView.as_view(),
+        name="company-ops-reporting-cadences",
+    ),
+    path(
+        "reporting-cadences/<uuid:plan_id>/runs",
+        ReportingCadenceRunGenerateView.as_view(),
+        name="company-ops-reporting-cadence-runs",
     ),
     path("signals", CompanySignalsView.as_view(), name="company-ops-signals"),
     path(
