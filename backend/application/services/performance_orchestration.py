@@ -66,6 +66,15 @@ def _dict_or_empty(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _sanitize_payload_value(value: Any) -> Any:
+    return sanitize_outbox_payload({"value": value}).get("value")
+
+
+def _sanitize_payload_list(value: Any) -> list[Any]:
+    sanitized = _sanitize_payload_value(value)
+    return sanitized if isinstance(sanitized, list) else []
+
+
 def load_performance_policy(
     *,
     whiteboard: WorkWhiteboard,
@@ -382,6 +391,8 @@ def create_metric_snapshot(
         "blocked_sources": [
             _source_ref(item) for item in sources if str(item.get("status") or "") == "blocked"
         ],
+        "baseline_target_summary": _baseline_target_summary(sources),
+        "optimization_actions": _optimization_actions_from_sources(sources),
     }
     return MetricSnapshot.objects.create(
         organization=whiteboard.organization,
@@ -505,6 +516,12 @@ def evaluate_performance(
                     "performance_result": result,
                     "criteria_results": criteria_results,
                     "submitted_scorecard": sanitize_outbox_payload(scorecard or {}),
+                    "baseline_target_summary": _baseline_target_summary(
+                        list(state.get("sources") or [])
+                    ),
+                    "optimization_actions": _optimization_actions_from_sources(
+                        list(state.get("sources") or [])
+                    ),
                     "conditions": _matched_conditions(
                         state=state, criteria_results=criteria_results, submitted=submitted
                     ),
@@ -769,6 +786,15 @@ def _normalize_source(item: dict[str, Any]) -> dict[str, Any]:
         "sample_metrics": sanitize_outbox_payload(
             item.get("sample_metrics") or item.get("metric_values") or {}
         ),
+        "baseline_metrics": sanitize_outbox_payload(
+            item.get("baseline_metrics") or item.get("baselines") or {}
+        ),
+        "target_metrics": sanitize_outbox_payload(
+            item.get("target_metrics") or item.get("targets") or {}
+        ),
+        "attribution_scope": str(item.get("attribution_scope") or "")[:255],
+        "evidence_mode": str(item.get("evidence_mode") or "")[:64],
+        "optimization_actions": _sanitize_payload_list(item.get("optimization_actions") or []),
         "metadata": sanitize_outbox_payload(item.get("metadata") or {}),
     }
 
@@ -1380,6 +1406,11 @@ def _tool_inputs(
             "period_end": period_end,
             "metrics": list(source.get("metrics") or []),
             "sample_metrics": source.get("sample_metrics") or {},
+            "baseline_metrics": source.get("baseline_metrics") or {},
+            "target_metrics": source.get("target_metrics") or {},
+            "attribution_scope": source.get("attribution_scope") or "",
+            "evidence_mode": source.get("evidence_mode") or "",
+            "optimization_actions": source.get("optimization_actions") or [],
         }
     )
 
@@ -1420,8 +1451,13 @@ def _assemble_performance_report(
                 "id": str(snapshot.id),
                 "period_start": snapshot.period_start.isoformat(),
                 "period_end": snapshot.period_end.isoformat(),
+                "values": snapshot.metric_values_json or {},
             },
             "sources": list(state.get("sources") or []),
+            "baseline_target_summary": _baseline_target_summary(list(state.get("sources") or [])),
+            "optimization_actions": _optimization_actions_from_sources(
+                list(state.get("sources") or [])
+            ),
         }
     )
     return ReportRun.objects.create(
@@ -1468,6 +1504,9 @@ def _source_payload(
     receipt: dict[str, Any] | None = None,
     include_internal: bool = True,
 ) -> dict[str, Any]:
+    metric_values = sanitize_outbox_payload(metrics or {})
+    baseline_metrics = _source_metric_baselines(source)
+    target_metrics = _source_metric_targets(source)
     item: dict[str, Any] = {
         "id": str(source["id"]),
         "display_name": str(source.get("display_name") or _label(str(source["id"]))),
@@ -1477,7 +1516,17 @@ def _source_payload(
         "tool_execution_id": tool_execution_id,
         "company_signal_id": company_signal_id,
         "routing_record_id": routing_record_id,
-        "metrics": sanitize_outbox_payload(metrics or {}),
+        "metrics": metric_values,
+        "baseline_metrics": baseline_metrics,
+        "target_metrics": target_metrics,
+        "variance": _metric_variance(
+            metrics=metric_values,
+            baselines=baseline_metrics,
+            targets=target_metrics,
+        ),
+        "attribution_scope": str(source.get("attribution_scope") or ""),
+        "evidence_mode": str(source.get("evidence_mode") or ""),
+        "optimization_actions": _sanitize_payload_list(source.get("optimization_actions") or []),
     }
     if operation_id:
         item["operation_id"] = operation_id
@@ -1564,6 +1613,65 @@ def _source_metric_values(source: dict[str, Any]) -> dict[str, Any]:
     return sanitize_outbox_payload({key: value for key, value in values.items() if key in allowed})
 
 
+def _source_metric_baselines(source: dict[str, Any]) -> dict[str, Any]:
+    return _allowed_metric_map(
+        source.get("baseline_metrics") or source.get("baselines") or {},
+        allowed=list(source.get("metrics") or []),
+    )
+
+
+def _source_metric_targets(source: dict[str, Any]) -> dict[str, Any]:
+    return _allowed_metric_map(
+        source.get("target_metrics") or source.get("targets") or {},
+        allowed=list(source.get("metrics") or []),
+    )
+
+
+def _allowed_metric_map(value: Any, *, allowed: list[Any]) -> dict[str, Any]:
+    values = _dict_or_empty(value)
+    allowed_keys = {str(item) for item in allowed}
+    if not allowed_keys:
+        return sanitize_outbox_payload(values)
+    return sanitize_outbox_payload(
+        {str(key): item for key, item in values.items() if str(key) in allowed_keys}
+    )
+
+
+def _metric_variance(
+    *,
+    metrics: dict[str, Any],
+    baselines: dict[str, Any],
+    targets: dict[str, Any],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    keys = sorted({*metrics.keys(), *baselines.keys(), *targets.keys()})
+    for key in keys:
+        actual = metrics.get(key)
+        baseline = baselines.get(key)
+        target = targets.get(key)
+        item: dict[str, Any] = {
+            "actual": actual,
+            "baseline": baseline,
+            "target": target,
+        }
+        actual_number = _number_or_none(actual)
+        baseline_number = _number_or_none(baseline)
+        target_number = _number_or_none(target)
+        if actual_number is not None and baseline_number is not None:
+            item["actual_minus_baseline"] = round(actual_number - baseline_number, 6)
+        if actual_number is not None and target_number is not None:
+            item["actual_minus_target"] = round(actual_number - target_number, 6)
+        result[key] = item
+    return sanitize_outbox_payload(result)
+
+
+def _number_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _collected_metric_values(sources: list[dict[str, Any]]) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for source in sources:
@@ -1587,8 +1695,68 @@ def _source_ref(source: dict[str, Any]) -> dict[str, Any]:
             "company_signal_id": source.get("company_signal_id"),
             "routing_record_id": source.get("routing_record_id"),
             "blocked_reason_code": source.get("blocked_reason_code"),
+            "metrics": source.get("metrics") if isinstance(source.get("metrics"), dict) else {},
+            "baseline_metrics": source.get("baseline_metrics")
+            if isinstance(source.get("baseline_metrics"), dict)
+            else {},
+            "target_metrics": source.get("target_metrics")
+            if isinstance(source.get("target_metrics"), dict)
+            else {},
+            "variance": source.get("variance") if isinstance(source.get("variance"), dict) else {},
+            "attribution_scope": source.get("attribution_scope"),
+            "evidence_mode": source.get("evidence_mode"),
+            "optimization_actions": source.get("optimization_actions")
+            if isinstance(source.get("optimization_actions"), list)
+            else [],
         }
     )
+
+
+def _baseline_target_summary(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    summary: list[dict[str, Any]] = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        summary.append(
+            sanitize_outbox_payload(
+                {
+                    "id": source.get("id"),
+                    "status": source.get("status"),
+                    "metrics": source.get("metrics") if isinstance(source.get("metrics"), dict) else {},
+                    "baseline_metrics": source.get("baseline_metrics")
+                    if isinstance(source.get("baseline_metrics"), dict)
+                    else {},
+                    "target_metrics": source.get("target_metrics")
+                    if isinstance(source.get("target_metrics"), dict)
+                    else {},
+                    "variance": source.get("variance") if isinstance(source.get("variance"), dict) else {},
+                    "attribution_scope": source.get("attribution_scope"),
+                    "evidence_mode": source.get("evidence_mode"),
+                }
+            )
+        )
+    return summary
+
+
+def _optimization_actions_from_sources(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        source_id = str(source.get("id") or "")
+        for action in list(source.get("optimization_actions") or []):
+            if not isinstance(action, dict):
+                continue
+            actions.append(
+                sanitize_outbox_payload(
+                    {
+                        **action,
+                        "source_id": source_id,
+                        "source_status": source.get("status"),
+                    }
+                )
+            )
+    return actions
 
 
 def _ids_from_sources(sources: list[dict[str, Any]], field: str) -> list[str]:

@@ -54,6 +54,7 @@ const OAUTH_PROVIDERS: OAuthIntegrationProvider[] = [
   "linear",
   "hubspot",
   "google_drive",
+  "microsoft_graph",
 ];
 
 const PROVIDERS: { value: CredentialCreateInput["provider"]; label: string }[] = [
@@ -71,6 +72,21 @@ const PROVIDERS: { value: CredentialCreateInput["provider"]; label: string }[] =
   { value: "google_drive", label: "Google Drive" },
   { value: "telegram", label: "Telegram" },
   { value: "twilio", label: "Twilio" },
+  { value: "api_server", label: "API Server" },
+  { value: "bluebubbles", label: "BlueBubbles" },
+  { value: "dingtalk", label: "DingTalk" },
+  { value: "feishu", label: "Feishu" },
+  { value: "generic_webhook", label: "Generic Webhook" },
+  { value: "homeassistant", label: "Home Assistant" },
+  { value: "matrix", label: "Matrix" },
+  { value: "microsoft_graph", label: "Microsoft Graph" },
+  { value: "qqbot", label: "QQ Bot" },
+  { value: "signal", label: "Signal" },
+  { value: "sms", label: "SMS" },
+  { value: "wecom", label: "WeCom" },
+  { value: "weixin", label: "Weixin" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "yuanbao", label: "Yuanbao" },
 ];
 
 const OAUTH_PROVIDER_SET = new Set<string>(OAUTH_PROVIDERS);
@@ -121,6 +137,10 @@ const OAUTH_PROVIDER_GUIDANCE: Record<OAuthIntegrationProvider, { scopeHint: str
   google_drive: {
     scopeHint: "Use Drive file + metadata scopes.",
     docsUrl: "https://developers.google.com/identity/protocols/oauth2",
+  },
+  microsoft_graph: {
+    scopeHint: "Use Graph chat or Teams scopes for Microsoft Graph gateway sends.",
+    docsUrl: "https://learn.microsoft.com/graph/overview",
   },
 };
 

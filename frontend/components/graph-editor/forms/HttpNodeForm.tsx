@@ -46,6 +46,21 @@ const PROVIDERS = [
   { value: "google_drive", label: "Google Drive" },
   { value: "telegram", label: "Telegram" },
   { value: "twilio", label: "Twilio" },
+  { value: "api_server", label: "API Server" },
+  { value: "bluebubbles", label: "BlueBubbles" },
+  { value: "dingtalk", label: "DingTalk" },
+  { value: "feishu", label: "Feishu" },
+  { value: "generic_webhook", label: "Generic Webhook" },
+  { value: "homeassistant", label: "Home Assistant" },
+  { value: "matrix", label: "Matrix" },
+  { value: "microsoft_graph", label: "Microsoft Graph" },
+  { value: "qqbot", label: "QQ Bot" },
+  { value: "signal", label: "Signal" },
+  { value: "sms", label: "SMS" },
+  { value: "wecom", label: "WeCom" },
+  { value: "weixin", label: "Weixin" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "yuanbao", label: "Yuanbao" },
 ];
 
 type HttpFormState = {

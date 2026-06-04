@@ -2,6 +2,7 @@
 
 from django.urls import path
 
+from adapters.api.integrations.gateway_views import GatewayWebhookView
 from adapters.api.integrations.http_test_views import HttpNodeTestView
 from adapters.api.integrations.telegram_views import TelegramWebhookView
 from adapters.api.integrations.webhook_views import GenericWebhookView
@@ -20,4 +21,9 @@ urlpatterns = [
         name="whatsapp-webhook",
     ),
     path("webhook/<uuid:graph_version_id>", GenericWebhookView.as_view(), name="generic-webhook"),
+    path(
+        "gateway/<str:platform>/webhook/<uuid:graph_version_id>",
+        GatewayWebhookView.as_view(),
+        name="gateway-webhook",
+    ),
 ]

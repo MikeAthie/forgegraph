@@ -21,6 +21,7 @@ from adapters.api.marketplace.serializers import (
 )
 from adapters.api.responses import error_response, success_response
 from application.services.audit_log import record_audit_log
+from application.services.gateway_registry import capability_for_tool_id, capability_payload
 from application.services.marketplace_runtime import (
     build_install_metadata,
     build_runtime_delivery_state,
@@ -41,6 +42,14 @@ from infrastructure.security import s2s
 def _serialize_release(release: NodeRegistryRelease | None) -> dict[str, Any] | None:
     if release is None:
         return None
+    runtime_manifest = release.runtime_manifest if isinstance(release.runtime_manifest, dict) else {}
+    tool_id = str(
+        runtime_manifest.get("name")
+        or (runtime_manifest.get("execution") or {}).get("local", {}).get("handler")
+        or release.config_defaults.get("tool_id")
+        or release.config_defaults.get("tool")
+        or ""
+    )
     return {
         "id": str(release.id),
         "version": release.version,
@@ -52,6 +61,7 @@ def _serialize_release(release: NodeRegistryRelease | None) -> dict[str, Any] | 
         "config_schema": release.config_schema,
         "config_defaults": release.config_defaults,
         "runtime_manifest": release.runtime_manifest,
+        "gateway_capability": capability_payload(capability_for_tool_id(tool_id)),
         "manifest_version": release.manifest_version,
         "cloud_allowed": release.cloud_allowed,
         "review_notes": release.review_notes,

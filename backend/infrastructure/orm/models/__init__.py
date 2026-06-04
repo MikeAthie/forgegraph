@@ -22,4 +22,5 @@ from infrastructure.orm.models.domain_signals import *
 from infrastructure.orm.models.communications import *
 from infrastructure.orm.models.routing import *
 from infrastructure.orm.models.work_whiteboards import *
+from infrastructure.orm.models.gateway import *
 from infrastructure.orm.models.base import _make_check_constraint

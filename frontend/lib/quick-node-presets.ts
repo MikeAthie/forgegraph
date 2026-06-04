@@ -340,22 +340,14 @@ return {
     description: "Send or reply to messages via Telegram Bot API",
     icon: "Send",
     category: "integrations",
-    nodeType: NODE_TYPES.HTTP,
+    nodeType: NODE_TYPES.TOOL,
     defaultConfig: {
       provider: "telegram",
-      method: "POST",
-      url: "https://api.telegram.org/bot{{credentials.telegram_token}}/sendMessage",
-      headers: {
-        "Content-Type": "application/json",
+      tool_name: "gateway.telegram.send",
+      parameters: {
+        to: "{{input.chat_id}}",
+        text: "{{input.message}}",
       },
-      body: JSON.stringify(
-        {
-          chat_id: "{{input.chat_id}}",
-          text: "{{input.message}}",
-        },
-        null,
-        2,
-      ),
       output_key: "telegram_response",
     },
     tags: ["telegram", "messaging", "bot", "chat"],
@@ -366,23 +358,22 @@ return {
   {
     id: "whatsapp-send",
     name: "WhatsApp",
-    description: "Send WhatsApp replies via Twilio API",
+    description: "Send WhatsApp replies via the backend gateway connector",
     icon: "MessageCircle",
     category: "integrations",
-    nodeType: NODE_TYPES.HTTP,
+    nodeType: NODE_TYPES.TOOL,
     defaultConfig: {
-      provider: "twilio",
-      method: "POST",
-      url: "https://api.twilio.com/2010-04-01/Accounts/{{input.account_sid}}/Messages.json",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+      provider: "whatsapp",
+      tool_name: "gateway.whatsapp.send",
+      parameters: {
+        to: "{{input.to}}",
+        text: "{{input.message}}",
       },
-      body: "To={{input.to}}&From={{input.from}}&Body={{input.message}}",
       output_key: "whatsapp_response",
     },
-    tags: ["whatsapp", "twilio", "messaging", "chatbot"],
-    requiredCredentialProvider: "twilio",
-    setupHint: "Provide Twilio credential and Account SID, then map To/From/Body placeholders.",
+    tags: ["whatsapp", "messaging", "chatbot", "gateway"],
+    requiredCredentialProvider: "whatsapp",
+    setupHint: "Connect WhatsApp Cloud API credentials, then map To/Text placeholders.",
     validationBadge: "Credential required",
   },
   {
@@ -410,21 +401,15 @@ return {
     description: "Send email using Gmail API",
     icon: "Send",
     category: "integrations",
-    nodeType: NODE_TYPES.HTTP,
+    nodeType: NODE_TYPES.TOOL,
     defaultConfig: {
       provider: "gmail",
-      method: "POST",
-      url: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-      headers: {
-        "Content-Type": "application/json",
+      tool_name: "gateway.email.send",
+      parameters: {
+        to: "{{input.to}}",
+        subject: "{{input.subject}}",
+        text: "{{input.message}}",
       },
-      body: JSON.stringify(
-        {
-          raw: "{{input.raw_message_base64url}}",
-        },
-        null,
-        2,
-      ),
       output_key: "gmail_send_response",
     },
     tags: ["gmail", "email", "send", "reply"],
@@ -520,21 +505,14 @@ return {
     description: "Generic webhook/REST fallback node",
     icon: "Webhook",
     category: "integrations",
-    nodeType: NODE_TYPES.HTTP,
+    nodeType: NODE_TYPES.TOOL,
     defaultConfig: {
-      method: "POST",
-      url: "{{input.webhook_url}}",
-      headers: {
-        "Content-Type": "application/json",
+      provider: "generic_webhook",
+      tool_name: "gateway.webhook.send",
+      parameters: {
+        endpoint_url: "{{input.webhook_url}}",
+        text: "{{input.message}}",
       },
-      body: JSON.stringify(
-        {
-          event: "{{input.event}}",
-          payload: "{{input.payload}}",
-        },
-        null,
-        2,
-      ),
       output_key: "webhook_response",
     },
     tags: ["webhook", "http", "integration", "fallback"],
@@ -578,21 +556,14 @@ return {
     description: "Send messages to Slack channels",
     icon: "Hash",
     category: "integrations",
-    nodeType: NODE_TYPES.HTTP,
+    nodeType: NODE_TYPES.TOOL,
     defaultConfig: {
-      method: "POST",
-      url: "{{input.webhook_url}}",
-      headers: {
-        "Content-Type": "application/json",
+      provider: "slack",
+      tool_name: "gateway.slack.send",
+      parameters: {
+        to: "{{input.channel}}",
+        text: "{{input.message}}",
       },
-      body: JSON.stringify(
-        {
-          text: "{{input.message}}",
-          channel: "{{input.channel}}",
-        },
-        null,
-        2,
-      ),
       output_key: "slack_response",
     },
     tags: ["slack", "messaging", "webhook", "team"],

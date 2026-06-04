@@ -26,6 +26,10 @@ def create_celery_app() -> Celery:
                 "task": "adapters.worker.retention_worker.run_retention_cleanup",
                 "schedule": crontab(hour=4, minute=0),
             },
+            "gateway-due-schedules-every-minute": {
+                "task": "adapters.worker.gateway_schedule_worker.run_gateway_due_schedules",
+                "schedule": 60.0,
+            },
         },
     )
     app.autodiscover_tasks(["adapters.worker"])

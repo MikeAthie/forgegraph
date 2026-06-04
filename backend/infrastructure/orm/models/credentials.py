@@ -28,7 +28,22 @@ class APIKey(models.Model):
         ("google_drive", "Google Drive"),
         ("telegram", "Telegram"),
         ("twilio", "Twilio"),
+        ("api_server", "API Server"),
+        ("bluebubbles", "BlueBubbles"),
+        ("dingtalk", "DingTalk"),
+        ("feishu", "Feishu"),
+        ("generic_webhook", "Generic Webhook"),
+        ("homeassistant", "Home Assistant"),
+        ("matrix", "Matrix"),
+        ("microsoft_graph", "Microsoft Graph"),
+        ("qqbot", "QQ Bot"),
+        ("signal", "Signal"),
+        ("sms", "SMS"),
         ("stripe", "Stripe"),
+        ("wecom", "WeCom"),
+        ("weixin", "Weixin"),
+        ("whatsapp", "WhatsApp"),
+        ("yuanbao", "Yuanbao"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -14,6 +14,7 @@ OAUTH_PROVIDER_SET = {
     "linear",
     "hubspot",
     "google_drive",
+    "microsoft_graph",
 }
 
 
