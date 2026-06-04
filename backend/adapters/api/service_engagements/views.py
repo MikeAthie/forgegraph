@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from adapters.api.responses import error_response, success_response
 from adapters.api.service_engagements.serializers import (
     AtlasDeliverableAssembleSerializer,
+    AtlasLaunchReadinessSerializer,
     ServiceCatalogCreateSerializer,
     ServiceCatalogPatchSerializer,
     ServiceCatalogQuerySerializer,
@@ -28,6 +29,7 @@ from application.services.agency_deliverables import (
     assemble_atlas_deliverable,
     assemble_atlas_mvp_deliverables,
 )
+from application.services.agency_launch_readiness import CampaignLaunchReadiness
 from application.services.audit_log import record_audit_log
 from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.departments import can_mutate_department_work
@@ -463,6 +465,41 @@ class AtlasDeliverableAssembleView(APIView):
         )
 
 
+class AtlasLaunchReadinessView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        serializer = AtlasLaunchReadinessSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        whiteboard = _whiteboard_for_user(user, whiteboard_id, minimum_role="member")
+        if whiteboard is None:
+            return _not_found("Whiteboard was not found.")
+
+        validated = dict(serializer.validated_data)
+        live_mode = (
+            str(validated.get("mode") or "dry_run") == "live"
+            or bool(validated.get("live_mode"))
+            or not bool(validated.get("dry_run", True))
+        )
+        readiness = CampaignLaunchReadiness().evaluate(
+            whiteboard=whiteboard,
+            user=user,
+            live_mode=live_mode,
+            idempotency_key=str(validated.get("idempotency_key") or _request_idempotency_key(request)),
+            create_receipt=bool(validated.get("create_receipt")),
+        )
+        receipt = readiness.get("receipt_deliverable")
+        readiness_payload = {
+            key: value for key, value in readiness.items() if key != "receipt_deliverable"
+        }
+        payload: dict[str, Any] = {"readiness": readiness_payload}
+        if isinstance(receipt, dict):
+            payload["receipt_deliverable"] = receipt
+        return success_response(payload)
+
+
 def _catalog_item_for_user(
     user: User,
     service_id: UUID,
@@ -616,3 +653,7 @@ def _not_found(message: str) -> Response:
 
 def _forbidden(message: str) -> Response:
     return error_response("FORBIDDEN", message, status=http_status.HTTP_403_FORBIDDEN)
+
+
+def _request_idempotency_key(request: Request) -> str:
+    return str(request.headers.get("Idempotency-Key") or "").strip()

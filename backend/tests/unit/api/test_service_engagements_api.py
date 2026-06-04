@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import cast
 from uuid import uuid4
 
 import pytest
 
+from application.services.agency_deliverables import assemble_atlas_mvp_deliverables
 from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     Asset,
@@ -19,6 +21,7 @@ from infrastructure.orm.models import (
     ServiceCatalogItem,
     ServiceDeliverable,
     ServiceEngagement,
+    StateProjection,
     User,
     WorkWhiteboard,
 )
@@ -115,6 +118,49 @@ def _whiteboard(company: Graph, owner: User) -> WorkWhiteboard:
         objective="Increase repeat purchases for summer accessories.",
         created_by=owner,
     )
+
+
+def _projection(whiteboard: WorkWhiteboard, suffix: str, state: dict[str, object]) -> None:
+    StateProjection.objects.update_or_create(
+        organization=whiteboard.organization,
+        company=whiteboard.company,
+        program=None,
+        projection_type=f"whiteboard_{suffix}:{whiteboard.id}",
+        defaults={"display_label": f"Whiteboard {suffix}", "json_state": state},
+    )
+
+
+def _mark_atlas_launch_ready(whiteboard: WorkWhiteboard, owner: User) -> None:
+    whiteboard.idempotency_key = f"launch-ready-{whiteboard.id}"
+    whiteboard.save(update_fields=["idempotency_key", "updated_at"])
+    _projection(
+        whiteboard,
+        "connector_inventory",
+        {
+            "connector_inventory": {
+                "email_connector": {"status": "ready", "api_key": "email-secret"},
+                "whatsapp_connector": {"status": "ready", "access_token": "whatsapp-secret"},
+                "social_connector": {"status": "ready", "credential": "social-secret"},
+                "analytics_connector": {"status": "ready", "private_key": "analytics-secret"},
+            }
+        },
+    )
+    _projection(
+        whiteboard,
+        "approval",
+        {"status": "approved", "approval_id": "approval-ok", "secret": "approval-secret"},
+    )
+    _projection(
+        whiteboard,
+        "qa",
+        {"status": "passed", "passed": True, "private_note": "qa-secret"},
+    )
+    _projection(
+        whiteboard,
+        "tracking",
+        {"status": "ready", "tracking_plan_id": "tracking-v1", "access_token": "tracking-secret"},
+    )
+    assemble_atlas_mvp_deliverables(whiteboard=whiteboard, user=owner)
 
 
 def test_service_catalog_engagement_and_deliverable_facade(authenticated_client, user):
@@ -627,3 +673,87 @@ def test_atlas_deliverables_assemble_api_hides_inaccessible_whiteboard(api_clien
     assert response.status_code == 404
     assert ServiceEngagement.objects.count() == 0
     assert ServiceDeliverable.objects.count() == 0
+
+
+def test_atlas_launch_readiness_api_returns_sanitized_dry_run_payload_and_receipt(
+    authenticated_client,
+    user,
+):
+    company = _company(user, "Atlas Launch API Client")
+    whiteboard = _whiteboard(company, user)
+    _mark_atlas_launch_ready(whiteboard, user)
+
+    response = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        {"create_receipt": True},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    payload = response.data["data"]
+    readiness = payload["readiness"]
+    receipt = payload["receipt_deliverable"]
+    assert readiness["status"] == "ready"
+    assert readiness["passed"] is True
+    assert readiness["dry_run"] is True
+    assert readiness["live_execution_enabled"] is False
+    assert set(readiness) >= {
+        "required_checks",
+        "connector_readiness",
+        "approval_state",
+        "deliverable_state",
+        "tracking_state",
+        "side_effect_readiness",
+    }
+    assert receipt["deliverable_type"] == "campaign_launch_receipt"
+    assert receipt["metadata"]["source"] == "atlas_launch_readiness"
+    assert receipt["metadata"]["dry_run"] is True
+    assert receipt["metadata"]["live_execution_enabled"] is False
+    rendered = json.dumps(response.data, sort_keys=True, default=str)
+    assert "email-secret" not in rendered
+    assert "whatsapp-secret" not in rendered
+    assert "social-secret" not in rendered
+    assert "analytics-secret" not in rendered
+    assert "approval-secret" not in rendered
+    assert "tracking-secret" not in rendered
+    assert "access_token" not in rendered
+    assert "api_key" not in rendered
+    assert "private_key" not in rendered
+
+
+def test_atlas_launch_readiness_api_requires_auth_and_scopes_whiteboard(api_client, user):
+    visible_company = _company(user, "Visible Launch Client")
+    hidden_company = _company(user, "Hidden Launch Client")
+    hidden_whiteboard = _whiteboard(hidden_company, user)
+    member = _member_in_org(user, role="member")
+    for company in [visible_company, hidden_company]:
+        CompanyAccessPolicy.objects.create(
+            organization=_organization(company),
+            company=company,
+            assignment_required=True,
+            org_admin_access_enabled=False,
+        )
+    CompanyAssignment.objects.create(
+        organization=_organization(visible_company),
+        company=visible_company,
+        user=member,
+        role="member",
+        status="active",
+        created_by=user,
+    )
+
+    unauthenticated = api_client.post(
+        f"/api/whiteboards/{hidden_whiteboard.id}/atlas-launch/readiness",
+        {},
+        format="json",
+    )
+    api_client.force_authenticate(user=member)
+    scoped = api_client.post(
+        f"/api/whiteboards/{hidden_whiteboard.id}/atlas-launch/readiness",
+        {},
+        format="json",
+    )
+
+    assert unauthenticated.status_code in {401, 403}
+    assert scoped.status_code == 404
+    assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
