@@ -27,6 +27,7 @@ from adapters.api.company_ops.serializers import (
 )
 from adapters.api.responses import error_response, success_response
 from application.services.agency_account_health import build_agency_account_health_snapshot
+from application.services.agency_growth_signals import build_agency_growth_signals
 from application.services.agency_reporting_cadence import (
     generate_reporting_cadence_run,
     reporting_cadence_plan_payload,
@@ -58,6 +59,7 @@ from application.services.company_ops import (
     request_publication_approval,
     update_opportunity_status,
 )
+from application.services.portfolio_intelligence import portfolio_intelligence_payload
 from application.services.processed_commands import (
     IdempotencyConflict,
     build_idempotency_context,
@@ -97,6 +99,27 @@ class AgencyHealthView(APIView):
             return company_or_response
         return success_response(
             {"agency_health": build_agency_account_health_snapshot(company_or_response)}
+        )
+
+
+class RetentionIntelligenceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        company_or_response = _company_from_query(request, minimum_role="viewer")
+        if isinstance(company_or_response, Response):
+            return company_or_response
+        return success_response(
+            {"retention_intelligence": build_agency_growth_signals(company_or_response)}
+        )
+
+
+class PortfolioIntelligenceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        return success_response(
+            {"portfolio_intelligence": portfolio_intelligence_payload(cast(User, request.user))}
         )
 
 
