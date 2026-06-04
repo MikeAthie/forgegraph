@@ -160,6 +160,100 @@ export type CompanyWorkspaceVM = {
   pendingApprovalCount: number;
 };
 
+export type AgencyHealthStatusViewModel = "healthy" | "monitor" | "attention" | "blocked" | "unknown";
+
+export type AgencyHealthDimensionViewModel = {
+  slug: string;
+  label: string;
+  score: number;
+  status: AgencyHealthStatusViewModel;
+  weight: number;
+  ownerDepartmentSlug: string | null;
+  summary: string;
+};
+
+export type AgencyOnboardingItemStatusViewModel = "completed" | "in_progress" | "blocked" | "not_started" | "unknown";
+
+export type AgencyOnboardingItemViewModel = {
+  slug: string;
+  label: string;
+  status: AgencyOnboardingItemStatusViewModel;
+  ownerDepartmentSlug: string | null;
+  message: string;
+};
+
+export type AgencyConnectorReadinessStatusViewModel = "ready" | "degraded" | "blocked" | "unknown";
+
+export type AgencyConnectorStatusViewModel = "ready" | "missing" | "degraded" | "disabled" | "unknown";
+
+export type AgencyConnectorReadinessValueViewModel = "ready" | "action_required" | "unknown";
+
+export type AgencyConnectorReadinessItemViewModel = {
+  slug: string;
+  label: string;
+  category: string;
+  required: boolean;
+  status: AgencyConnectorStatusViewModel;
+  readiness: AgencyConnectorReadinessValueViewModel;
+  ownerDepartmentSlug: string | null;
+  source: string;
+  lastSeenAt: string | null;
+  lastHealthCheckAt: string | null;
+  message: string;
+};
+
+export type AgencyConnectorReadinessViewModel = {
+  status: AgencyConnectorReadinessStatusViewModel;
+  summary: {
+    total: number;
+    required: number;
+    ready: number;
+    missing: number;
+    degraded: number;
+    disabled: number;
+  };
+  connectors: AgencyConnectorReadinessItemViewModel[];
+};
+
+export type AgencyHealthFindingViewModel = {
+  slug: string;
+  label: string;
+  severity: "low" | "medium" | "high" | "unknown";
+  ownerDepartmentSlug: string | null;
+  summary: string;
+};
+
+export type AgencyHealthOpportunityViewModel = {
+  slug: string;
+  label: string;
+  priority: "low" | "medium" | "high" | "unknown";
+  ownerDepartmentSlug: string | null;
+  summary: string;
+};
+
+export type AgencyHealthNextActionViewModel = {
+  slug: string;
+  label: string;
+  priority: "low" | "medium" | "high" | "unknown";
+  ownerDepartmentSlug: string | null;
+  reason: string;
+};
+
+export type AgencyHealthSnapshotViewModel = {
+  companyId: string;
+  generatedAt: string | null;
+  health: {
+    score: number;
+    status: AgencyHealthStatusViewModel;
+    dimensions: AgencyHealthDimensionViewModel[];
+  };
+  onboardingItems: AgencyOnboardingItemViewModel[];
+  connectorReadiness: AgencyConnectorReadinessViewModel;
+  risks: AgencyHealthFindingViewModel[];
+  opportunities: AgencyHealthOpportunityViewModel[];
+  nextActions: AgencyHealthNextActionViewModel[];
+};
+
 export type ApprovalRiskVM = "low" | "medium" | "high";
 
 export type ApprovalVM = {
