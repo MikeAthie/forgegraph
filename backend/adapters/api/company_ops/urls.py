@@ -12,15 +12,27 @@ from adapters.api.company_ops.views import (
     CompanyOpsOverviewView,
     CompanySignalQualifyView,
     CompanySignalsView,
+    PortfolioIntelligenceView,
     ProcurementDraftApprovalView,
     ProcurementDraftsView,
     PublicationDraftApprovalView,
     PublicationDraftsView,
+    RetentionIntelligenceView,
 )
 
 urlpatterns = [
     path("overview", CompanyOpsOverviewView.as_view(), name="company-ops-overview"),
     path("agency-health", AgencyHealthView.as_view(), name="company-ops-agency-health"),
+    path(
+        "retention-intelligence",
+        RetentionIntelligenceView.as_view(),
+        name="company-ops-retention-intelligence",
+    ),
+    path(
+        "portfolio-intelligence",
+        PortfolioIntelligenceView.as_view(),
+        name="company-ops-portfolio-intelligence",
+    ),
     path(
         "atlas-onboarding",
         AtlasOnboardingView.as_view(),

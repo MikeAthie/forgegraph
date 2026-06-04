@@ -4923,6 +4923,34 @@ routes:
       oversized_request: skip
     rate_limit_scope: default
     request_size_limit: api_default
+  - id: company-ops-retention-intelligence
+    names:
+      - company-ops-retention-intelligence
+    paths:
+      - /api/company-ops/retention-intelligence
+      - /api/v1/company-ops/retention-intelligence
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: viewer
+    org_scope: tenant
+    expected: *company_ops_jwt_read_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: company-ops-portfolio-intelligence
+    names:
+      - company-ops-portfolio-intelligence
+    paths:
+      - /api/company-ops/portfolio-intelligence
+      - /api/v1/company-ops/portfolio-intelligence
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: viewer
+    org_scope: tenant
+    expected: *company_ops_jwt_read_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
   - id: company-ops-signals-read
     names:
       - company-ops-signals

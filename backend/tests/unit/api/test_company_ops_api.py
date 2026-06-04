@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from typing import cast
 
@@ -124,6 +125,38 @@ def test_company_ops_overview_uses_same_stock_semantics_as_inventory(authenticat
     assert company_ops["summary"]["low_stock_products"] == 1
 
 
+def test_company_ops_retention_intelligence_api_returns_sanitized_growth_read_model(
+    authenticated_client,
+    user,
+):
+    company = _create_company(user)
+    create_company_signal(
+        company=company,
+        actor=user,
+        signal_type="fulfillment_issue",
+        signal_kind="risk",
+        source="manual",
+        external_key="retention-risk-1",
+        title="Client raised a delivery concern",
+        metadata={"secret_token": "do-not-render"},
+    )
+
+    response = authenticated_client.get(
+        "/api/company-ops/retention-intelligence",
+        {"company_id": str(company.id)},
+    )
+
+    assert response.status_code == 200
+    intelligence = response.json()["data"]["retention_intelligence"]
+    assert intelligence["company_id"] == str(company.id)
+    assert intelligence["retention"]["status"] == "risk"
+    assert intelligence["retention"]["risk_score"] > 0
+    assert "expansion" in intelligence
+    rendered = json.dumps(intelligence, sort_keys=True, default=str)
+    assert "do-not-render" not in rendered
+    assert "secret_token" not in rendered
+
+
 def test_company_signal_api_requires_idempotency(authenticated_client, user):
     company = _create_company(user)
 
@@ -238,6 +271,21 @@ def test_company_ops_tenant_isolation_blocks_cross_company_signal(authenticated_
         data={},
         format="json",
         HTTP_IDEMPOTENCY_KEY="cross-tenant",
+    )
+
+    assert response.status_code == 404
+
+
+def test_company_ops_retention_intelligence_api_blocks_cross_tenant_company(
+    authenticated_client,
+    user,
+):
+    other_user = User.objects.create_user(email="other-intel@example.com", password="pw")
+    other_company = _create_company(other_user, name="Other Intelligence Company")
+
+    response = authenticated_client.get(
+        "/api/company-ops/retention-intelligence",
+        {"company_id": str(other_company.id)},
     )
 
     assert response.status_code == 404
