@@ -1,7 +1,11 @@
 import { AlertTriangle, CheckCircle2, ClipboardList, PlugZap, ShieldAlert, Sparkles, Target } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { CompanyVM, OperationVM } from "@/domain/translation";
+import type {
+  AgencyConnectorStatusViewModel,
+  AgencyHealthSnapshotViewModel,
+  AgencyHealthStatusViewModel,
+} from "@/domain/translation";
 import { cn } from "@/lib/utils";
 
 export type AgencyHealthStatus = "healthy" | "watch" | "attention" | "critical";
@@ -81,13 +85,6 @@ type AgencyHealthPanelProps = {
   snapshot: AgencyHealthSnapshot;
   audience?: AgencyHealthAudience;
   className?: string;
-};
-
-type WorkspaceHealthInput = {
-  company: CompanyVM | null;
-  operations: OperationVM[];
-  pendingApprovalCount: number;
-  displayedCompanyStatus: string;
 };
 
 const statusTone: Record<
@@ -394,127 +391,85 @@ export function AgencyHealthPanel({ snapshot, audience = "operator", className }
   );
 }
 
-export function buildAgencyHealthSnapshotFromWorkspace({
-  company,
-  displayedCompanyStatus,
-  operations,
-  pendingApprovalCount,
-}: WorkspaceHealthInput): AgencyHealthSnapshot {
-  const profile = company?.profile;
-  const agencyName = profile?.companyName ?? company?.name ?? "Atlas Agency";
-  const failedCount = operations.filter((operation) => operation.status === "failed").length;
-  const runningCount = operations.filter((operation) => operation.status === "running").length;
-  const completedCount = operations.filter((operation) => operation.status === "completed").length;
-  const hasSetup = Boolean(company?.setupVersionId);
-  const hasDepartments = Boolean(company?.departments.length);
-  const connectorReady = profile?.aiAccessMode !== "byok" || Boolean(profile.byokCredentialId);
-  const connectorMissing = profile?.aiAccessMode === "byok" && !profile.byokCredentialId;
-  const connectorReadyCount = Number(hasSetup) + Number(connectorReady);
-  const connectorDegradedCount = pendingApprovalCount > 0 ? 1 : 0;
-  const connectorMissingCount = Number(!hasSetup) + Number(connectorMissing);
-  const deliveryScore = failedCount > 0 ? 42 : runningCount > 0 ? 78 : completedCount > 0 ? 88 : 72;
-  const approvalScore = pendingApprovalCount > 0 ? 64 : 90;
-  const connectorScore = connectorMissingCount > 0 ? 58 : connectorDegradedCount > 0 ? 70 : 86;
-  const readinessScore = hasSetup && hasDepartments ? 84 : hasSetup ? 68 : 52;
-  const dimensions: AgencyHealthDimension[] = [
-    {
-      id: "delivery",
-      label: "Delivery Quality",
-      score: deliveryScore,
-      status: healthStatusForScore(deliveryScore),
-      summary:
-        failedCount > 0
-          ? "A failed operation is blocking the clean delivery path."
-          : completedCount > 0
-            ? "Recent deliverables are available for review and follow-through."
-            : "No completed deliverable is available yet; launch a scoped first operation.",
-    },
-    {
-      id: "approval-flow",
-      label: "Approval Flow",
-      score: approvalScore,
-      status: healthStatusForScore(approvalScore),
-      summary:
-        pendingApprovalCount > 0
-          ? `${pendingApprovalCount} approval${pendingApprovalCount === 1 ? "" : "s"} need a decision before the agency can move cleanly.`
-          : "No approval queue is currently blocking the next agency move.",
-    },
-    {
-      id: "connectors",
-      label: "Connector Readiness",
-      score: connectorScore,
-      status: healthStatusForScore(connectorScore),
-      summary: connectorMissing
-        ? "BYOK mode is selected, but the credential connection is not confirmed."
-        : "Core agency access is ready for the next operation.",
-    },
-    {
-      id: "readiness",
-      label: "Workspace Readiness",
-      score: readinessScore,
-      status: healthStatusForScore(readinessScore),
-      summary: hasDepartments
-        ? "The company workspace has a saved operating model and department map."
-        : "The workspace still needs a saved operating model before health can stabilize.",
-    },
-  ];
-  const healthScore = Math.round(
-    dimensions.reduce((total, dimension) => total + dimension.score, 0) / dimensions.length,
-  );
-  const status = displayedCompanyStatus === "Needs attention" ? "attention" : healthStatusForScore(healthScore);
-
+export function agencyHealthSnapshotFromViewModel(
+  snapshot: AgencyHealthSnapshotViewModel,
+  agencyName: string,
+): AgencyHealthSnapshot {
+  const healthScore = clampScore(snapshot.health.score);
+  const status = panelStatus(snapshot.health.status, healthScore);
+  const connectorSummary = snapshot.connectorReadiness.summary;
   return {
-    agencyName,
+    agencyName: agencyName.trim() || "Atlas Agency",
     healthScore,
     status,
     statusLabel: statusLabel(status),
-    dimensions,
-    checklist: [
-      { id: "setup", label: "Operating model saved", complete: hasSetup },
-      { id: "departments", label: "Departments mapped", complete: hasDepartments },
-      { id: "operation", label: "First operation launched", complete: operations.length > 0 },
-      { id: "connectors", label: "Connector access confirmed", complete: connectorReady && !connectorMissingCount },
-      { id: "approvals", label: "Approval queue clear", complete: pendingApprovalCount === 0 },
-    ],
+    dimensions: snapshot.health.dimensions.map((dimension) => ({
+      id: dimension.slug,
+      label: dimension.label,
+      score: dimension.score,
+      status: panelStatus(dimension.status, dimension.score),
+      summary: dimension.summary,
+    })),
+    checklist: snapshot.onboardingItems.map((item) => ({
+      id: item.slug,
+      label: item.label,
+      complete: item.status === "completed",
+    })),
     connectors: {
-      ready: connectorReadyCount,
-      degraded: connectorDegradedCount,
-      missing: connectorMissingCount,
-      summary: connectorSummary(connectorReadyCount, connectorDegradedCount, connectorMissingCount),
-      items: [
-        {
-          id: "operating-model",
-          label: "Operating model",
-          status: hasSetup ? "ready" : "missing",
-        },
-        {
-          id: "ai-access",
-          label: profile?.aiAccessMode === "byok" ? "BYOK AI access" : "Managed AI access",
-          status: connectorMissing ? "missing" : "ready",
-          detail: connectorMissing ? "Credential not confirmed" : undefined,
-        },
-        {
-          id: "approval-queue",
-          label: "Approval queue",
-          status: pendingApprovalCount > 0 ? "degraded" : "ready",
-        },
-      ],
+      ready: connectorSummary.ready,
+      degraded: connectorSummary.degraded,
+      missing: connectorSummary.missing,
+      summary: connectorSummaryText(connectorSummary.ready, connectorSummary.degraded, connectorSummary.missing),
+      items: snapshot.connectorReadiness.connectors.map((connector) => ({
+        id: connector.slug,
+        label: connector.label,
+        status: panelConnectorStatus(connector.status),
+        detail: connector.message,
+      })),
     },
-    nextActions: nextActionsForWorkspace({
-      connectorMissing,
-      failedCount,
-      operations,
-      pendingApprovalCount,
-      runningCount,
-    }),
-    risks: risksForWorkspace({
-      connectorMissing,
-      failedCount,
-      pendingApprovalCount,
-      objective: profile?.objective ?? company?.description ?? "",
-    }),
-    opportunities: opportunitiesForWorkspace({ completedCount, operations, runningCount }),
+    nextActions: snapshot.nextActions.map((action) => ({
+      id: action.slug,
+      label: action.label,
+      owner: action.ownerDepartmentSlug ?? undefined,
+      dueLabel: labelize(action.priority),
+      internalNote: action.reason,
+    })),
+    risks: snapshot.risks.map((risk) => ({
+      id: risk.slug,
+      label: risk.label,
+      severity: risk.severity === "unknown" ? "medium" : risk.severity,
+      internalNote: risk.summary,
+    })),
+    opportunities: snapshot.opportunities.map((opportunity) => ({
+      id: opportunity.slug,
+      label: opportunity.label,
+      impact: opportunity.priority === "unknown" ? "medium" : opportunity.priority,
+      internalNote: opportunity.summary,
+    })),
   };
+}
+
+function panelStatus(status: AgencyHealthStatusViewModel, score: number): AgencyHealthStatus {
+  if (status === "healthy") {
+    return "healthy";
+  }
+  if (status === "monitor") {
+    return "watch";
+  }
+  if (status === "attention") {
+    return "attention";
+  }
+  if (status === "blocked") {
+    return "critical";
+  }
+  return healthStatusForScore(score);
+}
+
+function panelConnectorStatus(status: AgencyConnectorStatusViewModel): AgencyConnectorStatus {
+  if (status === "ready" || status === "degraded" || status === "missing") {
+    return status;
+  }
+  return status === "disabled" ? "degraded" : "missing";
 }
 
 function PanelList<T>({
@@ -647,183 +602,6 @@ function labelize(value: string): string {
     .join(" ");
 }
 
-function connectorSummary(ready: number, degraded: number, missing: number): string {
+function connectorSummaryText(ready: number, degraded: number, missing: number): string {
   return `${ready} ready, ${degraded} degraded, ${missing} missing`;
-}
-
-function nextActionsForWorkspace({
-  connectorMissing,
-  failedCount,
-  operations,
-  pendingApprovalCount,
-  runningCount,
-}: {
-  connectorMissing: boolean;
-  failedCount: number;
-  operations: OperationVM[];
-  pendingApprovalCount: number;
-  runningCount: number;
-}): AgencyHealthAction[] {
-  if (failedCount > 0) {
-    return [
-      {
-        id: "retry-failed-operation",
-        label: "Retry or rescope the latest failed operation",
-        owner: "Operator",
-        dueLabel: "Now",
-        internalNote: "Internal risk hint: inspect the failure before exposing a delivery date.",
-      },
-    ];
-  }
-  if (pendingApprovalCount > 0) {
-    return [
-      {
-        id: "clear-approvals",
-        label: `Review ${pendingApprovalCount} pending approval${pendingApprovalCount === 1 ? "" : "s"}`,
-        owner: "Operator",
-        dueLabel: "Today",
-        internalNote: "Internal scope hint: approval delay is the current delivery bottleneck.",
-      },
-    ];
-  }
-  if (connectorMissing) {
-    return [
-      {
-        id: "confirm-connector",
-        label: "Confirm AI access before launching the next agency cycle",
-        owner: "Operator",
-        dueLabel: "Before launch",
-        internalNote: "Internal risk hint: avoid promising autonomous delivery until access is connected.",
-      },
-    ];
-  }
-  if (!operations.length) {
-    return [
-      {
-        id: "launch-first-operation",
-        label: "Launch the first scoped agency operation",
-        owner: "Operator",
-        dueLabel: "Next",
-      },
-    ];
-  }
-  if (runningCount > 0) {
-    return [
-      {
-        id: "monitor-active-operation",
-        label: "Monitor the active operation until the deliverable is ready",
-        owner: "Operator",
-        dueLabel: "In progress",
-      },
-    ];
-  }
-  return [
-    {
-      id: "launch-next-cycle",
-      label: "Launch the next operating cycle from the latest deliverable",
-      owner: "Operator",
-      dueLabel: "Next",
-    },
-  ];
-}
-
-function risksForWorkspace({
-  connectorMissing,
-  failedCount,
-  objective,
-  pendingApprovalCount,
-}: {
-  connectorMissing: boolean;
-  failedCount: number;
-  objective: string;
-  pendingApprovalCount: number;
-}): AgencyHealthRisk[] {
-  const risks: AgencyHealthRisk[] = [];
-  if (failedCount > 0) {
-    risks.push({
-      id: "failed-operation",
-      label: "A failed operation is reducing confidence in the next client-ready handoff.",
-      severity: "high",
-      internalNote: "Internal risk hint: retry with tighter scope before presenting a new timeline.",
-    });
-  }
-  if (pendingApprovalCount > 0) {
-    risks.push({
-      id: "approval-delay",
-      label: "Pending approvals may delay delivery follow-through.",
-      severity: "medium",
-      internalNote: "Internal scope hint: approvals are backend-owned decisions and should be cleared before launch.",
-    });
-  }
-  if (connectorMissing) {
-    risks.push({
-      id: "connector-access",
-      label: "Connector access is not fully ready for autonomous follow-through.",
-      severity: "medium",
-      internalNote: "Internal risk hint: keep the client-facing commitment limited until access is confirmed.",
-    });
-  }
-  if (objective.length > 160) {
-    risks.push({
-      id: "broad-objective",
-      label: "The current objective may be broad for one agency cycle.",
-      severity: "low",
-      internalNote: "Internal scope hint: split the objective into a first deliverable and a follow-up cycle.",
-    });
-  }
-  return risks.length
-    ? risks
-    : [
-        {
-          id: "baseline-risk",
-          label: "No material delivery risks are visible in the current workspace snapshot.",
-          severity: "low",
-        },
-      ];
-}
-
-function opportunitiesForWorkspace({
-  completedCount,
-  operations,
-  runningCount,
-}: {
-  completedCount: number;
-  operations: OperationVM[];
-  runningCount: number;
-}): AgencyHealthOpportunity[] {
-  if (completedCount > 0) {
-    return [
-      {
-        id: "delivery-digest",
-        label: "Turn the latest deliverable into a recurring client update.",
-        impact: "high",
-        internalNote: "Internal pricing hint: use the digest as the first retainer expansion path.",
-      },
-    ];
-  }
-  if (runningCount > 0) {
-    return [
-      {
-        id: "live-quality-loop",
-        label: "Use the active operation as a live quality calibration point.",
-        impact: "medium",
-      },
-    ];
-  }
-  if (!operations.length) {
-    return [
-      {
-        id: "first-cycle",
-        label: "Start with one narrow assignment to build a useful health baseline.",
-        impact: "medium",
-      },
-    ];
-  }
-  return [
-    {
-      id: "next-cycle",
-      label: "Use the current workspace rhythm to launch the next scoped agency cycle.",
-      impact: "medium",
-    },
-  ];
 }

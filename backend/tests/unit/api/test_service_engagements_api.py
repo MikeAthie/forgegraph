@@ -194,6 +194,7 @@ def test_service_catalog_engagement_and_deliverable_facade(authenticated_client,
             "internal_notes": "Operator-only setup note.",
         },
         format="json",
+        HTTP_IDEMPOTENCY_KEY="service-engagement-facade-create",
     )
     assert engagement_response.status_code == 201
     engagement = engagement_response.data["data"]["engagement"]
@@ -221,6 +222,7 @@ def test_service_catalog_engagement_and_deliverable_facade(authenticated_client,
             "metadata": {"private_source_path": "s3://internal/report.md"},
         },
         format="json",
+        HTTP_IDEMPOTENCY_KEY="service-deliverable-facade-create",
     )
     assert deliverable_response.status_code == 201
     deliverable = deliverable_response.data["data"]["deliverable"]
@@ -231,6 +233,131 @@ def test_service_catalog_engagement_and_deliverable_facade(authenticated_client,
     assert stored_deliverable.metadata_json["quality_gate"]["status"] == "fail"
     assert ServiceEngagement.objects.filter(company=company).count() == 1
     assert ServiceDeliverable.objects.filter(company=company).count() == 1
+
+
+def test_service_catalog_persists_and_returns_safe_metadata(authenticated_client, user):
+    organization = user.default_organization
+    assert organization is not None
+
+    response = authenticated_client.post(
+        "/api/service-catalog",
+        {
+            "slug": "safe-catalog-metadata",
+            "title": "Safe Catalog Metadata",
+            "description": "Metadata safety regression.",
+            "status": "active",
+            "visibility": "customer",
+            "pricing_metadata": {
+                "public_price": "$5k",
+                "stripe_secret_key": "sk_live_secret",
+                "nested": {
+                    "authorization": "Bearer raw-token",
+                    "billing_model": "retainer",
+                },
+            },
+            "metadata": {
+                "safe_context": "visible",
+                "session_cookie": "sid=secret-session",
+                "nested": {
+                    "bearer_token": "raw-token",
+                    "public_note": "ok",
+                },
+            },
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    service = response.json()["data"]["service"]
+    item = ServiceCatalogItem.objects.get(id=service["id"])
+    rendered_response = json.dumps(service, sort_keys=True, default=str)
+    rendered_stored = json.dumps(
+        {
+            "pricing_metadata": item.pricing_metadata_json,
+            "metadata": item.metadata_json,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert service["pricing_metadata"]["public_price"] == "$5k"
+    assert service["pricing_metadata"]["nested"]["billing_model"] == "retainer"
+    assert service["metadata"]["safe_context"] == "visible"
+    assert service["metadata"]["nested"]["public_note"] == "ok"
+    for unsafe in [
+        "sk_live_secret",
+        "raw-token",
+        "secret-session",
+        "stripe_secret_key",
+        "authorization",
+        "session_cookie",
+        "bearer_token",
+    ]:
+        assert unsafe not in rendered_response
+        assert unsafe not in rendered_stored
+
+    OrganizationMembership.objects.filter(organization=organization, user=user).update(
+        role="viewer"
+    )
+    list_response = authenticated_client.get("/api/service-catalog")
+    assert list_response.status_code == 200
+    rendered_list = json.dumps(list_response.json(), sort_keys=True, default=str)
+    assert "sk_live_secret" not in rendered_list
+    assert "raw-token" not in rendered_list
+    assert "session_cookie" not in rendered_list
+
+
+def test_service_engagement_create_requires_idempotency_key(authenticated_client, user):
+    company = _company(user, "Idempotency Required Client")
+    service = _catalog_item(user)
+
+    response = authenticated_client.post(
+        "/api/service-engagements",
+        {
+            "company_id": str(company.id),
+            "catalog_item_id": str(service.id),
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+    assert ServiceEngagement.objects.filter(company=company).count() == 0
+
+
+def test_service_engagement_create_replays_and_rejects_conflict(authenticated_client, user):
+    company = _company(user, "Idempotent Engagement Client")
+    service = _catalog_item(user)
+    payload = {
+        "company_id": str(company.id),
+        "catalog_item_id": str(service.id),
+        "public_summary": "Initial scope.",
+    }
+
+    first = authenticated_client.post(
+        "/api/service-engagements",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="engagement-create-idempotent",
+    )
+    replay = authenticated_client.post(
+        "/api/service-engagements",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="engagement-create-idempotent",
+    )
+    conflict = authenticated_client.post(
+        "/api/service-engagements",
+        {**payload, "public_summary": "Changed scope."},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="engagement-create-idempotent",
+    )
+
+    assert first.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json()["data"]["duplicate"] is True
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert ServiceEngagement.objects.filter(company=company).count() == 1
 
 
 def test_service_engagements_are_company_assignment_filtered(api_client, user):
@@ -313,6 +440,7 @@ def test_service_deliverable_rejects_wrong_company_artifact(authenticated_client
             "status": "ready",
         },
         format="json",
+        HTTP_IDEMPOTENCY_KEY="wrong-company-artifact",
     )
 
     assert response.status_code == 404
@@ -348,10 +476,66 @@ def test_service_deliverable_can_reference_company_report(authenticated_client, 
             "status": "ready",
         },
         format="json",
+        HTTP_IDEMPOTENCY_KEY="service-deliverable-report",
     )
 
     assert response.status_code == 201
     assert response.data["data"]["deliverable"]["report_run_id"] == str(report.id)
+
+
+def test_service_deliverable_create_requires_idempotency_key(authenticated_client, user):
+    company = _company(user, "Deliverable Idempotency Required")
+    engagement = _engagement(user, company)
+
+    response = authenticated_client.post(
+        f"/api/service-engagements/{engagement.id}/deliverables",
+        {
+            "title": "Monthly report",
+            "status": "draft",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+    assert ServiceDeliverable.objects.filter(company=company).count() == 0
+
+
+def test_service_deliverable_create_replays_and_rejects_conflict(authenticated_client, user):
+    company = _company(user, "Idempotent Deliverable Client")
+    engagement = _engagement(user, company)
+    payload = {
+        "title": "Monthly report",
+        "deliverable_type": "report",
+        "status": "draft",
+        "summary": "Draft report.",
+    }
+
+    first = authenticated_client.post(
+        f"/api/service-engagements/{engagement.id}/deliverables",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-create-idempotent",
+    )
+    replay = authenticated_client.post(
+        f"/api/service-engagements/{engagement.id}/deliverables",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-create-idempotent",
+    )
+    conflict = authenticated_client.post(
+        f"/api/service-engagements/{engagement.id}/deliverables",
+        {**payload, "title": "Changed report"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-create-idempotent",
+    )
+
+    assert first.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json()["data"]["duplicate"] is True
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert ServiceDeliverable.objects.filter(company=company).count() == 1
 
 
 def test_service_deliverable_action_mark_ready_runs_quality_gate(authenticated_client, user):
@@ -375,6 +559,7 @@ def test_service_deliverable_action_mark_ready_runs_quality_gate(authenticated_c
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "mark_ready"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-mark-ready",
     )
 
     assert response.status_code == 200
@@ -389,6 +574,80 @@ def test_service_deliverable_action_mark_ready_runs_quality_gate(authenticated_c
         resource_type="service_deliverable",
         resource_id=str(deliverable.id),
     ).exists()
+
+
+def test_service_deliverable_action_requires_idempotency_key(authenticated_client, user):
+    company = _company(user, "Action Idempotency Required")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Launch report",
+        deliverable_type="report",
+        status="draft",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Ready for customer review.",
+        metadata_json={"source_refs": {"whiteboard": "wb_123"}},
+        created_by=user,
+    )
+
+    response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "mark_ready"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+    deliverable.refresh_from_db()
+    assert deliverable.status == "draft"
+
+
+def test_service_deliverable_action_replays_and_rejects_conflict(authenticated_client, user):
+    company = _company(user, "Idempotent Action Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Launch report",
+        deliverable_type="report",
+        status="draft",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Ready for customer review.",
+        metadata_json={"source_refs": {"whiteboard": "wb_123"}},
+        created_by=user,
+    )
+
+    first = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "mark_ready"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-action-idempotent",
+    )
+    replay = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "mark_ready"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-action-idempotent",
+    )
+    conflict = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "deliver_to_client"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-action-idempotent",
+    )
+
+    assert first.status_code == 200
+    assert replay.status_code == 200
+    assert replay.json()["data"]["duplicate"] is True
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    deliverable.refresh_from_db()
+    assert deliverable.status == "ready"
 
 
 def test_service_deliverable_action_submit_for_approval(authenticated_client, user):
@@ -412,6 +671,7 @@ def test_service_deliverable_action_submit_for_approval(authenticated_client, us
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "submit_for_approval"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-submit-approval",
     )
 
     assert response.status_code == 200
@@ -445,6 +705,7 @@ def test_service_deliverable_action_deliver_to_client_sets_delivered_at(
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "deliver_to_client"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-deliver-client",
     )
 
     assert response.status_code == 200
@@ -479,6 +740,7 @@ def test_service_deliverable_action_deliver_to_client_requires_approval_submissi
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "deliver_to_client"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-delivery-before-approval",
     )
     assert blocked_response.status_code == 400
     assert blocked_response.data["error"]["code"] == "APPROVAL_REQUIRED"
@@ -489,6 +751,7 @@ def test_service_deliverable_action_deliver_to_client_requires_approval_submissi
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "submit_for_approval"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-delivery-approval",
     )
     assert approval_response.status_code == 200
 
@@ -496,6 +759,7 @@ def test_service_deliverable_action_deliver_to_client_requires_approval_submissi
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "deliver_to_client"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-delivery-after-approval",
     )
     assert delivery_response.status_code == 200
     deliverable.refresh_from_db()
@@ -523,6 +787,7 @@ def test_service_deliverable_action_accept_only_after_delivered(authenticated_cl
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "accept"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-accept-invalid",
     )
     assert invalid_response.status_code == 400
     assert invalid_response.data["error"]["code"] == "INVALID_DELIVERABLE_TRANSITION"
@@ -533,6 +798,7 @@ def test_service_deliverable_action_accept_only_after_delivered(authenticated_cl
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "accept"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-accept-valid",
     )
 
     assert response.status_code == 200
@@ -562,6 +828,7 @@ def test_service_deliverable_action_deliver_to_client_blocks_quality_failures(
         f"/api/service-deliverables/{deliverable.id}/actions",
         {"action": "deliver_to_client"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-quality-blocked",
     )
 
     assert response.status_code == 400
@@ -579,6 +846,7 @@ def test_atlas_deliverables_batch_assemble_api(authenticated_client, user):
         f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
         {},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-deliverables-batch",
     )
 
     assert response.status_code == 200
@@ -615,6 +883,7 @@ def test_atlas_deliverables_single_assemble_api(authenticated_client, user):
         f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
         {"deliverable_type": "performance_report"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-deliverables-single",
     )
 
     assert response.status_code == 200
@@ -624,6 +893,55 @@ def test_atlas_deliverables_single_assemble_api(authenticated_client, user):
         "performance_report"
     ]
     assert ServiceDeliverable.objects.get(company=company).deliverable_type == "performance_report"
+
+
+def test_atlas_deliverables_assemble_api_requires_idempotency_key(authenticated_client, user):
+    company = _company(user, "Atlas Assemble Missing Key Client")
+    whiteboard = _whiteboard(company, user)
+
+    response = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
+        {},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+    assert ServiceEngagement.objects.filter(company=company).count() == 0
+    assert ServiceDeliverable.objects.filter(company=company).count() == 0
+
+
+def test_atlas_deliverables_assemble_api_replays_and_rejects_conflict(authenticated_client, user):
+    company = _company(user, "Atlas Assemble Idempotent Client")
+    whiteboard = _whiteboard(company, user)
+    payload: dict[str, object] = {}
+
+    first = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-deliverables-idempotent",
+    )
+    replay = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-deliverables-idempotent",
+    )
+    conflict = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
+        {"deliverable_type": "performance_report"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-deliverables-idempotent",
+    )
+
+    assert first.status_code == 200
+    assert replay.status_code == 200
+    assert replay.json()["data"]["duplicate"] is True
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert ServiceEngagement.objects.filter(company=company).count() == 1
+    assert ServiceDeliverable.objects.filter(company=company).count() == 10
 
 
 def test_atlas_deliverables_assemble_api_rejects_unknown_type(authenticated_client, user):
@@ -687,6 +1005,7 @@ def test_atlas_launch_readiness_api_returns_sanitized_dry_run_payload_and_receip
         f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
         {"create_receipt": True},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-readiness-receipt",
     )
 
     assert response.status_code == 200
@@ -719,6 +1038,64 @@ def test_atlas_launch_readiness_api_returns_sanitized_dry_run_payload_and_receip
     assert "access_token" not in rendered
     assert "api_key" not in rendered
     assert "private_key" not in rendered
+
+
+def test_atlas_launch_readiness_receipt_requires_idempotency_key(authenticated_client, user):
+    company = _company(user, "Atlas Launch Missing Key Client")
+    whiteboard = _whiteboard(company, user)
+    _mark_atlas_launch_ready(whiteboard, user)
+
+    response = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        {"create_receipt": True},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+    assert ServiceDeliverable.objects.filter(
+        company=company,
+        deliverable_type="campaign_launch_receipt",
+    ).count() == 0
+
+
+def test_atlas_launch_readiness_receipt_replays_and_rejects_conflict(
+    authenticated_client,
+    user,
+):
+    company = _company(user, "Atlas Launch Idempotent Client")
+    whiteboard = _whiteboard(company, user)
+    _mark_atlas_launch_ready(whiteboard, user)
+    payload = {"create_receipt": True}
+
+    first = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-receipt-idempotent",
+    )
+    replay = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        payload,
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-receipt-idempotent",
+    )
+    conflict = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        {**payload, "mode": "live"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-receipt-idempotent",
+    )
+
+    assert first.status_code == 200
+    assert replay.status_code == 200
+    assert replay.json()["data"]["duplicate"] is True
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert ServiceDeliverable.objects.filter(
+        company=company,
+        deliverable_type="campaign_launch_receipt",
+    ).count() == 1
 
 
 def test_atlas_launch_readiness_api_requires_auth_and_scopes_whiteboard(api_client, user):

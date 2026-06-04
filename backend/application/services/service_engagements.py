@@ -30,21 +30,31 @@ _BLOCKED_METADATA_KEY_TOKENS = (
     "api-key",
     "api_key",
     "apikey",
+    "auth",
+    "authorization",
+    "bearer",
     "confidential",
+    "cookie",
     "credential",
     "internal",
     "password",
     "private",
     "secret",
+    "session",
     "token",
 )
 _SECRET_METADATA_KEY_TOKENS = (
     "api-key",
     "api_key",
     "apikey",
+    "auth",
+    "authorization",
+    "bearer",
+    "cookie",
     "credential",
     "password",
     "secret",
+    "session",
     "token",
 )
 _BLOCKED_METADATA_TEXT_TOKENS = (
@@ -53,7 +63,11 @@ _BLOCKED_METADATA_TEXT_TOKENS = (
     "api_key=",
     "apikey",
     "apikey=",
+    "authorization:",
+    "authorization=",
     "bearer ",
+    "cookie:",
+    "cookie=",
     "confidential",
     "credential",
     "credential=",
@@ -68,6 +82,9 @@ _BLOCKED_METADATA_TEXT_TOKENS = (
     "private note",
     "secret",
     "secret=",
+    "session:",
+    "session=",
+    "set-cookie",
     "token",
     "token=",
 )
@@ -105,8 +122,8 @@ def service_catalog_payload(item: ServiceCatalogItem) -> dict[str, Any]:
         "deliverables_schema": list(item.deliverables_schema_json or []),
         "default_operation_templates": list(item.default_operation_templates_json or []),
         "default_report_template_id": item.default_report_template_id,
-        "pricing_metadata": dict(item.pricing_metadata_json or {}),
-        "metadata": dict(item.metadata_json or {}),
+        "pricing_metadata": _safe_metadata(dict(item.pricing_metadata_json or {})),
+        "metadata": _safe_metadata(dict(item.metadata_json or {})),
         "created_by_id": str(item.created_by_id) if item.created_by_id else None,
         "created_at": item.created_at.isoformat(),
         "updated_at": item.updated_at.isoformat(),
@@ -145,7 +162,7 @@ def service_engagement_payload(
     if include_internal:
         payload["internal_notes"] = engagement.internal_notes
         payload["source_key"] = engagement.source_key
-        payload["metadata"] = dict(engagement.metadata_json or {})
+        payload["metadata"] = _safe_metadata(dict(engagement.metadata_json or {}))
     return payload
 
 
@@ -282,10 +299,17 @@ def _contains_secret_like_metadata_text(value: str) -> bool:
         for token in (
             "api_key=",
             "apikey=",
+            "authorization:",
+            "authorization=",
             "bearer ",
+            "cookie:",
+            "cookie=",
             "credential=",
             "password=",
             "secret=",
+            "session:",
+            "session=",
+            "set-cookie",
             "token=",
         )
     )
@@ -338,8 +362,8 @@ def create_service_catalog_item(
         deliverables_schema_json=list(data.get("deliverables_schema") or []),
         default_operation_templates_json=list(data.get("default_operation_templates") or []),
         default_report_template_id=str(data.get("default_report_template_id") or ""),
-        pricing_metadata_json=dict(data.get("pricing_metadata") or {}),
-        metadata_json=dict(data.get("metadata") or {}),
+        pricing_metadata_json=_safe_metadata(dict(data.get("pricing_metadata") or {})),
+        metadata_json=_safe_metadata(dict(data.get("metadata") or {})),
         created_by=user,
     )
 
@@ -380,7 +404,10 @@ def update_service_catalog_item(
     }
     for input_key, (attr, caster) in json_fields.items():
         if input_key in data:
-            setattr(item, attr, caster(data.get(input_key) or caster()))
+            value = caster(data.get(input_key) or caster())
+            if input_key in {"pricing_metadata", "metadata"}:
+                value = _safe_metadata(dict(value))
+            setattr(item, attr, value)
             update_fields.append(attr)
     item.save(update_fields=sorted(set(update_fields)))
     return item

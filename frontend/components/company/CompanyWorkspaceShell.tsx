@@ -18,7 +18,11 @@ import { CommerceInventoryPanel } from "@/components/company/CommerceInventoryPa
 import { OperatingModelWorkspace } from "@/components/company/OperatingModelWorkspace";
 import { QuestGuide } from "@/components/company/QuestGuide";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { AgencyHealthPanel, buildAgencyHealthSnapshotFromWorkspace } from "@/components/company/AgencyHealthPanel";
+import {
+  AgencyHealthPanel,
+  agencyHealthSnapshotFromViewModel,
+  type AgencyHealthSnapshot,
+} from "@/components/company/AgencyHealthPanel";
 import {
   EmptyBlock,
   InspectorPanel,
@@ -489,6 +493,9 @@ type CompanyWorkspaceState = {
   operatingBriefError: string | null;
   latestPmAction: string | null;
   latestInteractionResponse: InteractionEventResponse | null;
+  agencyHealthSnapshot: AgencyHealthSnapshot | null;
+  agencyHealthLoading: boolean;
+  agencyHealthError: string | null;
   questMilestoneComplete: boolean;
   questPhase: "workspace" | "deliverable" | "done";
 };
@@ -537,6 +544,9 @@ function useCompanyWorkspaceShellController({
     operatingBriefError: null,
     latestPmAction: null,
     latestInteractionResponse: null,
+    agencyHealthSnapshot: null,
+    agencyHealthLoading: false,
+    agencyHealthError: null,
     questMilestoneComplete: false,
     questPhase: "workspace",
   } satisfies CompanyWorkspaceState);
@@ -557,6 +567,9 @@ function useCompanyWorkspaceShellController({
     operatingBriefError,
     latestPmAction,
     latestInteractionResponse,
+    agencyHealthSnapshot,
+    agencyHealthLoading,
+    agencyHealthError,
     questMilestoneComplete,
     questPhase,
   } = workspaceState;
@@ -805,6 +818,59 @@ function useCompanyWorkspaceShellController({
     };
   }, [activeBriefOperation?.id, company?.id]);
 
+  useEffect(() => {
+    if (!company?.id) {
+      dispatchWorkspaceState({
+        patch: {
+          agencyHealthSnapshot: null,
+          agencyHealthLoading: false,
+          agencyHealthError: null,
+        },
+      });
+      return;
+    }
+
+    let mounted = true;
+    dispatchWorkspaceState({
+      patch: {
+        agencyHealthLoading: true,
+        agencyHealthError: null,
+      },
+    });
+    void companyRepository
+      .getAgencyHealth(company.id)
+      .then((snapshot) => {
+        if (!mounted) {
+          return;
+        }
+        dispatchWorkspaceState({
+          patch: {
+            agencyHealthSnapshot: agencyHealthSnapshotFromViewModel(
+              snapshot,
+              company.profile.companyName || company.name,
+            ),
+            agencyHealthLoading: false,
+          },
+        });
+      })
+      .catch((healthError: unknown) => {
+        if (!mounted) {
+          return;
+        }
+        dispatchWorkspaceState({
+          patch: {
+            agencyHealthSnapshot: null,
+            agencyHealthLoading: false,
+            agencyHealthError: translateProductError(healthError, "company"),
+          },
+        });
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [company?.id, company?.name, company?.profile.companyName]);
+
   const nextAction = useMemo(() => {
     if (failure) {
       return {
@@ -1039,6 +1105,9 @@ function useCompanyWorkspaceShellController({
     operatingBriefError,
     latestPmAction,
     latestInteractionResponse,
+    agencyHealthSnapshot,
+    agencyHealthLoading,
+    agencyHealthError,
     latestFailedOperation,
     failure,
     latestCompletedOutputs,
@@ -1189,21 +1258,16 @@ function CompanyQuestGuides({ controller }: { controller: CompanyWorkspaceContro
 }
 
 function CompanyWorkspaceLoaded({ controller }: { controller: CompanyWorkspaceController }) {
-  const agencyHealthSnapshot = useMemo(
-    () =>
-      buildAgencyHealthSnapshotFromWorkspace({
-        company: controller.company,
-        displayedCompanyStatus: controller.displayedCompanyStatus,
-        operations: controller.operations,
-        pendingApprovalCount: controller.pendingApprovalCount,
-      }),
-    [controller.company, controller.displayedCompanyStatus, controller.operations, controller.pendingApprovalCount],
-  );
-
   return (
     <>
       <CompanyHeaderPanel controller={controller} />
-      <AgencyHealthPanel snapshot={agencyHealthSnapshot} audience="operator" />
+      {controller.agencyHealthSnapshot ? (
+        <AgencyHealthPanel snapshot={controller.agencyHealthSnapshot} audience="operator" />
+      ) : controller.agencyHealthError && !controller.agencyHealthLoading ? (
+        <Alert>
+          <AlertDescription>{controller.agencyHealthError}</AlertDescription>
+        </Alert>
+      ) : null}
       <OperatingModelWorkspace companyId={controller.companyId} companyName={controller.profile.companyName} />
       <div className="grid gap-6 2xl:grid-cols-[1.06fr_0.94fr]">
         <div data-guide-id="company-operations-panel">
