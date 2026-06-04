@@ -369,7 +369,7 @@ class ServiceDeliverableListCreateView(APIView):
             return _not_found("Service engagement was not found.")
         queryset = ServiceDeliverable.objects.filter(engagement=engagement).order_by("-updated_at")
         if not has_company_access(user, engagement.company, "member"):
-            queryset = queryset.exclude(visibility="internal")
+            queryset = queryset.exclude(visibility__in=["internal", "operator"])
         include_internal = has_company_access(user, engagement.company, "member")
         return success_response(
             {
@@ -452,9 +452,17 @@ class ServiceDeliverableListCreateView(APIView):
 class ServiceDeliverableActionView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request, deliverable_id: UUID) -> Response:
+    def post(
+        self,
+        request: Request,
+        deliverable_id: UUID,
+        lifecycle_action: str | None = None,
+    ) -> Response:
         user = cast(User, request.user)
-        serializer = ServiceDeliverableActionSerializer(data=request.data)
+        request_data = dict(request.data)
+        if lifecycle_action is not None:
+            request_data["action"] = lifecycle_action.replace("-", "_")
+        serializer = ServiceDeliverableActionSerializer(data=request_data)
         if not serializer.is_valid():
             return _validation_error(serializer.errors)
         deliverable = _deliverable_for_user(user, deliverable_id, minimum_role="member")

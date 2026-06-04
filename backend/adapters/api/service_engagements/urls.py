@@ -45,6 +45,30 @@ urlpatterns = [
         name="service-deliverable-actions",
     ),
     path(
+        "service-deliverables/<uuid:deliverable_id>/mark-ready",
+        ServiceDeliverableActionView.as_view(),
+        {"lifecycle_action": "mark_ready"},
+        name="service-deliverable-mark-ready",
+    ),
+    path(
+        "service-deliverables/<uuid:deliverable_id>/submit-for-approval",
+        ServiceDeliverableActionView.as_view(),
+        {"lifecycle_action": "submit_for_approval"},
+        name="service-deliverable-submit-for-approval",
+    ),
+    path(
+        "service-deliverables/<uuid:deliverable_id>/deliver-to-client",
+        ServiceDeliverableActionView.as_view(),
+        {"lifecycle_action": "deliver_to_client"},
+        name="service-deliverable-deliver-to-client",
+    ),
+    path(
+        "service-deliverables/<uuid:deliverable_id>/accept",
+        ServiceDeliverableActionView.as_view(),
+        {"lifecycle_action": "accept"},
+        name="service-deliverable-accept",
+    ),
+    path(
         "whiteboards/<uuid:whiteboard_id>/atlas-deliverables/assemble",
         AtlasDeliverableAssembleView.as_view(),
         name="whiteboard-atlas-deliverables-assemble",
