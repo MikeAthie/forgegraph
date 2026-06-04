@@ -172,6 +172,10 @@ def service_deliverable_payload(
     include_internal: bool = False,
 ) -> dict[str, Any]:
     latest_version = _latest_asset_version(deliverable)
+    lifecycle = _deliverable_lifecycle_payload(
+        deliverable.metadata_json or {},
+        include_internal=include_internal,
+    )
     return {
         "id": str(deliverable.id),
         "organization_id": str(deliverable.organization_id),
@@ -180,6 +184,7 @@ def service_deliverable_payload(
         "title": deliverable.title,
         "deliverable_type": deliverable.deliverable_type,
         "status": deliverable.status,
+        "client_visible_status": _client_visible_deliverable_status(deliverable),
         "visibility": deliverable.visibility,
         "department_id": str(deliverable.department_id) if deliverable.department_id else None,
         "artifact_id": str(deliverable.artifact_id) if deliverable.artifact_id else None,
@@ -193,10 +198,52 @@ def service_deliverable_payload(
         "latest_asset_version_uri": latest_version.content_uri if latest_version else None,
         "latest_asset_version_mime_type": latest_version.mime_type if latest_version else None,
         "created_by_id": str(deliverable.created_by_id) if deliverable.created_by_id else None,
+        "ready_at": lifecycle["timestamps"].get("ready_at"),
+        "submitted_for_approval_at": lifecycle["timestamps"].get(
+            "submitted_for_approval_at"
+        ),
         "delivered_at": deliverable.delivered_at.isoformat() if deliverable.delivered_at else None,
+        "accepted_at": lifecycle["timestamps"].get("accepted_at"),
+        "lifecycle": lifecycle,
         "created_at": deliverable.created_at.isoformat(),
         "updated_at": deliverable.updated_at.isoformat(),
     }
+
+
+def _client_visible_deliverable_status(deliverable: ServiceDeliverable) -> str:
+    if deliverable.visibility in {"internal", "operator"}:
+        return "not_visible"
+    return {
+        "draft": "working",
+        "ready": "ready",
+        "in_review": "review_ready",
+        "delivered": "delivered",
+        "accepted": "accepted",
+        "archived": "archived",
+    }.get(deliverable.status, "working")
+
+
+def _deliverable_lifecycle_payload(
+    metadata: dict[str, Any],
+    *,
+    include_internal: bool,
+) -> dict[str, Any]:
+    timestamps = dict(metadata.get("lifecycle_timestamps") or {})
+    history = []
+    for item in list(metadata.get("lifecycle_history") or []):
+        if not isinstance(item, dict):
+            continue
+        entry = {
+            "action": item.get("action"),
+            "from_status": item.get("from_status"),
+            "to_status": item.get("to_status"),
+            "at": item.get("at"),
+            "quality_gate_status": item.get("quality_gate_status"),
+        }
+        if include_internal:
+            entry["actor_id"] = item.get("actor_id")
+        history.append(entry)
+    return {"timestamps": timestamps, "history": history}
 
 
 def _latest_asset_version(deliverable: ServiceDeliverable) -> AssetVersion | None:
@@ -587,7 +634,9 @@ def _mark_deliverable_ready(
     deliverable: ServiceDeliverable,
     actor: User | None,
 ) -> ServiceDeliverable:
-    if deliverable.status in {"delivered", "accepted", "archived"}:
+    if deliverable.status == "ready":
+        return deliverable
+    if deliverable.status != "draft":
         raise _transition_error("mark_ready", deliverable.status)
     quality_gate = _evaluate_and_store_quality_gate(deliverable)
     _raise_if_quality_blocked(quality_gate)
@@ -608,6 +657,8 @@ def _submit_deliverable_for_approval(
     deliverable: ServiceDeliverable,
     actor: User | None,
 ) -> ServiceDeliverable:
+    if deliverable.status == "in_review":
+        return deliverable
     if deliverable.status != "ready":
         raise _transition_error("submit_for_approval", deliverable.status)
     quality_gate = _evaluate_and_store_quality_gate(deliverable)
@@ -635,6 +686,8 @@ def _deliver_deliverable_to_client(
     deliverable: ServiceDeliverable,
     actor: User | None,
 ) -> ServiceDeliverable:
+    if deliverable.status == "delivered":
+        return deliverable
     if deliverable.status not in {"ready", "in_review"}:
         raise _transition_error("deliver_to_client", deliverable.status)
     quality_gate = _evaluate_and_store_quality_gate(deliverable)
@@ -662,6 +715,8 @@ def _accept_deliverable(
     deliverable: ServiceDeliverable,
     actor: User | None,
 ) -> ServiceDeliverable:
+    if deliverable.status == "accepted":
+        return deliverable
     if deliverable.status != "delivered":
         raise _transition_error("accept", deliverable.status)
     quality_gate = _evaluate_and_store_quality_gate(deliverable)
@@ -723,6 +778,17 @@ def _persist_deliverable_lifecycle(
         }
     )
     metadata["lifecycle_history"] = history[-50:]
+    timestamps = dict(metadata.get("lifecycle_timestamps") or {})
+    timestamp_key = {
+        "mark_ready": "ready_at",
+        "submit_for_approval": "submitted_for_approval_at",
+        "deliver_to_client": "delivered_at",
+        "accept": "accepted_at",
+    }.get(action)
+    if timestamp_key and not timestamps.get(timestamp_key):
+        action_time = delivered_at if delivered_at is not None else now
+        timestamps[timestamp_key] = action_time.isoformat()
+    metadata["lifecycle_timestamps"] = timestamps
     deliverable.status = to_status
     deliverable.metadata_json = metadata
     update_fields = ["status", "metadata_json", "updated_at"]
