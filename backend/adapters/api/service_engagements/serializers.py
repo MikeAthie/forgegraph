@@ -176,6 +176,17 @@ class ServiceDeliverableCreateSerializer(serializers.Serializer[Any]):
     metadata = serializers.JSONField(required=False, default=dict)
 
 
+class ServiceDeliverableActionSerializer(serializers.Serializer[Any]):
+    action = serializers.ChoiceField(
+        choices=[
+            "mark_ready",
+            "submit_for_approval",
+            "deliver_to_client",
+            "accept",
+        ]
+    )
+
+
 class AtlasDeliverableAssembleSerializer(serializers.Serializer[Any]):
     deliverable_type = serializers.CharField(max_length=80, required=False)
 

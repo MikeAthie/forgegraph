@@ -10,6 +10,7 @@ from application.services.agency_deliverable_catalog import (
     get_deliverable_definition,
     list_deliverable_definitions,
 )
+from application.services.agency_deliverable_quality import refresh_deliverable_quality_gate
 from application.services.company_archive import ArchiveService
 from infrastructure.orm.models import (
     Asset,
@@ -140,6 +141,7 @@ def assemble_atlas_deliverable(
         "source_refs": _source_refs(sources),
         "blocked_by": blocked_by,
         "evidence": _evidence_refs(sources),
+        "requires_approval": definition.requires_approval,
     }
     deliverable = (
         ServiceDeliverable.objects.filter(
@@ -181,6 +183,7 @@ def assemble_atlas_deliverable(
                 "updated_at",
             ]
         )
+    refresh_deliverable_quality_gate(deliverable)
     return deliverable
 
 

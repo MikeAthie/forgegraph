@@ -6,6 +6,7 @@ from adapters.api.service_engagements.views import (
     AtlasDeliverableAssembleView,
     ServiceCatalogDetailView,
     ServiceCatalogListCreateView,
+    ServiceDeliverableActionView,
     ServiceDeliverableListCreateView,
     ServiceEngagementDetailView,
     ServiceEngagementListCreateView,
@@ -36,6 +37,11 @@ urlpatterns = [
         "service-engagements/<uuid:engagement_id>/deliverables",
         ServiceDeliverableListCreateView.as_view(),
         name="service-engagement-deliverables",
+    ),
+    path(
+        "service-deliverables/<uuid:deliverable_id>/actions",
+        ServiceDeliverableActionView.as_view(),
+        name="service-deliverable-actions",
     ),
     path(
         "whiteboards/<uuid:whiteboard_id>/atlas-deliverables/assemble",

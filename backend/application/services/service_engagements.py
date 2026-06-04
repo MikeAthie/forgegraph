@@ -6,6 +6,8 @@ from typing import Any
 
 from django.utils import timezone
 
+from application.services.agency_deliverable_quality import DeliverableQualityGate
+from application.services.audit_log import record_audit_log
 from infrastructure.orm.models import (
     Asset,
     AssetVersion,
@@ -15,6 +17,59 @@ from infrastructure.orm.models import (
     ServiceDeliverable,
     ServiceEngagement,
     User,
+)
+
+SERVICE_DELIVERABLE_ACTIONS = {
+    "accept",
+    "deliver_to_client",
+    "mark_ready",
+    "submit_for_approval",
+}
+_OMIT_METADATA_VALUE = object()
+_BLOCKED_METADATA_KEY_TOKENS = (
+    "api-key",
+    "api_key",
+    "apikey",
+    "confidential",
+    "credential",
+    "internal",
+    "password",
+    "private",
+    "secret",
+    "token",
+)
+_SECRET_METADATA_KEY_TOKENS = (
+    "api-key",
+    "api_key",
+    "apikey",
+    "credential",
+    "password",
+    "secret",
+    "token",
+)
+_BLOCKED_METADATA_TEXT_TOKENS = (
+    "api-key",
+    "api_key",
+    "api_key=",
+    "apikey",
+    "apikey=",
+    "bearer ",
+    "confidential",
+    "credential",
+    "credential=",
+    "do not share",
+    "internal only",
+    "internal-only",
+    "operator only",
+    "operator-only",
+    "password",
+    "password=",
+    "private",
+    "private note",
+    "secret",
+    "secret=",
+    "token",
+    "token=",
 )
 
 
@@ -94,7 +149,11 @@ def service_engagement_payload(
     return payload
 
 
-def service_deliverable_payload(deliverable: ServiceDeliverable) -> dict[str, Any]:
+def service_deliverable_payload(
+    deliverable: ServiceDeliverable,
+    *,
+    include_internal: bool = False,
+) -> dict[str, Any]:
     latest_version = _latest_asset_version(deliverable)
     return {
         "id": str(deliverable.id),
@@ -109,7 +168,10 @@ def service_deliverable_payload(deliverable: ServiceDeliverable) -> dict[str, An
         "artifact_id": str(deliverable.artifact_id) if deliverable.artifact_id else None,
         "report_run_id": str(deliverable.report_run_id) if deliverable.report_run_id else None,
         "summary": deliverable.summary,
-        "metadata": _safe_metadata(deliverable.metadata_json or {}),
+        "metadata": _deliverable_metadata_payload(
+            deliverable.metadata_json or {},
+            include_internal=include_internal,
+        ),
         "latest_asset_version_id": str(latest_version.id) if latest_version else None,
         "latest_asset_version_uri": latest_version.content_uri if latest_version else None,
         "latest_asset_version_mime_type": latest_version.mime_type if latest_version else None,
@@ -131,28 +193,129 @@ def _latest_asset_version(deliverable: ServiceDeliverable) -> AssetVersion | Non
 
 
 def _safe_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
-    blocked_tokens = ("private", "secret", "token", "credential", "password", "api_key")
     safe: dict[str, Any] = {}
     for key, value in metadata.items():
         key_text = str(key)
-        if any(token in key_text.lower() for token in blocked_tokens):
+        if _is_blocked_metadata_key(key_text):
             continue
-        safe[key_text] = _safe_metadata_value(value, blocked_tokens=blocked_tokens)
+        if key_text == "quality_gate" and isinstance(value, dict):
+            safe[key_text] = _safe_quality_gate_metadata(value)
+            continue
+        sanitized = _safe_metadata_value(value)
+        if sanitized is not _OMIT_METADATA_VALUE:
+            safe[key_text] = sanitized
     return safe
 
 
-def _safe_metadata_value(value: Any, *, blocked_tokens: tuple[str, ...]) -> Any:
+def _safe_metadata_value(value: Any) -> Any:
     if isinstance(value, dict):
         nested: dict[str, Any] = {}
         for key, item in value.items():
             key_text = str(key)
-            if any(token in key_text.lower() for token in blocked_tokens):
+            if _is_blocked_metadata_key(key_text):
                 continue
-            nested[key_text] = _safe_metadata_value(item, blocked_tokens=blocked_tokens)
+            if key_text == "quality_gate" and isinstance(item, dict):
+                nested[key_text] = _safe_quality_gate_metadata(item)
+                continue
+            sanitized = _safe_metadata_value(item)
+            if sanitized is not _OMIT_METADATA_VALUE:
+                nested[key_text] = sanitized
         return nested
     if isinstance(value, list):
-        return [_safe_metadata_value(item, blocked_tokens=blocked_tokens) for item in value]
+        sanitized_items = [_safe_metadata_value(item) for item in value]
+        return [item for item in sanitized_items if item is not _OMIT_METADATA_VALUE]
+    if isinstance(value, str) and _is_blocked_metadata_text(value):
+        return _OMIT_METADATA_VALUE
     return value
+
+
+def _safe_quality_gate_metadata(value: dict[str, Any]) -> dict[str, Any]:
+    safe: dict[str, Any] = {}
+    for key, item in value.items():
+        key_text = str(key)
+        if _is_secret_metadata_key(key_text):
+            continue
+        sanitized = _safe_quality_gate_value(item)
+        if sanitized is not _OMIT_METADATA_VALUE:
+            safe[key_text] = sanitized
+    return safe
+
+
+def _safe_quality_gate_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        nested: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if _is_secret_metadata_key(key_text):
+                continue
+            sanitized = _safe_quality_gate_value(item)
+            if sanitized is not _OMIT_METADATA_VALUE:
+                nested[key_text] = sanitized
+        return nested
+    if isinstance(value, list):
+        sanitized_items = [_safe_quality_gate_value(item) for item in value]
+        return [item for item in sanitized_items if item is not _OMIT_METADATA_VALUE]
+    if isinstance(value, str) and _contains_secret_like_metadata_text(value):
+        return _OMIT_METADATA_VALUE
+    return value
+
+
+def _is_blocked_metadata_key(key: str) -> bool:
+    normalized = key.lower()
+    return any(token in normalized for token in _BLOCKED_METADATA_KEY_TOKENS)
+
+
+def _is_secret_metadata_key(key: str) -> bool:
+    normalized = key.lower()
+    return any(token in normalized for token in _SECRET_METADATA_KEY_TOKENS)
+
+
+def _is_blocked_metadata_text(value: str) -> bool:
+    normalized = value.lower()
+    return any(token in normalized for token in _BLOCKED_METADATA_TEXT_TOKENS)
+
+
+def _contains_secret_like_metadata_text(value: str) -> bool:
+    normalized = value.lower()
+    return any(
+        token in normalized
+        for token in (
+            "api_key=",
+            "apikey=",
+            "bearer ",
+            "credential=",
+            "password=",
+            "secret=",
+            "token=",
+        )
+    )
+
+
+def _deliverable_metadata_payload(
+    metadata: dict[str, Any],
+    *,
+    include_internal: bool,
+) -> dict[str, Any]:
+    safe = _safe_metadata(metadata)
+    if include_internal:
+        return safe
+    safe.pop("lifecycle_history", None)
+    quality_gate = safe.get("quality_gate")
+    if isinstance(quality_gate, dict):
+        visibility = quality_gate.get("visibility")
+        safe["quality_gate"] = {
+            "status": quality_gate.get("status"),
+            "passed": quality_gate.get("passed"),
+            "score": quality_gate.get("score"),
+            "visibility": {
+                "client_safe": visibility.get("client_safe") if isinstance(visibility, dict) else None,
+                "customer_visible": visibility.get("customer_visible")
+                if isinstance(visibility, dict)
+                else None,
+            },
+            "requires_approval": quality_gate.get("requires_approval"),
+        }
+    return safe
 
 
 def create_service_catalog_item(
@@ -348,7 +511,7 @@ def create_service_deliverable(
     report_run = data.get("report_run")
     _validate_company_owned_output(engagement=engagement, artifact=artifact, report_run=report_run)
     status = str(data.get("status") or "draft")
-    return ServiceDeliverable.objects.create(
+    deliverable = ServiceDeliverable.objects.create(
         organization=engagement.organization,
         company=engagement.company,
         engagement=engagement,
@@ -363,6 +526,207 @@ def create_service_deliverable(
         metadata_json=dict(data.get("metadata") or {}),
         created_by=user,
         delivered_at=timezone.now() if status == "delivered" else None,
+    )
+    DeliverableQualityGate().refresh(deliverable)
+    return deliverable
+
+
+def apply_service_deliverable_action(
+    *,
+    deliverable: ServiceDeliverable,
+    action: str,
+    actor: User | None,
+) -> ServiceDeliverable:
+    normalized_action = str(action or "").strip()
+    if normalized_action not in SERVICE_DELIVERABLE_ACTIONS:
+        raise ServiceEngagementError(
+            "invalid_deliverable_action",
+            "Unsupported service deliverable action.",
+        )
+
+    if normalized_action == "mark_ready":
+        return _mark_deliverable_ready(deliverable=deliverable, actor=actor)
+    if normalized_action == "submit_for_approval":
+        return _submit_deliverable_for_approval(deliverable=deliverable, actor=actor)
+    if normalized_action == "deliver_to_client":
+        return _deliver_deliverable_to_client(deliverable=deliverable, actor=actor)
+    return _accept_deliverable(deliverable=deliverable, actor=actor)
+
+
+def _mark_deliverable_ready(
+    *,
+    deliverable: ServiceDeliverable,
+    actor: User | None,
+) -> ServiceDeliverable:
+    if deliverable.status in {"delivered", "accepted", "archived"}:
+        raise _transition_error("mark_ready", deliverable.status)
+    quality_gate = _evaluate_and_store_quality_gate(deliverable)
+    _raise_if_quality_blocked(quality_gate)
+    from_status = deliverable.status
+    _persist_deliverable_lifecycle(
+        deliverable=deliverable,
+        action="mark_ready",
+        actor=actor,
+        from_status=from_status,
+        to_status="ready",
+        quality_gate=quality_gate,
+    )
+    return deliverable
+
+
+def _submit_deliverable_for_approval(
+    *,
+    deliverable: ServiceDeliverable,
+    actor: User | None,
+) -> ServiceDeliverable:
+    if deliverable.status != "ready":
+        raise _transition_error("submit_for_approval", deliverable.status)
+    quality_gate = _evaluate_and_store_quality_gate(deliverable)
+    _raise_if_quality_blocked(quality_gate)
+    if not quality_gate.get("requires_approval"):
+        raise ServiceEngagementError(
+            "approval_not_required",
+            "This deliverable does not require approval.",
+        )
+    from_status = deliverable.status
+    _persist_deliverable_lifecycle(
+        deliverable=deliverable,
+        action="submit_for_approval",
+        actor=actor,
+        from_status=from_status,
+        to_status="in_review",
+        quality_gate=quality_gate,
+    )
+    _move_engagement_to_customer_review(deliverable.engagement)
+    return deliverable
+
+
+def _deliver_deliverable_to_client(
+    *,
+    deliverable: ServiceDeliverable,
+    actor: User | None,
+) -> ServiceDeliverable:
+    if deliverable.status not in {"ready", "in_review"}:
+        raise _transition_error("deliver_to_client", deliverable.status)
+    quality_gate = _evaluate_and_store_quality_gate(deliverable)
+    _raise_if_quality_blocked(quality_gate)
+    if quality_gate.get("requires_approval") and deliverable.status != "in_review":
+        raise ServiceEngagementError(
+            "approval_required",
+            "Submit this deliverable for approval before client delivery.",
+        )
+    from_status = deliverable.status
+    _persist_deliverable_lifecycle(
+        deliverable=deliverable,
+        action="deliver_to_client",
+        actor=actor,
+        from_status=from_status,
+        to_status="delivered",
+        quality_gate=quality_gate,
+        delivered_at=timezone.now(),
+    )
+    return deliverable
+
+
+def _accept_deliverable(
+    *,
+    deliverable: ServiceDeliverable,
+    actor: User | None,
+) -> ServiceDeliverable:
+    if deliverable.status != "delivered":
+        raise _transition_error("accept", deliverable.status)
+    quality_gate = _evaluate_and_store_quality_gate(deliverable)
+    _raise_if_quality_blocked(quality_gate)
+    from_status = deliverable.status
+    _persist_deliverable_lifecycle(
+        deliverable=deliverable,
+        action="accept",
+        actor=actor,
+        from_status=from_status,
+        to_status="accepted",
+        quality_gate=quality_gate,
+    )
+    return deliverable
+
+
+def _evaluate_and_store_quality_gate(deliverable: ServiceDeliverable) -> dict[str, Any]:
+    quality_gate = DeliverableQualityGate().evaluate(deliverable)
+    metadata = dict(deliverable.metadata_json or {})
+    metadata["quality_gate"] = quality_gate
+    deliverable.metadata_json = metadata
+    deliverable.save(update_fields=["metadata_json", "updated_at"])
+    return quality_gate
+
+
+def _raise_if_quality_blocked(quality_gate: dict[str, Any]) -> None:
+    blockers = quality_gate.get("blockers")
+    if isinstance(blockers, list) and blockers:
+        raise ServiceEngagementError(
+            "quality_gate_blocked",
+            "Deliverable quality gate has blockers.",
+            details=[item for item in blockers if isinstance(item, dict)],
+        )
+
+
+def _persist_deliverable_lifecycle(
+    *,
+    deliverable: ServiceDeliverable,
+    action: str,
+    actor: User | None,
+    from_status: str,
+    to_status: str,
+    quality_gate: dict[str, Any] | None,
+    delivered_at: Any | None = None,
+) -> None:
+    now = timezone.now()
+    metadata = dict(deliverable.metadata_json or {})
+    if quality_gate is not None:
+        metadata["quality_gate"] = quality_gate
+    history = list(metadata.get("lifecycle_history") or [])
+    history.append(
+        {
+            "action": action,
+            "actor_id": str(actor.id) if actor else None,
+            "from_status": from_status,
+            "to_status": to_status,
+            "at": now.isoformat(),
+            "quality_gate_status": quality_gate.get("status") if quality_gate else None,
+        }
+    )
+    metadata["lifecycle_history"] = history[-50:]
+    deliverable.status = to_status
+    deliverable.metadata_json = metadata
+    update_fields = ["status", "metadata_json", "updated_at"]
+    if delivered_at is not None:
+        deliverable.delivered_at = delivered_at
+        update_fields.append("delivered_at")
+    deliverable.save(update_fields=update_fields)
+    record_audit_log(
+        actor=actor,
+        tenant_id=str(deliverable.organization_id),
+        action=f"service_deliverable.{action}",
+        resource_type="service_deliverable",
+        resource_id=str(deliverable.id),
+        metadata={
+            "company_id": str(deliverable.company_id),
+            "engagement_id": str(deliverable.engagement_id),
+            "from_status": from_status,
+            "to_status": to_status,
+            "quality_gate_status": quality_gate.get("status") if quality_gate else None,
+        },
+    )
+
+
+def _move_engagement_to_customer_review(engagement: ServiceEngagement) -> None:
+    engagement.status = "waiting_on_customer"
+    engagement.customer_status = "review_ready"
+    engagement.save(update_fields=["status", "customer_status", "updated_at"])
+
+
+def _transition_error(action: str, current_status: str) -> ServiceEngagementError:
+    return ServiceEngagementError(
+        "invalid_deliverable_transition",
+        f"Cannot apply {action} to a deliverable in {current_status} status.",
     )
 
 

@@ -18,6 +18,7 @@ from adapters.api.service_engagements.serializers import (
     ServiceCatalogCreateSerializer,
     ServiceCatalogPatchSerializer,
     ServiceCatalogQuerySerializer,
+    ServiceDeliverableActionSerializer,
     ServiceDeliverableCreateSerializer,
     ServiceEngagementCreateSerializer,
     ServiceEngagementPatchSerializer,
@@ -33,6 +34,7 @@ from application.services.departments import can_mutate_department_work
 from application.services.rbac import has_min_role
 from application.services.service_engagements import (
     ServiceEngagementError,
+    apply_service_deliverable_action,
     create_service_catalog_item,
     create_service_deliverable,
     create_service_engagement,
@@ -321,8 +323,14 @@ class ServiceDeliverableListCreateView(APIView):
         queryset = ServiceDeliverable.objects.filter(engagement=engagement).order_by("-updated_at")
         if not has_company_access(user, engagement.company, "member"):
             queryset = queryset.exclude(visibility="internal")
+        include_internal = has_company_access(user, engagement.company, "member")
         return success_response(
-            {"deliverables": [service_deliverable_payload(item) for item in queryset]}
+            {
+                "deliverables": [
+                    service_deliverable_payload(item, include_internal=include_internal)
+                    for item in queryset
+                ]
+            }
         )
 
     def post(self, request: Request, engagement_id: UUID) -> Response:
@@ -370,8 +378,37 @@ class ServiceDeliverableListCreateView(APIView):
             },
         )
         return success_response(
-            {"deliverable": service_deliverable_payload(deliverable)},
+            {"deliverable": service_deliverable_payload(deliverable, include_internal=True)},
             status=http_status.HTTP_201_CREATED,
+        )
+
+
+class ServiceDeliverableActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, deliverable_id: UUID) -> Response:
+        user = cast(User, request.user)
+        serializer = ServiceDeliverableActionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        deliverable = _deliverable_for_user(user, deliverable_id, minimum_role="member")
+        if deliverable is None:
+            return _not_found("Service deliverable was not found.")
+        try:
+            deliverable = apply_service_deliverable_action(
+                deliverable=deliverable,
+                action=str(serializer.validated_data["action"]),
+                actor=user,
+            )
+        except ServiceEngagementError as exc:
+            return _service_error(exc)
+        return success_response(
+            {
+                "deliverable": service_deliverable_payload(
+                    deliverable,
+                    include_internal=has_company_access(user, deliverable.company, "member"),
+                )
+            }
         )
 
 
@@ -419,7 +456,8 @@ class AtlasDeliverableAssembleView(APIView):
             {
                 "engagement": service_engagement_payload(engagement, include_internal=True),
                 "deliverables": [
-                    service_deliverable_payload(deliverable) for deliverable in deliverables
+                    service_deliverable_payload(deliverable, include_internal=True)
+                    for deliverable in deliverables
                 ],
             }
         )
@@ -468,6 +506,20 @@ def _engagement_for_user(
     return (
         ServiceEngagement.objects.filter(id=engagement_id, company__in=companies)
         .select_related("company", "catalog_item", "assigned_operator", "requested_by")
+        .first()
+    )
+
+
+def _deliverable_for_user(
+    user: User,
+    deliverable_id: UUID,
+    *,
+    minimum_role: str,
+) -> ServiceDeliverable | None:
+    companies = accessible_company_queryset(user, minimum_role=minimum_role)
+    return (
+        ServiceDeliverable.objects.filter(id=deliverable_id, company__in=companies)
+        .select_related("company", "engagement", "engagement__catalog_item", "artifact", "report_run")
         .first()
     )
 

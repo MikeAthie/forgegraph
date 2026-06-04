@@ -396,7 +396,7 @@ def route_account_intake_clarification(
     )
 
 
-def update_whiteboard_field(
+def update_whiteboard_field(  # noqa: C901
     *,
     user: User,
     whiteboard: WorkWhiteboard,
