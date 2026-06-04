@@ -205,6 +205,12 @@ class AtlasLaunchReadinessSerializer(serializers.Serializer[Any]):
     dry_run = serializers.BooleanField(required=False, default=True)
     live_mode = serializers.BooleanField(required=False, default=False)
     create_receipt = serializers.BooleanField(required=False, default=False)
+    source_key = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
     idempotency_key = serializers.CharField(
         max_length=255,
         required=False,

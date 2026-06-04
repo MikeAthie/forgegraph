@@ -521,6 +521,81 @@ class ServiceEngagement(models.Model):
         return f"{self.company_id} {self.catalog_item_id} ({self.status})"
 
 
+class AtlasLaunchAttempt(models.Model):
+    """Backend-owned durable state for an Atlas campaign launch attempt."""
+
+    STATUS_CHOICES = [
+        ("dry_run", "Dry Run"),
+        ("blocked", "Blocked"),
+        ("ready", "Ready"),
+        ("launched", "Launched"),
+        ("failed", "Failed"),
+    ]
+    MODE_CHOICES = [("dry_run", "Dry Run"), ("live", "Live")]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="atlas_launch_attempts",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="atlas_launch_attempts",
+    )
+    whiteboard = models.ForeignKey(
+        "WorkWhiteboard",
+        on_delete=models.CASCADE,
+        related_name="atlas_launch_attempts",
+    )
+    source_key = models.CharField(max_length=255)
+    idempotency_key = models.CharField(max_length=255)
+    requested_mode = models.CharField(max_length=16, choices=MODE_CHOICES, default="dry_run")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="dry_run")
+    blocker_snapshot_json = models.JSONField(default=list, blank=True)
+    readiness_snapshot_json = models.JSONField(default=dict, blank=True)
+    receipt_deliverable = models.ForeignKey(
+        "ServiceDeliverable",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="atlas_launch_attempts",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_atlas_launch_attempts",
+    )
+    last_checkpoint_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "atlas_launch_attempts"
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "source_key"],
+                name="atlas_launch_att_comp_src_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "idempotency_key"],
+                name="atlas_launch_att_comp_idem_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "status"], name="atlas_launch_att_org_st_idx"),
+            models.Index(fields=["company", "status"], name="atlas_launch_att_comp_st_idx"),
+            models.Index(fields=["whiteboard", "status"], name="atlas_launch_att_board_st_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.company_id} {self.source_key} ({self.status})"
+
+
 class ServiceDeliverable(models.Model):
     """Customer-facing wrapper around a company-owned artifact or report."""
 
@@ -605,6 +680,73 @@ class ServiceDeliverable(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.status})"
+
+
+class AtlasLaunchCheckpoint(models.Model):
+    """Append-only audit checkpoint for an Atlas launch attempt."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="atlas_launch_checkpoints",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="atlas_launch_checkpoints",
+    )
+    attempt = models.ForeignKey(
+        AtlasLaunchAttempt,
+        on_delete=models.CASCADE,
+        related_name="checkpoints",
+    )
+    whiteboard = models.ForeignKey(
+        "WorkWhiteboard",
+        on_delete=models.CASCADE,
+        related_name="atlas_launch_checkpoints",
+    )
+    sequence = models.PositiveIntegerField()
+    checkpoint_type = models.CharField(max_length=80, default="readiness_evaluated")
+    requested_mode = models.CharField(max_length=16, choices=AtlasLaunchAttempt.MODE_CHOICES)
+    status = models.CharField(max_length=16, choices=AtlasLaunchAttempt.STATUS_CHOICES)
+    idempotency_key = models.CharField(max_length=255)
+    source_key = models.CharField(max_length=255)
+    blocker_snapshot_json = models.JSONField(default=list, blank=True)
+    readiness_snapshot_json = models.JSONField(default=dict, blank=True)
+    receipt_deliverable = models.ForeignKey(
+        ServiceDeliverable,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="atlas_launch_checkpoints",
+    )
+    recorded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_atlas_launch_checkpoints",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "atlas_launch_checkpoints"
+        ordering = ["attempt", "sequence"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["attempt", "sequence"],
+                name="atlas_launch_cp_att_seq_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["organization", "created_at"], name="atlas_launch_cp_org_cr_idx"),
+            models.Index(fields=["company", "status"], name="atlas_launch_cp_comp_st_idx"),
+            models.Index(fields=["whiteboard", "created_at"], name="atlas_launch_cp_board_cr_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.attempt_id} #{self.sequence} ({self.status})"
 
 
 class CompanyProgram(models.Model):

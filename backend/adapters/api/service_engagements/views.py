@@ -30,6 +30,11 @@ from application.services.agency_deliverables import (
     assemble_atlas_mvp_deliverables,
 )
 from application.services.agency_launch_readiness import CampaignLaunchReadiness
+from application.services.atlas_launch_attempts import (
+    launch_attempt_payload,
+    launch_status_from_readiness,
+    record_launch_attempt_checkpoint,
+)
 from application.services.audit_log import record_audit_log
 from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.departments import can_mutate_department_work
@@ -587,43 +592,60 @@ class AtlasLaunchReadinessView(APIView):
             or not bool(validated.get("dry_run", True))
         )
         create_receipt = bool(validated.get("create_receipt"))
-        context = None
-        if create_receipt:
-            context, error = _command_context(
-                request=request,
-                company=whiteboard.company,
-                action=f"atlas.launch_readiness.receipt:{whiteboard_id}",
-            )
-            if error is not None:
-                return error
-            try:
-                replay = replay_processed_command(context)
-            except IdempotencyConflict as exc:
-                return _idempotency_conflict_response(exc)
-            if replay is not None:
-                return replay
+        context, error = _command_context(
+            request=request,
+            company=whiteboard.company,
+            action=f"atlas.launch_attempt:{whiteboard_id}",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
+
+        idempotency_key = str(validated.get("idempotency_key") or idempotency_key_from_request(request))
+        source_key = str(validated.get("source_key") or f"atlas-launch:{whiteboard.id}:{idempotency_key}")
+        requested_mode = "live" if live_mode else "dry_run"
         readiness = CampaignLaunchReadiness().evaluate(
             whiteboard=whiteboard,
             user=user,
             live_mode=live_mode,
-            idempotency_key=str(
-                validated.get("idempotency_key") or idempotency_key_from_request(request)
-            ),
+            idempotency_key=idempotency_key,
             create_receipt=create_receipt,
         )
         receipt = readiness.get("receipt_deliverable")
         readiness_payload = {
             key: value for key, value in readiness.items() if key != "receipt_deliverable"
         }
-        payload: dict[str, Any] = {"readiness": readiness_payload}
+        receipt_deliverable = None
+        if isinstance(receipt, dict) and receipt.get("id"):
+            receipt_deliverable = ServiceDeliverable.objects.filter(id=receipt["id"]).first()
+        attempt = record_launch_attempt_checkpoint(
+            whiteboard=whiteboard,
+            user=user,
+            idempotency_key=idempotency_key,
+            source_key=source_key,
+            requested_mode=requested_mode,
+            status=launch_status_from_readiness(readiness_payload, live_mode=live_mode),
+            readiness=readiness_payload,
+            receipt_deliverable=receipt_deliverable,
+        )
+        payload: dict[str, Any] = {
+            "readiness": readiness_payload,
+            "launch_attempt": launch_attempt_payload(attempt),
+        }
         if isinstance(receipt, dict):
             payload["receipt_deliverable"] = receipt
         response = success_response(payload)
+        resource_id = str(attempt.id)
         return record_processed_command(
             context=context,
             response=response,
-            resource_type="service_deliverable",
-            resource_id=str(receipt.get("id") if isinstance(receipt, dict) else ""),
+            resource_type="atlas_launch_attempt",
+            resource_id=resource_id,
         )
 
 
