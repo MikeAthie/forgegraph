@@ -4951,6 +4951,67 @@ routes:
     expected: *company_ops_jwt_read_expected
     rate_limit_scope: default
     request_size_limit: api_default
+  - id: company-ops-reporting-cadences-read
+    names:
+      - company-ops-reporting-cadences
+    paths:
+      - /api/company-ops/reporting-cadences
+      - /api/v1/company-ops/reporting-cadences
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: viewer
+    org_scope: tenant
+    company_scope: required
+    company_role: viewer
+    expected: *company_ops_jwt_read_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: company-ops-reporting-cadences-write
+    names:
+      - company-ops-reporting-cadences
+    paths:
+      - /api/company-ops/reporting-cadences
+      - /api/v1/company-ops/reporting-cadences
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    company_scope: required
+    company_role: member
+    expected: &company_ops_jwt_write_expected
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: 403
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: 413
+    rate_limit_scope: default
+    request_size_limit: api_default
+    idempotency_required: true
+    sensitive_audit_action: company_ops.reporting_cadence.plan_upsert
+  - id: company-ops-reporting-cadence-runs-create
+    names:
+      - company-ops-reporting-cadence-runs
+    paths:
+      - /api/company-ops/reporting-cadences/<uuid:plan_id>/runs
+      - /api/v1/company-ops/reporting-cadences/<uuid:plan_id>/runs
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    company_scope: required
+    company_role: member
+    expected: *company_ops_jwt_write_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+    idempotency_required: true
+    sensitive_audit_action: company_ops.reporting_cadence.run_generate
   - id: company-ops-signals-read
     names:
       - company-ops-signals
@@ -4976,16 +5037,7 @@ routes:
     auth_surface: jwt
     required_role: member
     org_scope: tenant
-    expected: &company_ops_jwt_write_expected
-      unauthenticated: 401
-      expired_token: 401
-      revoked_token: 401
-      wrong_org: 403_or_404
-      insufficient_role: 403
-      correct_role: 2xx_or_domain_error
-      malformed_payload: 400_or_domain_error
-      rate_limited: 429
-      oversized_request: 413
+    expected: *company_ops_jwt_write_expected
     rate_limit_scope: default
     request_size_limit: api_default
   - id: company-ops-signal-qualify
@@ -5409,6 +5461,40 @@ routes:
     rate_limit_scope: default
     request_size_limit: api_default
     sensitive_audit_action: service_engagement.updated
+  - id: service-engagement-business-snapshots-read
+    names:
+      - service-engagement-business-snapshots
+    paths:
+      - /api/service-engagements/<uuid:engagement_id>/business-snapshots
+      - /api/v1/service-engagements/<uuid:engagement_id>/business-snapshots
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: viewer
+    org_scope: tenant
+    company_scope: required
+    company_role: viewer
+    expected: *company_ops_jwt_read_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: service-engagement-business-snapshots-create
+    names:
+      - service-engagement-business-snapshots
+    paths:
+      - /api/service-engagements/<uuid:engagement_id>/business-snapshots
+      - /api/v1/service-engagements/<uuid:engagement_id>/business-snapshots
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    company_scope: required
+    company_role: member
+    expected: *company_ops_jwt_write_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+    idempotency_required: true
+    sensitive_audit_action: service_engagement.business_snapshot_recorded
   - id: service-engagement-deliverables-read
     names:
       - service-engagement-deliverables
@@ -6780,3 +6866,326 @@ routes:
       oversized_request: skip
     rate_limit_scope: websocket_ticket
     request_size_limit: not_applicable
+  - id: company-ops-agency-health
+    names:
+      - company-ops-agency-health
+    paths:
+      - /api/company-ops/agency-health
+      - /api/v1/company-ops/agency-health
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: viewer
+    org_scope: tenant
+    expected:
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: skip
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: skip
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: company-ops-atlas-onboarding-read
+    names:
+      - company-ops-atlas-onboarding
+    paths:
+      - /api/company-ops/atlas-onboarding
+      - /api/v1/company-ops/atlas-onboarding
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: viewer
+    org_scope: tenant
+    expected:
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: skip
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: skip
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: company-ops-atlas-onboarding-write
+    names:
+      - company-ops-atlas-onboarding
+    paths:
+      - /api/company-ops/atlas-onboarding
+      - /api/v1/company-ops/atlas-onboarding
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected:
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: 403
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: 413
+    rate_limit_scope: default
+    request_size_limit: api_default
+    idempotency_required: true
+  - id: gateway-capabilities
+    names:
+      - gateway-capabilities
+    paths:
+      - /api/gateway/capabilities
+      - /api/v1/gateway/capabilities
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected: &gateway_jwt_member_expected
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: 403
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: skip
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: gateway-connections-read
+    names:
+      - gateway-connections
+    paths:
+      - /api/gateway/connections
+      - /api/v1/gateway/connections
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected: *gateway_jwt_member_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: gateway-connections-write
+    names:
+      - gateway-connections
+    paths:
+      - /api/gateway/connections
+      - /api/v1/gateway/connections
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: admin
+    org_scope: tenant
+    expected: &gateway_jwt_admin_write_expected
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: 403
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: 413
+    rate_limit_scope: default
+    request_size_limit: api_default
+    sensitive_audit_action: gateway.connection.created
+  - id: gateway-connection-detail
+    names:
+      - gateway-connection-detail
+    paths:
+      - /api/gateway/connections/<uuid:connection_id>
+      - /api/v1/gateway/connections/<uuid:connection_id>
+    methods:
+      - PATCH
+    auth_surface: jwt
+    required_role: admin
+    org_scope: tenant
+    expected: *gateway_jwt_admin_write_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+    sensitive_audit_action: gateway.connection.updated
+  - id: gateway-connection-health
+    names:
+      - gateway-connection-health
+    paths:
+      - /api/gateway/connections/<uuid:connection_id>/health-check
+      - /api/v1/gateway/connections/<uuid:connection_id>/health-check
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected:
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: 403
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: 413
+    rate_limit_scope: default
+    request_size_limit: api_default
+    sensitive_audit_action: gateway.connection.health_checked
+  - id: gateway-connection-diagnostics
+    names:
+      - gateway-connection-diagnostics
+    paths:
+      - /api/gateway/connections/<uuid:connection_id>/diagnostics
+      - /api/v1/gateway/connections/<uuid:connection_id>/diagnostics
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected: *gateway_jwt_member_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: gateway-schedules-read
+    names:
+      - gateway-schedules
+    paths:
+      - /api/gateway/schedules
+      - /api/v1/gateway/schedules
+    methods:
+      - GET
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected: *gateway_jwt_member_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: gateway-schedules-write
+    names:
+      - gateway-schedules
+    paths:
+      - /api/gateway/schedules
+      - /api/v1/gateway/schedules
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: admin
+    org_scope: tenant
+    expected: *gateway_jwt_admin_write_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+    sensitive_audit_action: gateway.schedule.created
+  - id: gateway-schedule-detail
+    names:
+      - gateway-schedule-detail
+    paths:
+      - /api/gateway/schedules/<uuid:schedule_id>
+      - /api/v1/gateway/schedules/<uuid:schedule_id>
+    methods:
+      - PATCH
+      - DELETE
+    auth_surface: jwt
+    required_role: admin
+    org_scope: tenant
+    expected: *gateway_jwt_admin_write_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+    sensitive_audit_action: gateway.schedule.updated_or_deleted
+  - id: gateway-schedule-run-now
+    names:
+      - gateway-schedule-run-now
+    paths:
+      - /api/gateway/schedules/<uuid:schedule_id>/run-now
+      - /api/v1/gateway/schedules/<uuid:schedule_id>/run-now
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected:
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: 403
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: 413
+    rate_limit_scope: default
+    request_size_limit: api_default
+    sensitive_audit_action: gateway.schedule.run_now
+  - id: integrations-gateway-webhook-graph-version-id
+    names:
+      - gateway-webhook
+    paths:
+      - /api/integrations/gateway/<str:platform>/webhook/<uuid:graph_version_id>
+      - /api/v1/integrations/gateway/<str:platform>/webhook/<uuid:graph_version_id>
+    methods:
+      - GET
+      - POST
+    auth_surface: provider_signed
+    required_role: none
+    org_scope: none
+    expected:
+      unauthenticated: 200
+      expired_token: skip
+      revoked_token: skip
+      wrong_org: skip
+      insufficient_role: skip
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: 413
+    rate_limit_scope: provider_webhook
+    request_size_limit: api_default
+  - id: whiteboard-atlas-deliverables-assemble
+    names:
+      - whiteboard-atlas-deliverables-assemble
+    paths:
+      - /api/whiteboards/<uuid:whiteboard_id>/atlas-deliverables/assemble
+      - /api/v1/whiteboards/<uuid:whiteboard_id>/atlas-deliverables/assemble
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected:
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: 403
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: 413
+    rate_limit_scope: default
+    request_size_limit: api_default
+  - id: whiteboard-atlas-launch-readiness
+    names:
+      - whiteboard-atlas-launch-readiness
+    paths:
+      - /api/whiteboards/<uuid:whiteboard_id>/atlas-launch/readiness
+      - /api/v1/whiteboards/<uuid:whiteboard_id>/atlas-launch/readiness
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    expected:
+      unauthenticated: 401
+      expired_token: 401
+      revoked_token: 401
+      wrong_org: 403_or_404
+      insufficient_role: 403
+      correct_role: 2xx_or_domain_error
+      malformed_payload: 400_or_domain_error
+      rate_limited: 429
+      oversized_request: 413
+    rate_limit_scope: default
+    request_size_limit: api_default

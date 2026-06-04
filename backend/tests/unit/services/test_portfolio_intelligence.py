@@ -216,6 +216,7 @@ def test_portfolio_intelligence_aggregates_accessible_companies_without_raw_peer
     assert payload["benchmarks"]["churn_risk_score"]["sample_size"] == 2
     assert payload["benchmarks"]["expansion_opportunity_score"]["sample_size"] == 2
     assert payload["benchmarks"]["churn_risk_score"]["median"] is not None
+    assert payload["priority_queue"][0]["priority"] in {"protect", "expand"}
     rendered = json.dumps(payload, sort_keys=True, default=str)
     assert "Hidden Client" not in rendered
     assert "Hidden tenant risk" not in rendered
@@ -268,3 +269,37 @@ def test_company_ops_portfolio_intelligence_api_uses_assignment_scoping(
     assert "Allowed Benchmark Client" not in rendered
     assert "Hidden Benchmark Client" not in rendered
     assert "Hidden risk" not in rendered
+
+
+def test_portfolio_benchmarks_are_suppressed_below_minimum_peer_count(user) -> None:
+    ensure_default_organization(user)
+    allowed = _company(user, "Solo Benchmark Client")
+    hidden = _company(user, "Hidden Solo Peer")
+    member = _restrict_to_assignments(user, allowed, hidden, assigned_count=1)
+    organization = _organization(allowed)
+    CompanySignal.objects.create(
+        organization=organization,
+        company=allowed,
+        created_by=user,
+        signal_type="fulfillment_issue",
+        signal_kind="risk",
+        status="new",
+        source="manual",
+        title="Solo risk",
+    )
+
+    payload = portfolio_intelligence_payload(member)
+
+    assert payload["summary"]["companies_analyzed"] == 1
+    assert payload["privacy"]["minimum_peer_count"] == 2
+    churn_benchmark = payload["benchmarks"]["churn_risk_score"]
+    assert churn_benchmark["sample_size"] == 1
+    assert churn_benchmark["suppressed"] is True
+    assert churn_benchmark["suppression_reason"] == "minimum_peer_count"
+    assert churn_benchmark["average"] is None
+    assert churn_benchmark["median"] is None
+    assert churn_benchmark["minimum"] is None
+    assert churn_benchmark["maximum"] is None
+    rendered = json.dumps(payload, sort_keys=True, default=str)
+    assert "Solo Benchmark Client" not in rendered
+    assert "Hidden Solo Peer" not in rendered

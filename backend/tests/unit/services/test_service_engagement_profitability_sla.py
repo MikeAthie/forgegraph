@@ -5,9 +5,11 @@ from decimal import Decimal
 from typing import cast
 
 import pytest
+from django.db import IntegrityError
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from application.services import service_engagement_snapshots as snapshots
 from application.services.agency_growth_signals import build_agency_growth_signals
 from application.services.service_engagement_snapshots import (
     record_service_engagement_business_snapshot,
@@ -313,3 +315,59 @@ def test_growth_signals_use_latest_backend_business_snapshot(user: User) -> None
     assert payload["profit"]["profitability_band"] == "healthy"
     assert payload["scope"]["status"] == "warning"
     assert payload["scope"]["utilization_percent"] == "120.00"
+
+
+def test_business_snapshot_replays_after_concurrent_unique_conflict(monkeypatch) -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "atlas-profit-race@example.com")
+    company = _company(org, owner)
+    engagement = _engagement(company, owner)
+    payload = _snapshot_payload()
+    first = record_service_engagement_business_snapshot(
+        engagement=engagement,
+        actor=owner,
+        data=payload,
+        idempotency_key="profitability-sla-race",
+    )
+
+    original_existing = snapshots._existing_snapshot
+    original_existing_locked = snapshots._existing_snapshot_locked
+    calls = {"existing": 0, "locked": 0}
+
+    def miss_then_existing(*, engagement, idempotency_key, source_key):
+        calls["existing"] += 1
+        if calls["existing"] == 1:
+            return None
+        return original_existing(
+            engagement=engagement,
+            idempotency_key=idempotency_key,
+            source_key=source_key,
+        )
+
+    def miss_locked_once(*, engagement, idempotency_key, source_key):
+        calls["locked"] += 1
+        if calls["locked"] == 1:
+            return None
+        return original_existing_locked(
+            engagement=engagement,
+            idempotency_key=idempotency_key,
+            source_key=source_key,
+        )
+
+    def raise_unique_conflict(**kwargs):
+        raise IntegrityError("duplicate key value violates unique constraint")
+
+    monkeypatch.setattr(snapshots, "_existing_snapshot", miss_then_existing)
+    monkeypatch.setattr(snapshots, "_existing_snapshot_locked", miss_locked_once)
+    monkeypatch.setattr(ServiceEngagementBusinessSnapshot.objects, "create", raise_unique_conflict)
+
+    replay = record_service_engagement_business_snapshot(
+        engagement=engagement,
+        actor=owner,
+        data=payload,
+        idempotency_key="profitability-sla-race",
+    )
+
+    assert replay.id == first.id
+    assert replay._idempotency_status == "already_applied"
+    assert ServiceEngagementBusinessSnapshot.objects.count() == 1

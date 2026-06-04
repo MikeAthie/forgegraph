@@ -440,3 +440,17 @@ def test_expansion_intelligence_recommends_cross_sell_from_successful_delivery(u
     rendered = json.dumps(payload, sort_keys=True, default=str)
     assert "hidden" not in rendered
     assert "secret" not in rendered
+
+
+def test_account_health_score_contributes_to_retention_risk(user) -> None:
+    company, _version = _company(user)
+    _engagement(company, user, metadata={"private_token": "do-not-render"})
+
+    payload = build_agency_growth_signals(company)
+
+    factor_slugs = {item["slug"] for item in payload["retention"]["factors"]}
+    assert "account_health_attention" in factor_slugs
+    assert payload["retention"]["risk_score"] > 0
+    rendered = json.dumps(payload, sort_keys=True, default=str)
+    assert "do-not-render" not in rendered
+    assert "private_token" not in rendered

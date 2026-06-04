@@ -6,7 +6,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from application.services.audit_log import record_audit_log
@@ -105,38 +105,55 @@ def record_service_engagement_business_snapshot(
             existing._idempotency_status = "already_applied"
             return existing
 
-        snapshot = ServiceEngagementBusinessSnapshot.objects.create(
-            organization=engagement.organization,
-            company=engagement.company,
-            engagement=engagement,
-            source_key=source_key,
-            idempotency_key=normalized_key,
-            request_hash=request_hash,
-            period_start=values["period_start"],
-            period_end=values["period_end"],
-            currency=values["currency"],
-            revenue_amount=values["revenue_amount"],
-            delivery_cost_amount=values["delivery_cost_amount"],
-            pass_through_cost_amount=values["pass_through_cost_amount"],
-            tooling_cost_amount=values["tooling_cost_amount"],
-            gross_margin_amount=values["gross_margin_amount"],
-            gross_margin_percent=values["gross_margin_percent"],
-            profitability_band=values["profitability_band"],
-            scope_unit=values["scope_unit"],
-            scope_included_units=values["scope_included_units"],
-            scope_used_units=values["scope_used_units"],
-            scope_overage_units=values["scope_overage_units"],
-            scope_utilization_percent=values["scope_utilization_percent"],
-            scope_status=values["scope_status"],
-            sla_target_hours=values["sla_target_hours"],
-            sla_elapsed_hours=values["sla_elapsed_hours"],
-            sla_breach_count=values["sla_breach_count"],
-            sla_status=values["sla_status"],
-            snapshot_json=values["snapshot_json"],
-            metadata_json=values["metadata_json"],
-            recorded_by=actor,
-            recorded_at=now,
-        )
+        try:
+            with transaction.atomic():
+                snapshot = ServiceEngagementBusinessSnapshot.objects.create(
+                    organization=engagement.organization,
+                    company=engagement.company,
+                    engagement=engagement,
+                    source_key=source_key,
+                    idempotency_key=normalized_key,
+                    request_hash=request_hash,
+                    period_start=values["period_start"],
+                    period_end=values["period_end"],
+                    currency=values["currency"],
+                    revenue_amount=values["revenue_amount"],
+                    delivery_cost_amount=values["delivery_cost_amount"],
+                    pass_through_cost_amount=values["pass_through_cost_amount"],
+                    tooling_cost_amount=values["tooling_cost_amount"],
+                    gross_margin_amount=values["gross_margin_amount"],
+                    gross_margin_percent=values["gross_margin_percent"],
+                    profitability_band=values["profitability_band"],
+                    scope_unit=values["scope_unit"],
+                    scope_included_units=values["scope_included_units"],
+                    scope_used_units=values["scope_used_units"],
+                    scope_overage_units=values["scope_overage_units"],
+                    scope_utilization_percent=values["scope_utilization_percent"],
+                    scope_status=values["scope_status"],
+                    sla_target_hours=values["sla_target_hours"],
+                    sla_elapsed_hours=values["sla_elapsed_hours"],
+                    sla_breach_count=values["sla_breach_count"],
+                    sla_status=values["sla_status"],
+                    snapshot_json=values["snapshot_json"],
+                    metadata_json=values["metadata_json"],
+                    recorded_by=actor,
+                    recorded_at=now,
+                )
+        except IntegrityError as exc:
+            existing = _existing_snapshot_locked(
+                engagement=engagement,
+                idempotency_key=normalized_key,
+                source_key=source_key,
+            )
+            if existing is None:
+                raise
+            if existing.request_hash != request_hash:
+                raise ServiceEngagementError(
+                    "idempotency_conflict",
+                    "Idempotency key or source key was already used with a different snapshot body.",
+                ) from exc
+            existing._idempotency_status = "already_applied"
+            return existing
         _record_snapshot_audit(snapshot=snapshot, actor=actor)
         _record_snapshot_domain_event(snapshot)
 

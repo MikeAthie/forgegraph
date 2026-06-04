@@ -29,10 +29,18 @@ from infrastructure.orm.models import (
 )
 
 
-def build_agency_account_health_snapshot(company: Graph) -> dict[str, Any]:
+def build_agency_account_health_snapshot(
+    company: Graph,
+    *,
+    include_growth_signals: bool = True,
+) -> dict[str, Any]:
     connector_readiness = build_connector_readiness(company)
     recurring_reporting = build_recurring_reporting_status(company)
-    growth_signals = build_agency_growth_signals(company)
+    growth_signals = (
+        build_agency_growth_signals(company)
+        if include_growth_signals
+        else _empty_growth_signals()
+    )
     onboarding = build_virtual_onboarding_checklist(
         company,
         connector_readiness=connector_readiness,
@@ -69,6 +77,15 @@ def build_agency_account_health_snapshot(company: Graph) -> dict[str, Any]:
         "risks": risks,
         "opportunities": opportunities,
         "next_actions": next_actions,
+    }
+
+
+def _empty_growth_signals() -> dict[str, Any]:
+    return {
+        "commercial": {"status": "unknown"},
+        "scope": {"status": "unknown", "warnings": []},
+        "retention": {"status": "unknown", "factors": []},
+        "expansion": {"status": "unknown", "opportunities": []},
     }
 
 

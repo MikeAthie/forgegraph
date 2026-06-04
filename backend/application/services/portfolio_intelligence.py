@@ -64,6 +64,7 @@ def portfolio_intelligence_payload(user: User) -> dict[str, Any]:
             ),
         },
         "segments": _segments(summary),
+        "priority_queue": _priority_queue(summary),
         "insights": _insights(summary),
     }
 
@@ -91,9 +92,12 @@ def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _benchmark(values: list[int]) -> dict[str, Any]:
-    if not values:
+    sample_size = len(values)
+    if sample_size < 2:
         return {
-            "sample_size": 0,
+            "sample_size": sample_size,
+            "suppressed": True,
+            "suppression_reason": "minimum_peer_count" if sample_size else "no_data",
             "average": None,
             "median": None,
             "minimum": None,
@@ -101,8 +105,10 @@ def _benchmark(values: list[int]) -> dict[str, Any]:
         }
     sorted_values = sorted(values)
     return {
-        "sample_size": len(sorted_values),
-        "average": round(sum(sorted_values) / len(sorted_values), 2),
+        "sample_size": sample_size,
+        "suppressed": False,
+        "suppression_reason": None,
+        "average": round(sum(sorted_values) / sample_size, 2),
         "median": float(median(sorted_values)),
         "minimum": sorted_values[0],
         "maximum": sorted_values[-1],
@@ -126,6 +132,37 @@ def _segments(summary: dict[str, Any]) -> list[dict[str, Any]]:
         }
         for slug, key in segments
     ]
+
+
+def _priority_queue(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    queue: list[dict[str, Any]] = []
+    high_risk = int(summary.get("high_churn_risk") or 0)
+    if high_risk:
+        queue.append(
+            {
+                "priority": "protect",
+                "company_count": high_risk,
+                "summary": "Protect the aggregate high churn-risk account segment.",
+            }
+        )
+    expansion_accounts = int(summary.get("expansion_opportunity_accounts") or 0)
+    if expansion_accounts:
+        queue.append(
+            {
+                "priority": "expand",
+                "company_count": expansion_accounts,
+                "summary": "Expand the aggregate account segment with qualified opportunities.",
+            }
+        )
+    if int(summary.get("connector_gap_accounts") or 0):
+        queue.append(
+            {
+                "priority": "unblock",
+                "company_count": int(summary.get("connector_gap_accounts") or 0),
+                "summary": "Unblock the aggregate account segment with connector gaps.",
+            }
+        )
+    return queue
 
 
 def _insights(summary: dict[str, Any]) -> list[dict[str, Any]]:

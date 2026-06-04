@@ -555,6 +555,21 @@ def _retention_factors(
                 "Connector readiness gaps can reduce delivery reliability.",
             )
         )
+    from application.services.agency_account_health import build_agency_account_health_snapshot
+
+    account_health = build_agency_account_health_snapshot(company, include_growth_signals=False)
+    health_summary = _mapping(account_health.get("health"))
+    health_score = _int_or_none(health_summary.get("score"))
+    if health_score is not None and health_score < 80:
+        severity = "high" if health_score < 50 else "medium"
+        factors.append(
+            _insight(
+                "account_health_attention",
+                severity,
+                25 if severity == "high" else 15,
+                "Account health is below the target operating range and needs operator review.",
+            )
+        )
     if _sla_breach_count(company):
         factors.append(
             _insight(
@@ -647,6 +662,15 @@ def _summary_status(
 
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _int_or_none(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _decimal_or_none(value: Any) -> Decimal | None:
