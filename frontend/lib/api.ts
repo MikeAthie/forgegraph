@@ -232,6 +232,7 @@ const API_PATHS = {
   },
   companyOps: {
     overview: "/api/company-ops/overview",
+    agencyHealth: "/api/company-ops/agency-health",
     signals: "/api/company-ops/signals",
     qualifySignal: (signalId: string) => `/api/company-ops/signals/${signalId}/qualify`,
     opportunities: "/api/company-ops/opportunities",
@@ -1727,6 +1728,82 @@ export type CompanyOpsOverview = {
   }>;
 };
 
+export type AgencyHealthDimensionDTO = {
+  slug?: unknown;
+  label?: unknown;
+  score?: unknown;
+  status?: unknown;
+  weight?: unknown;
+  owner_department_slug?: unknown;
+  summary?: unknown;
+  [key: string]: unknown;
+};
+
+export type AgencyOnboardingItemDTO = {
+  slug?: unknown;
+  label?: unknown;
+  status?: unknown;
+  owner_department_slug?: unknown;
+  message?: unknown;
+  [key: string]: unknown;
+};
+
+export type AgencyConnectorReadinessItemDTO = {
+  slug?: unknown;
+  label?: unknown;
+  category?: unknown;
+  required?: unknown;
+  status?: unknown;
+  readiness?: unknown;
+  owner_department_slug?: unknown;
+  source?: unknown;
+  last_seen_at?: unknown;
+  last_health_check_at?: unknown;
+  message?: unknown;
+  [key: string]: unknown;
+};
+
+export type AgencyConnectorReadinessDTO = {
+  status?: unknown;
+  summary?: unknown;
+  connectors?: unknown;
+  [key: string]: unknown;
+};
+
+export type AgencyHealthFindingDTO = {
+  slug?: unknown;
+  label?: unknown;
+  severity?: unknown;
+  priority?: unknown;
+  owner_department_slug?: unknown;
+  summary?: unknown;
+  [key: string]: unknown;
+};
+
+export type AgencyHealthNextActionDTO = {
+  slug?: unknown;
+  label?: unknown;
+  priority?: unknown;
+  owner_department_slug?: unknown;
+  reason?: unknown;
+  [key: string]: unknown;
+};
+
+export type AgencyHealthSnapshotDTO = {
+  company_id?: unknown;
+  generated_at?: unknown;
+  profile?: unknown;
+  health?: unknown;
+  onboarding_items?: unknown;
+  connector_readiness?: unknown;
+  recurring_reporting?: unknown;
+  growth_signals?: unknown;
+  risks?: unknown;
+  opportunities?: unknown;
+  next_actions?: unknown;
+  [key: string]: unknown;
+};
+
 export const inventoryApi = {
   getOverview: async (companyId: string): Promise<InventoryOverview> => {
     const response = await api.get<ApiSuccessResponse<{ inventory: InventoryOverview }>>(API_PATHS.inventory.overview, {
@@ -1881,6 +1958,14 @@ export const companyOpsApi = {
       { params: { company_id: companyId } },
     );
     return response.data.data.company_ops;
+  },
+
+  getAgencyHealth: async (companyId: string): Promise<AgencyHealthSnapshotDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ agency_health: AgencyHealthSnapshotDTO }>>(
+      API_PATHS.companyOps.agencyHealth,
+      { params: { company_id: companyId } },
+    );
+    return response.data.data.agency_health;
   },
 
   createSignal: async (
