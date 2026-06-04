@@ -23,6 +23,7 @@ from adapters.api.company_ops.serializers import (
     PublicationDraftCreateSerializer,
 )
 from adapters.api.responses import error_response, success_response
+from application.services.agency_account_health import build_agency_account_health_snapshot
 from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.company_ops import (
     CompanyOpsError,
@@ -69,6 +70,18 @@ class CompanyOpsOverviewView(APIView):
         if isinstance(company_or_response, Response):
             return company_or_response
         return success_response({"company_ops": company_ops_overview_payload(company_or_response)})
+
+
+class AgencyHealthView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        company_or_response = _company_from_query(request, minimum_role="viewer")
+        if isinstance(company_or_response, Response):
+            return company_or_response
+        return success_response(
+            {"agency_health": build_agency_account_health_snapshot(company_or_response)}
+        )
 
 
 class CompanySignalsView(APIView):
