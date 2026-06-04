@@ -130,7 +130,7 @@ def test_assemble_client_brief_creates_asset_version_and_deliverable() -> None:
     assert deliverable.artifact == asset
     assert deliverable.metadata_json["whiteboard_id"] == str(whiteboard.id)
     assert deliverable.metadata_json["deliverable_type"] == "client_brief"
-    assert deliverable.metadata_json["owner_department_slug"] == "account_management"
+    assert deliverable.metadata_json["owner_department_slug"] == "client_approval_ops"
     assert deliverable.metadata_json["asset_version_id"] == str(version.id)
 
 

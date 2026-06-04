@@ -3,6 +3,7 @@
 from django.urls import path
 
 from adapters.api.service_engagements.views import (
+    AtlasDeliverableAssembleView,
     ServiceCatalogDetailView,
     ServiceCatalogListCreateView,
     ServiceDeliverableListCreateView,
@@ -35,5 +36,10 @@ urlpatterns = [
         "service-engagements/<uuid:engagement_id>/deliverables",
         ServiceDeliverableListCreateView.as_view(),
         name="service-engagement-deliverables",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/atlas-deliverables/assemble",
+        AtlasDeliverableAssembleView.as_view(),
+        name="whiteboard-atlas-deliverables-assemble",
     ),
 ]

@@ -9,6 +9,7 @@ import pytest
 from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     Asset,
+    AuditLog,
     CompanyAccessPolicy,
     CompanyAssignment,
     Graph,
@@ -19,6 +20,7 @@ from infrastructure.orm.models import (
     ServiceDeliverable,
     ServiceEngagement,
     User,
+    WorkWhiteboard,
 )
 
 pytestmark = pytest.mark.django_db
@@ -76,6 +78,21 @@ def _catalog_item(user: User, *, slug: str = "growth-audit") -> ServiceCatalogIt
         intake_schema_json={"type": "object"},
         deliverables_schema_json=[{"type": "report"}],
         created_by=user,
+    )
+
+
+def _whiteboard(company: Graph, owner: User) -> WorkWhiteboard:
+    return WorkWhiteboard.objects.create(
+        organization=_organization(company),
+        company=company,
+        status=WorkWhiteboard.STATUS_IN_DEPLOYMENT,
+        work_status=WorkWhiteboard.WORK_STATUS_DELIVERY,
+        request_type="service_request",
+        project_name="Summer Launch",
+        client_name=company.name,
+        request_summary="Launch a summer campaign across email and WhatsApp.",
+        objective="Increase repeat purchases for summer accessories.",
+        created_by=owner,
     )
 
 
@@ -265,3 +282,107 @@ def test_service_deliverable_can_reference_company_report(authenticated_client, 
 
     assert response.status_code == 201
     assert response.data["data"]["deliverable"]["report_run_id"] == str(report.id)
+
+
+def test_atlas_deliverables_batch_assemble_api(authenticated_client, user):
+    company = _company(user, "Atlas Batch Client")
+    whiteboard = _whiteboard(company, user)
+
+    response = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
+        {},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    payload = response.data["data"]
+    assert payload["engagement"]["company_id"] == str(company.id)
+    assert payload["engagement"]["source_key"] == f"atlas-engagement:{whiteboard.id}"
+    assert len(payload["deliverables"]) == 10
+    assert {item["deliverable_type"] for item in payload["deliverables"]} == {
+        "client_brief",
+        "strategy_brief",
+        "message_house",
+        "launch_readiness_checklist",
+        "connector_gap_report",
+        "measurement_plan",
+        "approval_packet",
+        "execution_receipt",
+        "performance_report",
+        "campaign_launch_package",
+    }
+    assert ServiceEngagement.objects.filter(company=company).count() == 1
+    assert ServiceDeliverable.objects.filter(company=company).count() == 10
+    assert AuditLog.objects.filter(
+        action="atlas_deliverables.assembled",
+        resource_type="work_whiteboard",
+        resource_id=str(whiteboard.id),
+    ).exists()
+
+
+def test_atlas_deliverables_single_assemble_api(authenticated_client, user):
+    company = _company(user, "Atlas Single Client")
+    whiteboard = _whiteboard(company, user)
+
+    response = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
+        {"deliverable_type": "performance_report"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    payload = response.data["data"]
+    assert payload["engagement"]["source_key"] == f"atlas-engagement:{whiteboard.id}"
+    assert [item["deliverable_type"] for item in payload["deliverables"]] == [
+        "performance_report"
+    ]
+    assert ServiceDeliverable.objects.get(company=company).deliverable_type == "performance_report"
+
+
+def test_atlas_deliverables_assemble_api_rejects_unknown_type(authenticated_client, user):
+    company = _company(user, "Atlas Invalid Client")
+    whiteboard = _whiteboard(company, user)
+
+    response = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
+        {"deliverable_type": "not_real"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.data["error"]["code"] == "VALIDATION_ERROR"
+    assert ServiceEngagement.objects.count() == 0
+    assert ServiceDeliverable.objects.count() == 0
+
+
+def test_atlas_deliverables_assemble_api_hides_inaccessible_whiteboard(api_client, user):
+    visible_company = _company(user, "Visible Atlas Client")
+    hidden_company = _company(user, "Hidden Atlas Client")
+    whiteboard = _whiteboard(hidden_company, user)
+    member = _member_in_org(user, role="member")
+    for company in [visible_company, hidden_company]:
+        CompanyAccessPolicy.objects.create(
+            organization=_organization(company),
+            company=company,
+            assignment_required=True,
+            org_admin_access_enabled=False,
+        )
+    CompanyAssignment.objects.create(
+        organization=_organization(visible_company),
+        company=visible_company,
+        user=member,
+        role="member",
+        status="active",
+        created_by=user,
+    )
+
+    api_client.force_authenticate(user=member)
+    response = api_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-deliverables/assemble",
+        {},
+        format="json",
+    )
+
+    assert response.status_code == 404
+    assert ServiceEngagement.objects.count() == 0
+    assert ServiceDeliverable.objects.count() == 0

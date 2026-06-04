@@ -6,6 +6,8 @@ from typing import Any
 
 from rest_framework import serializers
 
+from application.services.agency_deliverable_catalog import get_deliverable_definition
+
 
 class ServiceCatalogQuerySerializer(serializers.Serializer[Any]):
     status = serializers.CharField(max_length=16, required=False, allow_blank=True)
@@ -172,3 +174,12 @@ class ServiceDeliverableCreateSerializer(serializers.Serializer[Any]):
     department_id = serializers.UUIDField(required=False, allow_null=True)
     summary = serializers.CharField(required=False, allow_blank=True, default="")
     metadata = serializers.JSONField(required=False, default=dict)
+
+
+class AtlasDeliverableAssembleSerializer(serializers.Serializer[Any]):
+    deliverable_type = serializers.CharField(max_length=80, required=False)
+
+    def validate_deliverable_type(self, value: str) -> str:
+        if get_deliverable_definition(value) is None:
+            raise serializers.ValidationError("Unknown Atlas deliverable type.")
+        return value
