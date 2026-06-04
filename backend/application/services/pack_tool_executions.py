@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from typing import Any
 from uuid import UUID
 
@@ -33,6 +34,29 @@ from application.services.email_connectors import (
 from application.services.email_connectors import (
     validate_real_send_allowed as validate_email_real_send_allowed,
 )
+from application.services.gateway_connectors import (
+    GATEWAY_MODE_DRY_RUN,
+    GATEWAY_MODE_REAL_SEND,
+    GATEWAY_SEND_TOOL_IDS,
+    GatewayConnectorError,
+    GatewaySendRequest,
+    dry_run_gateway,
+    get_gateway_adapter,
+    is_gateway_tool,
+    platform_for_tool_id,
+    validate_gateway_request,
+)
+from application.services.gateway_connectors import (
+    sanitize_provider_error as sanitize_gateway_provider_error,
+)
+from application.services.gateway_connectors import (
+    validate_real_send_allowed as validate_gateway_real_send_allowed,
+)
+from application.services.gateway_media import (
+    attachment_refs_for_receipt as gateway_media_refs_for_receipt,
+)
+from application.services.gateway_media import media_ids as gateway_media_ids
+from application.services.gateway_media import normalize_gateway_attachments
 from application.services.operating_model_packs import OperatingModelPackError, load_pack_definition
 from application.services.policy_evaluations import evaluate_policy, policy_evaluation_payload
 from application.services.social_connectors import (
@@ -82,6 +106,7 @@ from application.services.whatsapp_connectors import (
 )
 from infrastructure.orm.models import (
     CompanyOperatingModelInstallation,
+    GatewayConnection,
     Graph,
     PolicyEvaluation,
     Run,
@@ -103,10 +128,12 @@ SOCIAL_CONNECTOR_COMPAT_TOOL_IDS = {
     "social.facebook_provider_publish",
 }
 SOCIAL_EXECUTION_TOOL_IDS = set(SOCIAL_CONNECTOR_TOOL_IDS) | SOCIAL_CONNECTOR_COMPAT_TOOL_IDS
+GATEWAY_EXECUTION_TOOL_IDS = set(GATEWAY_SEND_TOOL_IDS)
 CONNECTOR_EXECUTION_TOOL_IDS = (
     set(EMAIL_EXECUTION_TOOL_IDS)
     | set(WHATSAPP_EXECUTION_TOOL_IDS)
     | set(SOCIAL_EXECUTION_TOOL_IDS)
+    | set(GATEWAY_EXECUTION_TOOL_IDS)
 )
 DEPLOYMENT_EVIDENCE_TOOL_IDS = set(CONNECTOR_EXECUTION_TOOL_IDS)
 
@@ -198,6 +225,21 @@ _BUILT_IN_SOCIAL_TOOLS: dict[str, dict[str, Any]] = {
         "pack_id": "forgegraph.social_connector",
     },
 }
+
+
+def _built_in_gateway_tool(tool_id: str) -> dict[str, Any]:
+    platform = platform_for_tool_id(tool_id)
+    label_platform = platform.replace("_", " ").title() if platform else "Gateway"
+    return {
+        "id": tool_id,
+        "label": f"{label_platform} Gateway Send",
+        "category": "gateway",
+        "side_effects": "external",
+        "approval_required": True,
+        "dry_run": False,
+        "policy_action_type": "send_gateway_message",
+        "pack_id": "forgegraph.hermes_gateway",
+    }
 
 
 class PackToolExecutionError(ValueError):
@@ -317,6 +359,24 @@ def execute_pack_tool(  # noqa: C901
             policy_allows_manual_publish_evidence=policy_allows_manual_publish_evidence,
             requires_compliance_gate=requires_compliance_gate,
             requires_originality_check=requires_originality_check,
+            operator_confirmed=operator_confirmed,
+        )
+    if _is_gateway_tool(tool_id):
+        return _execute_gateway_tool(
+            company=company,
+            user=user,
+            operation=operation,
+            tool_id=tool_id,
+            tool=tool,
+            inputs=payload,
+            dry_run=dry_run,
+            attempt_id=attempt_id,
+            idempotency_key=idempotency_key,
+            side_effect_class=side_effect_class,
+            policy_evaluation=policy_evaluation,
+            approved=approved,
+            approval_id=approval_id,
+            policy_allows_live=policy_allows_live,
             operator_confirmed=operator_confirmed,
         )
     result_json = _tool_execution_result(
@@ -525,6 +585,24 @@ def execute_deployment_connector_tool(
             policy_allows_manual_publish_evidence=policy_allows_manual_publish_evidence,
             requires_compliance_gate=requires_compliance_gate,
             requires_originality_check=requires_originality_check,
+            operator_confirmed=operator_confirmed,
+        )
+    if _is_gateway_tool(tool_id):
+        return _execute_gateway_tool(
+            company=company,
+            user=user,
+            operation=operation,
+            tool_id=tool_id,
+            tool=tool,
+            inputs=payload,
+            dry_run=dry_run,
+            attempt_id=attempt_id,
+            idempotency_key=idempotency_key,
+            side_effect_class=side_effect_class,
+            policy_evaluation=None,
+            approved=approved,
+            approval_id=approval_id,
+            policy_allows_live=policy_allows_live,
             operator_confirmed=operator_confirmed,
         )
     raise PackToolExecutionError("tool_not_found", "Tool is not a managed connector tool.")
@@ -1341,6 +1419,273 @@ def _social_receipt_payload(
     return receipt
 
 
+def _execute_gateway_tool(  # noqa: C901
+    *,
+    company: Graph,
+    user: User,
+    operation: Run,
+    tool_id: str,
+    tool: dict[str, Any],
+    inputs: dict[str, Any],
+    dry_run: bool,
+    attempt_id: str,
+    idempotency_key: str,
+    side_effect_class: str,
+    policy_evaluation: PolicyEvaluation | None,
+    approved: bool,
+    approval_id: str,
+    policy_allows_live: bool,
+    operator_confirmed: bool,
+) -> dict[str, Any]:
+    request = _gateway_request_from_inputs(
+        company=company,
+        tool_id=tool_id,
+        inputs=inputs,
+        dry_run=dry_run,
+        idempotency_key=idempotency_key or attempt_id,
+        approval_id=approval_id,
+        operator_confirmed=operator_confirmed,
+    )
+    existing_execution = ToolExecution.objects.filter(
+        run=operation,
+        node_id=f"pack_tool:{tool_id}"[:255],
+        attempt_id=attempt_id,
+    ).first()
+    if existing_execution is not None and existing_execution.status in {
+        "succeeded",
+        "failed",
+        "ambiguous",
+    }:
+        return _gateway_receipt_payload(
+            company=company,
+            user=user,
+            operation=operation,
+            tool_id=tool_id,
+            tool=tool,
+            dry_run=dry_run,
+            tool_execution=existing_execution,
+            policy_evaluation=policy_evaluation,
+        )
+    if existing_execution is not None and existing_execution.status == "in_progress":
+        raise PackToolExecutionError(
+            "gateway_send_in_progress",
+            "Gateway send with this idempotency key is already in progress.",
+        )
+
+    if dry_run:
+        try:
+            validate_gateway_request(request, dry_run=True)
+        except GatewayConnectorError as exc:
+            raise PackToolExecutionError(exc.code, exc.message) from exc
+    else:
+        try:
+            adapter = get_gateway_adapter(request.platform, request.provider)
+            validate_gateway_request(request, dry_run=False)
+            validate_gateway_real_send_allowed(
+                request,
+                approved=approved or _policy_evaluation_approved(policy_evaluation),
+                policy_allows_live=policy_allows_live,
+                adapter=adapter,
+            )
+        except GatewayConnectorError as exc:
+            raise PackToolExecutionError(exc.code, exc.message) from exc
+
+    with transaction.atomic():
+        tool_execution, created = ToolExecution.objects.select_for_update().get_or_create(
+            run=operation,
+            node_id=f"pack_tool:{tool_id}"[:255],
+            attempt_id=attempt_id,
+            defaults={
+                "tool_name": tool_id[:128],
+                "tool_version": str(tool.get("pack_id") or "")[:64],
+                "idempotency_key": (idempotency_key or attempt_id)[:128],
+                "side_effect_class": side_effect_class,
+                "status": "planned" if dry_run else "in_progress",
+                "result_json": {},
+                "error_json": {},
+            },
+        )
+        if not created and tool_execution.status in {"succeeded", "failed", "ambiguous"}:
+            return _gateway_receipt_payload(
+                company=company,
+                user=user,
+                operation=operation,
+                tool_id=tool_id,
+                tool=tool,
+                dry_run=dry_run,
+                tool_execution=tool_execution,
+                policy_evaluation=policy_evaluation,
+            )
+        if not created and tool_execution.status == "in_progress":
+            raise PackToolExecutionError(
+                "gateway_send_in_progress",
+                "Gateway send with this idempotency key is already in progress.",
+            )
+
+    media_artifacts = []
+    if request.attachments and company.organization is not None:
+        connection = None
+        if request.connection_id:
+            connection = GatewayConnection.objects.filter(
+                id=request.connection_id,
+                organization=company.organization,
+            ).first()
+        media_artifacts = normalize_gateway_attachments(
+            organization=company.organization,
+            platform=request.platform,
+            provider=request.provider,
+            direction="outbound",
+            attachments=request.attachments,
+            connection=connection,
+            tool_execution=tool_execution,
+        )
+        if media_artifacts:
+            request = replace(request, media_artifact_ids=gateway_media_ids(media_artifacts))
+
+    if dry_run:
+        receipt_json = dry_run_gateway(request).as_dict()
+    else:
+        try:
+            receipt_json = adapter.send(request).as_dict()
+        except GatewayConnectorError as exc:
+            if exc.blocked_before_provider_call:
+                ToolExecution.objects.filter(id=tool_execution.id).delete()
+                raise PackToolExecutionError(exc.code, exc.message) from exc
+            error_json = sanitize_gateway_provider_error(
+                exc,
+                platform=request.platform,
+                provider=request.provider,
+                mode=GATEWAY_MODE_REAL_SEND,
+            )
+            completed_at = timezone.now()
+            with transaction.atomic():
+                tool_execution = ToolExecution.objects.select_for_update().get(id=tool_execution.id)
+                tool_execution.status = "failed"
+                tool_execution.result_json = {}
+                tool_execution.error_json = error_json
+                tool_execution.completed_at = completed_at
+                tool_execution.save(
+                    update_fields=[
+                        "status",
+                        "result_json",
+                        "error_json",
+                        "completed_at",
+                        "updated_at",
+                    ]
+                )
+            return _gateway_receipt_payload(
+                company=company,
+                user=user,
+                operation=operation,
+                tool_id=tool_id,
+                tool=tool,
+                dry_run=dry_run,
+                tool_execution=tool_execution,
+                policy_evaluation=policy_evaluation,
+            )
+        except Exception as exc:  # noqa: BLE001 - provider errors must become durable receipts.
+            error_json = sanitize_gateway_provider_error(
+                exc,
+                platform=request.platform,
+                provider=request.provider,
+                mode=GATEWAY_MODE_REAL_SEND,
+            )
+            completed_at = timezone.now()
+            with transaction.atomic():
+                tool_execution = ToolExecution.objects.select_for_update().get(id=tool_execution.id)
+                tool_execution.status = "failed"
+                tool_execution.result_json = {}
+                tool_execution.error_json = error_json
+                tool_execution.completed_at = completed_at
+                tool_execution.save(
+                    update_fields=[
+                        "status",
+                        "result_json",
+                        "error_json",
+                        "completed_at",
+                        "updated_at",
+                    ]
+                )
+            return _gateway_receipt_payload(
+                company=company,
+                user=user,
+                operation=operation,
+                tool_id=tool_id,
+                tool=tool,
+                dry_run=dry_run,
+                tool_execution=tool_execution,
+                policy_evaluation=policy_evaluation,
+            )
+
+    if media_artifacts:
+        receipt_json = {
+            **receipt_json,
+            "media_artifact_ids": gateway_media_ids(media_artifacts),
+            "media_artifacts": gateway_media_refs_for_receipt(media_artifacts),
+        }
+
+    completed_at = timezone.now()
+    with transaction.atomic():
+        tool_execution = ToolExecution.objects.select_for_update().get(id=tool_execution.id)
+        tool_execution.status = "succeeded"
+        tool_execution.result_json = receipt_json
+        tool_execution.error_json = {}
+        tool_execution.completed_at = completed_at
+        tool_execution.save(
+            update_fields=["status", "result_json", "error_json", "completed_at", "updated_at"]
+        )
+    return _gateway_receipt_payload(
+        company=company,
+        user=user,
+        operation=operation,
+        tool_id=tool_id,
+        tool=tool,
+        dry_run=dry_run,
+        tool_execution=tool_execution,
+        policy_evaluation=policy_evaluation,
+    )
+
+
+def _gateway_receipt_payload(
+    *,
+    company: Graph,
+    user: User,
+    operation: Run,
+    tool_id: str,
+    tool: dict[str, Any],
+    dry_run: bool,
+    tool_execution: ToolExecution,
+    policy_evaluation: PolicyEvaluation | None,
+) -> dict[str, Any]:
+    receipt = {
+        "tool_execution_id": str(tool_execution.id),
+        "company_id": str(company.id),
+        "operation_id": str(operation.id),
+        "tool_id": tool_id,
+        "label": str(tool.get("label") or tool.get("name") or tool_id),
+        "dry_run": dry_run,
+        "side_effects": str(tool.get("side_effects") or "external"),
+        "status": tool_execution.status,
+        "result": tool_execution.result_json,
+        "error": tool_execution.error_json or None,
+        "completed_at": tool_execution.completed_at.isoformat()
+        if tool_execution.completed_at
+        else None,
+        "policy_evaluation": policy_evaluation_payload(policy_evaluation)
+        if policy_evaluation is not None
+        else None,
+    }
+    record_audit_log(
+        actor=user,
+        tenant_id=str(company.organization_id),
+        action="pack_tool.execution_receipt",
+        resource_type="tool_execution",
+        resource_id=str(tool_execution.id),
+        metadata=receipt,
+    )
+    return receipt
+
+
 def _evaluate_and_enforce_policy(
     *,
     company: Graph,
@@ -1427,6 +1772,8 @@ def _tool_definition(*, company: Graph, tool_id: str) -> dict[str, Any]:  # noqa
         return dict(_BUILT_IN_WHATSAPP_TOOLS[tool_id])
     if tool_id in _BUILT_IN_SOCIAL_TOOLS:
         return dict(_BUILT_IN_SOCIAL_TOOLS[tool_id])
+    if _is_gateway_tool(tool_id):
+        return _built_in_gateway_tool(tool_id)
     if _is_email_tool_alias(tool_id):
         return {**_BUILT_IN_EMAIL_TOOLS[EMAIL_SEND_DRY_RUN_TOOL_ID], "id": tool_id}
     if _is_whatsapp_tool_alias(tool_id):
@@ -1533,6 +1880,21 @@ def _policy_inputs_for_tool(*, tool_id: str, inputs: dict[str, Any]) -> dict[str
             "caption_hash": _hash_social_value(caption),
             "caption_length": min(len(caption), 10000),
             "account_id_hash": _hash_social_value(account),
+            "personal_data_exposure": bool(inputs.get("personal_data_exposure", False)),
+            "regulated_claims": bool(inputs.get("regulated_claims", False)),
+        }
+    if _is_gateway_tool(tool_id):
+        destinations = _gateway_destination_values(inputs)
+        destination_hashes = [
+            f"sha256:{hashlib.sha256(value.encode('utf-8')).hexdigest()}"
+            for value in destinations
+        ]
+        message = str(inputs.get("text") or inputs.get("message") or inputs.get("body") or "")
+        return {
+            "platform": platform_for_tool_id(tool_id),
+            "destination_count": len(destinations),
+            "destination_hashes": destination_hashes,
+            "message_length": min(len(message), 10000),
             "personal_data_exposure": bool(inputs.get("personal_data_exposure", False)),
             "regulated_claims": bool(inputs.get("regulated_claims", False)),
         }
@@ -1726,6 +2088,164 @@ def _social_request_from_inputs(
     )
 
 
+def _gateway_request_from_inputs(
+    *,
+    company: Graph,
+    tool_id: str,
+    inputs: dict[str, Any],
+    dry_run: bool,
+    idempotency_key: str,
+    approval_id: str,
+    operator_confirmed: bool,
+) -> GatewaySendRequest:
+    platform = platform_for_tool_id(tool_id) or str(inputs.get("platform") or "")
+    provider = str(inputs.get("provider") or _gateway_default_provider(platform) or "fake")
+    metadata = {
+        key: inputs.get(key)
+        for key in (
+            "policy_id",
+            "source_policy_id",
+            "pack_id",
+            "channel_id",
+            "metric_source_id",
+            "endpoint_url",
+            "webhook_url",
+            "sidecar_url",
+            "method",
+            "phone_number_id",
+            "receive_id_type",
+            "file_token",
+            "agent_id",
+            "domain",
+            "service",
+            "service_data",
+            "headers",
+            "schedule_id",
+        )
+        if inputs.get(key) is not None
+    }
+    raw_metadata = inputs.get("metadata")
+    if isinstance(raw_metadata, dict):
+        metadata.update(raw_metadata)
+    raw_thread = inputs.get("thread")
+    thread = {str(key): value for key, value in raw_thread.items()} if isinstance(raw_thread, dict) else {}
+    return GatewaySendRequest(
+        platform=platform,
+        provider=provider,
+        mode=GATEWAY_MODE_DRY_RUN if dry_run else GATEWAY_MODE_REAL_SEND,
+        organization_id=company.organization_id,
+        credential_id=_optional_str(inputs.get("credential_id")),
+        connection_id=_optional_str(inputs.get("connection_id")),
+        schedule_id=_optional_str(inputs.get("schedule_id")),
+        to=_gateway_destination_values(inputs),
+        text=str(inputs.get("text") or inputs.get("message") or inputs.get("body") or ""),
+        subject=_clean_subject(inputs.get("subject") or inputs.get("title")),
+        html=str(inputs.get("html") or inputs.get("body_html") or ""),
+        attachments=_gateway_attachment_values(inputs),
+        media_artifact_ids=_gateway_media_artifact_id_values(inputs),
+        thread=thread,
+        metadata=metadata,
+        idempotency_key=(idempotency_key or "")[:128],
+        approval_id=approval_id or _optional_str(inputs.get("approval_id")),
+        operator_confirmed=bool(
+            operator_confirmed
+            or inputs.get("operator_confirmed")
+            or inputs.get("operator_confirmation")
+            or inputs.get("manual_operator_confirmed")
+        ),
+    )
+
+
+def _gateway_default_provider(platform: str) -> str:
+    normalized = platform_for_tool_id(f"gateway.{platform}.send") or str(platform or "")
+    if normalized == "email":
+        return "gmail"
+    if normalized == "whatsapp":
+        return "whatsapp_cloud_api"
+    if normalized == "sms":
+        return "twilio"
+    if normalized == "msgraph_webhook":
+        return "microsoft_graph"
+    return normalized
+
+
+def _gateway_destination_values(inputs: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in (
+        "destinations",
+        "destination",
+        "to",
+        "recipients",
+        "recipient",
+        "channel",
+        "channel_id",
+        "chat_id",
+        "room_id",
+        "conversation_id",
+        "open_id",
+        "to_user",
+        "phone_number",
+    ):
+        raw = inputs.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, str):
+            values.extend(part.strip() for part in raw.replace(";", ",").split(","))
+            continue
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict):
+                    values.append(
+                        str(
+                            item.get("id")
+                            or item.get("value")
+                            or item.get("email")
+                            or item.get("address")
+                            or item.get("phone")
+                            or item.get("number")
+                            or item.get("recipient")
+                            or ""
+                        )
+                    )
+                else:
+                    values.append(str(item))
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        clean = str(value or "").strip()
+        if not clean or clean in seen:
+            continue
+        result.append(clean[:255])
+        seen.add(clean)
+    return result
+
+
+def _gateway_attachment_values(inputs: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = inputs.get("attachments")
+    if not isinstance(raw, list):
+        return []
+    result: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, dict):
+            result.append({str(key): value for key, value in item.items()})
+    return result
+
+
+def _gateway_media_artifact_id_values(inputs: dict[str, Any]) -> list[str]:
+    raw = inputs.get("media_artifact_ids")
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        value = str(item or "").strip()
+        if not value or value in seen:
+            continue
+        result.append(value[:128])
+        seen.add(value)
+    return result
+
+
 def _policy_evaluation_approved(evaluation: PolicyEvaluation | None) -> bool:
     if evaluation is None:
         return False
@@ -1746,6 +2266,10 @@ def _is_whatsapp_tool(tool_id: str) -> bool:
 
 def _is_social_tool(tool_id: str) -> bool:
     return str(tool_id or "").strip() in SOCIAL_EXECUTION_TOOL_IDS
+
+
+def _is_gateway_tool(tool_id: str) -> bool:
+    return is_gateway_tool(str(tool_id or "").strip())
 
 
 def _is_managed_connector_tool(tool_id: str) -> bool:

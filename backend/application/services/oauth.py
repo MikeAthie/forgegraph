@@ -21,6 +21,7 @@ SUPPORTED_OAUTH_PROVIDERS = (
     "linear",
     "hubspot",
     "google_drive",
+    "microsoft_graph",
 )
 
 GOOGLE_OAUTH_PROVIDERS = ("gmail", "google_calendar", "google_tasks", "google_drive")
@@ -117,6 +118,18 @@ PROVIDER_DEFAULTS: dict[str, dict[str, Any]] = {
             "access_type": "offline",
             "prompt": "consent",
         },
+        "token_extra_params": {},
+    },
+    "microsoft_graph": {
+        "authorize_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        "scopes": [
+            "offline_access",
+            "Chat.ReadWrite",
+            "ChannelMessage.Send",
+            "User.Read",
+        ],
+        "authorize_extra_params": {},
         "token_extra_params": {},
     },
 }

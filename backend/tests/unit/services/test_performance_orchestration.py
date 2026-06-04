@@ -202,6 +202,68 @@ def test_atlas_policy_collects_available_source_and_blocks_missing_connectors() 
     assert not ToolExecution.objects.exclude(tool_name="email.send_dry_run").exists()
 
 
+def test_policy_collects_local_sandbox_sources_with_baseline_targets() -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "performance-sandbox-sources@example.com", "owner")
+    company = _company(org, owner)
+    _assign(org, company, owner, "member")
+    policy = atlas_launch_performance_policy()
+    _install_policy_pack(
+        company=company,
+        user=owner,
+        policy=policy,
+        connectors=[
+            "email_connector",
+            "whatsapp_connector",
+            "social_analytics_connector",
+            "analytics_connector",
+        ],
+    )
+    whiteboard = _whiteboard(company, owner)
+    _deployment_projection(whiteboard, status="prepared")
+
+    contract = start_performance_review_for_whiteboard(user=owner, whiteboard=whiteboard)
+    sources = {item["id"]: item for item in contract["sources"]}
+
+    assert contract["status"] == "collected"
+    for source_id in ("email", "whatsapp", "social", "landing_page"):
+        assert sources[source_id]["status"] == "collected"
+        assert sources[source_id]["tool_execution_id"]
+        assert sources[source_id]["metrics"]
+        assert sources[source_id]["baseline_metrics"]
+        assert sources[source_id]["target_metrics"]
+        assert sources[source_id]["variance"]
+        assert sources[source_id]["evidence_mode"] == "sandbox"
+        assert sources[source_id]["optimization_actions"]
+
+    assert set(
+        ToolExecution.objects.filter(run__graph_version__graph=company).values_list(
+            "tool_name", flat=True
+        )
+    ) == {
+        "email.send_dry_run",
+        "whatsapp.send_dry_run",
+        "social.analytics_snapshot",
+        "analytics.landing_page_snapshot",
+    }
+    snapshot = MetricSnapshot.objects.get(company=company)
+    assert snapshot.metric_values_json["reach"] == 12400
+    assert len(snapshot.metric_sources_json["baseline_target_summary"]) == 4
+    assert len(snapshot.metric_sources_json["optimization_actions"]) == 4
+
+    reported = create_performance_report(user=owner, whiteboard=whiteboard)
+    assert reported["current_state"]["report_run_id"]
+    report = ReportRun.objects.get(company=company)
+    assert report.generated_sections_json["summary"]["blocked_source_count"] == 0
+    assert len(report.generated_sections_json["baseline_target_summary"]) == 4
+    assert len(report.generated_sections_json["optimization_actions"]) == 4
+
+    evaluation = evaluate_performance(user=owner, whiteboard=whiteboard)
+    assert evaluation.status == "PASS"
+    assert len(evaluation.result_json["baseline_target_summary"]) == 4
+    assert len(evaluation.result_json["optimization_actions"]) == 4
+
+
 def test_report_evaluation_and_routing_are_created_from_policy() -> None:
     org = Organization.objects.create(name="ATLAS")
     owner = _user(org, "performance-eval@example.com", "owner")

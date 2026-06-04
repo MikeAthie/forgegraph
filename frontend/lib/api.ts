@@ -142,6 +142,16 @@ const API_PATHS = {
     oauthStart: "/api/credentials/oauth/start",
     oauthCallback: "/api/credentials/oauth/callback",
   },
+  gateway: {
+    capabilities: "/api/gateway/capabilities",
+    connections: "/api/gateway/connections",
+    connection: (connectionId: string) => `/api/gateway/connections/${connectionId}`,
+    connectionHealth: (connectionId: string) => `/api/gateway/connections/${connectionId}/health-check`,
+    connectionDiagnostics: (connectionId: string) => `/api/gateway/connections/${connectionId}/diagnostics`,
+    schedules: "/api/gateway/schedules",
+    schedule: (scheduleId: string) => `/api/gateway/schedules/${scheduleId}`,
+    scheduleRunNow: (scheduleId: string) => `/api/gateway/schedules/${scheduleId}/run-now`,
+  },
   integrations: {
     httpTest: "/api/integrations/http/test",
   },
@@ -2161,7 +2171,8 @@ export type OAuthIntegrationProvider =
   | "jira"
   | "linear"
   | "hubspot"
-  | "google_drive";
+  | "google_drive"
+  | "microsoft_graph";
 
 export type CredentialOAuthProviderStatus = {
   provider: OAuthIntegrationProvider;
@@ -2177,6 +2188,99 @@ export type CredentialOAuthProviderStatus = {
   scopes: string[];
   authorize_extra_params: Record<string, unknown>;
   token_extra_params: Record<string, unknown>;
+};
+
+export type GatewayConnectorCapabilityDTO = {
+  id: string;
+  platform: string;
+  provider: string;
+  display_name: string;
+  credential_provider: string;
+  runtime_tool_id: string;
+  capabilities: Record<string, unknown>;
+  setup_requirements: string[];
+  inbound_modes: string[];
+  outbound_modes: string[];
+  sidecar_required: boolean;
+  sidecar_health_path: string;
+  docs_url: string;
+  enabled: boolean;
+};
+
+export type GatewayConnectionDiagnosticsDTO = {
+  connection_id: string;
+  status: string;
+  ready: boolean;
+  checks: Array<Record<string, unknown> & { code: string; status: string; message: string }>;
+  capability: GatewayConnectorCapabilityDTO | null;
+  generated_at: string;
+};
+
+export type GatewayConnectionDTO = {
+  id: string;
+  organization_id: string;
+  graph_version_id: string | null;
+  credential_id: string | null;
+  platform: string;
+  provider: string;
+  name: string;
+  status: string;
+  config: Record<string, unknown>;
+  allowlist: string[];
+  capability: GatewayConnectorCapabilityDTO | null;
+  last_seen_at: string | null;
+  last_health_check_at: string | null;
+  last_error_at: string | null;
+  last_error_code: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GatewayMediaArtifactDTO = {
+  id: string;
+  organization_id: string;
+  connection_id: string | null;
+  inbound_receipt_id: string | null;
+  tool_execution_id: string | null;
+  asset_id: string | null;
+  asset_version_id: string | null;
+  transcript_observation_id: string | null;
+  platform: string;
+  provider: string;
+  direction: "inbound" | "outbound" | string;
+  media_kind: string;
+  content_type: string;
+  size_bytes: number | null;
+  source_id_hash: string;
+  content_sha256: string;
+  filename_hint: string;
+  storage_ref: string;
+  external_media_id: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type GatewayAutomationScheduleDTO = {
+  id: string;
+  organization_id: string;
+  graph_version_id: string;
+  connection_id: string | null;
+  last_materialized_run_id: string | null;
+  platform: string;
+  provider: string;
+  name: string;
+  status: string;
+  schedule_type: "once" | "interval" | "cron" | string;
+  schedule: Record<string, unknown>;
+  timezone: string;
+  input_template: Record<string, unknown>;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_fire_key: string;
+  last_error_code: string;
+  last_error_message: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type HttpNodeTestInput = {
@@ -2244,6 +2348,7 @@ type MarketplaceRelease = {
   config_schema: Record<string, unknown>;
   config_defaults: Record<string, unknown>;
   runtime_manifest: Record<string, unknown> | null;
+  gateway_capability?: GatewayConnectorCapabilityDTO | null;
   manifest_version: number | null;
   cloud_allowed: boolean;
   review_notes: string;
@@ -2476,6 +2581,112 @@ export const credentialsApi = {
   completeOAuthCallback: async (input: { code: string; state: string }): Promise<Credential> => {
     const response = await api.post<ApiSuccessResponse<Credential>>(API_PATHS.credentials.oauthCallback, input);
     return response.data.data;
+  },
+};
+
+export const gatewayApi = {
+  listCapabilities: async (): Promise<GatewayConnectorCapabilityDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ capabilities: GatewayConnectorCapabilityDTO[] }>>(
+      API_PATHS.gateway.capabilities,
+    );
+    return response.data.data.capabilities;
+  },
+  listConnections: async (): Promise<GatewayConnectionDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ connections: GatewayConnectionDTO[] }>>(
+      API_PATHS.gateway.connections,
+    );
+    return response.data.data.connections;
+  },
+  createConnection: async (input: {
+    platform: string;
+    provider?: string;
+    name?: string;
+    graph_version_id?: string;
+    credential_id?: string;
+    config?: Record<string, unknown>;
+    allowlist?: string[];
+  }): Promise<GatewayConnectionDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ connection: GatewayConnectionDTO }>>(
+      API_PATHS.gateway.connections,
+      input,
+    );
+    return response.data.data.connection;
+  },
+  updateConnection: async (
+    connectionId: string,
+    input: {
+      status?: string;
+      graph_version_id?: string;
+      credential_id?: string;
+      config?: Record<string, unknown>;
+      allowlist?: string[];
+    },
+  ): Promise<GatewayConnectionDTO> => {
+    const response = await api.patch<ApiSuccessResponse<{ connection: GatewayConnectionDTO }>>(
+      API_PATHS.gateway.connection(connectionId),
+      input,
+    );
+    return response.data.data.connection;
+  },
+  checkConnectionHealth: async (connectionId: string): Promise<GatewayConnectionDiagnosticsDTO> => {
+    const response = await api.post<
+      ApiSuccessResponse<{ diagnostics: GatewayConnectionDiagnosticsDTO; connection: GatewayConnectionDTO }>
+    >(API_PATHS.gateway.connectionHealth(connectionId), {});
+    return response.data.data.diagnostics;
+  },
+  getConnectionDiagnostics: async (connectionId: string): Promise<GatewayConnectionDiagnosticsDTO> => {
+    const response = await api.get<ApiSuccessResponse<{ diagnostics: GatewayConnectionDiagnosticsDTO }>>(
+      API_PATHS.gateway.connectionDiagnostics(connectionId),
+    );
+    return response.data.data.diagnostics;
+  },
+  listSchedules: async (): Promise<GatewayAutomationScheduleDTO[]> => {
+    const response = await api.get<ApiSuccessResponse<{ schedules: GatewayAutomationScheduleDTO[] }>>(
+      API_PATHS.gateway.schedules,
+    );
+    return response.data.data.schedules;
+  },
+  createSchedule: async (input: {
+    graph_version_id: string;
+    connection_id?: string;
+    platform: string;
+    provider?: string;
+    name: string;
+    status?: string;
+    schedule_type: string;
+    schedule: Record<string, unknown>;
+    timezone?: string;
+    input_template?: Record<string, unknown>;
+  }): Promise<GatewayAutomationScheduleDTO> => {
+    const response = await api.post<ApiSuccessResponse<{ schedule: GatewayAutomationScheduleDTO }>>(
+      API_PATHS.gateway.schedules,
+      input,
+    );
+    return response.data.data.schedule;
+  },
+  updateSchedule: async (
+    scheduleId: string,
+    input: {
+      status?: string;
+      schedule?: Record<string, unknown>;
+      timezone?: string;
+      input_template?: Record<string, unknown>;
+    },
+  ): Promise<GatewayAutomationScheduleDTO> => {
+    const response = await api.patch<ApiSuccessResponse<{ schedule: GatewayAutomationScheduleDTO }>>(
+      API_PATHS.gateway.schedule(scheduleId),
+      input,
+    );
+    return response.data.data.schedule;
+  },
+  deleteSchedule: async (scheduleId: string): Promise<void> => {
+    await api.delete(API_PATHS.gateway.schedule(scheduleId));
+  },
+  runScheduleNow: async (scheduleId: string): Promise<{ schedule_id: string; run_id: string; fire_key: string }> => {
+    const response = await api.post<
+      ApiSuccessResponse<{ result: { schedule_id: string; run_id: string; fire_key: string } }>
+    >(API_PATHS.gateway.scheduleRunNow(scheduleId), {});
+    return response.data.data.result;
   },
 };
 

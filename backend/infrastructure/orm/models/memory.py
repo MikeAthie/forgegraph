@@ -440,6 +440,7 @@ class IntegrationOAuthProviderConfig(models.Model):
         ("linear", "Linear"),
         ("hubspot", "HubSpot"),
         ("google_drive", "Google Drive"),
+        ("microsoft_graph", "Microsoft Graph"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -322,22 +322,93 @@ class OpenWaWebAutomationAdapter:
 class WhatsAppCloudApiAdapter:
     provider = WHATSAPP_PROVIDER_CLOUD_API
 
-    def credentials_configured(self) -> bool:
-        return bool(
-            getattr(settings, "WHATSAPP_CLOUD_API_TOKEN", "")
-            and getattr(settings, "WHATSAPP_CLOUD_PHONE_NUMBER_ID", "")
+    def __init__(
+        self,
+        *,
+        api_token: str | None = None,
+        phone_number_id: str | None = None,
+        api_base_url: str | None = None,
+        timeout_seconds: float | None = None,
+        session: Any = None,
+    ) -> None:
+        self.api_token = (
+            api_token if api_token is not None else getattr(settings, "WHATSAPP_CLOUD_API_TOKEN", "")
+        ).strip()
+        self.phone_number_id = (
+            phone_number_id
+            if phone_number_id is not None
+            else getattr(settings, "WHATSAPP_CLOUD_PHONE_NUMBER_ID", "")
+        ).strip()
+        self.api_base_url = (
+            api_base_url
+            if api_base_url is not None
+            else getattr(settings, "WHATSAPP_CLOUD_API_BASE_URL", "https://graph.facebook.com/v20.0")
+        ).rstrip("/")
+        self.timeout_seconds = float(
+            timeout_seconds
+            if timeout_seconds is not None
+            else getattr(settings, "WHATSAPP_CONNECTOR_TIMEOUT_SECONDS", 10)
         )
+        self.session = session or requests.Session()
+
+    def credentials_configured(self) -> bool:
+        return bool(self.api_token and self.phone_number_id)
 
     def session_status(self) -> str:
         return "not_applicable"
 
     def send(self, request: WhatsAppSendRequest) -> WhatsAppSendReceipt:
-        raise WhatsAppConnectorError(
-            "whatsapp_cloud_api_not_implemented",
-            "Official messaging provider send is not implemented in this connector slice.",
+        if not self.credentials_configured():
+            raise WhatsAppConnectorError(
+                "whatsapp_credentials_missing",
+                "Official messaging provider credentials are not configured.",
+                provider=self.provider,
+                mode=request.mode,
+                blocked_before_provider_call=True,
+            )
+        recipients = _normalized_recipients(request.to)
+        if len(recipients) != 1:
+            raise WhatsAppConnectorError(
+                "single_recipient_required",
+                "Official messaging provider send requires exactly one recipient.",
+                provider=self.provider,
+                mode=request.mode,
+                blocked_before_provider_call=True,
+            )
+        try:
+            response = self.session.post(
+                f"{self.api_base_url}/{self.phone_number_id}/messages",
+                json={
+                    "messaging_product": "whatsapp",
+                    "to": recipients[0].removeprefix("+"),
+                    "type": "text",
+                    "text": {"body": request.text},
+                },
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {self.api_token}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "forgegraph-whatsapp-cloud-api/1.0",
+                },
+                timeout=self.timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            raise WhatsAppConnectorError(
+                "provider_request_failed",
+                "Official messaging provider request failed.",
+                provider=self.provider,
+                mode=request.mode,
+                retryable=True,
+            ) from exc
+        payload = _provider_json_or_error(response, provider=self.provider, mode=request.mode)
+        messages = payload.get("messages") if isinstance(payload.get("messages"), list) else []
+        message = messages[0] if messages and isinstance(messages[0], dict) else {}
+        provider_payload = {"id": str(message.get("id") or payload.get("id") or "")}
+        return sanitize_provider_response(
+            provider_payload,
             provider=self.provider,
-            mode=request.mode,
-            blocked_before_provider_call=True,
+            request=request,
+            session_status="not_applicable",
         )
 
 
@@ -352,7 +423,7 @@ def get_whatsapp_provider_adapter(
     if selected == WHATSAPP_PROVIDER_OPEN_WA_WEB:
         return OpenWaWebAutomationAdapter(session=session)
     if selected == WHATSAPP_PROVIDER_CLOUD_API:
-        return WhatsAppCloudApiAdapter()
+        return WhatsAppCloudApiAdapter(session=session)
     if selected == WHATSAPP_PROVIDER_FAKE:
         return FakeWhatsAppAdapter()
     raise WhatsAppConnectorError(
@@ -494,7 +565,10 @@ def validate_real_send_allowed(
             mode=WHATSAPP_MODE_REAL_SEND,
             blocked_before_provider_call=True,
         )
-    if not bool(getattr(settings, "WHATSAPP_WEB_AUTOMATION_ALLOW_REAL_SEND", False)):
+    if not (
+        bool(getattr(settings, "WHATSAPP_CONNECTOR_ALLOW_REAL_SEND", False))
+        or bool(getattr(settings, "WHATSAPP_WEB_AUTOMATION_ALLOW_REAL_SEND", False))
+    ):
         raise WhatsAppConnectorError(
             "real_send_disabled",
             "Real messaging send is disabled by environment configuration.",
@@ -530,7 +604,11 @@ def validate_real_send_allowed(
             blocked_before_provider_call=True,
         )
     session_status = selected_adapter.session_status()
-    if session_status not in {"ready", "authenticated", "connected"}:
+    if request.provider == WHATSAPP_PROVIDER_OPEN_WA_WEB and session_status not in {
+        "ready",
+        "authenticated",
+        "connected",
+    }:
         raise WhatsAppConnectorError(
             "whatsapp_session_unhealthy",
             "Messaging web automation session is not ready.",

@@ -24,7 +24,7 @@ from adapters.api.integrations.run_dispatch import (
     prepare_integration_run_context,
 )
 from adapters.api.responses import error_response, success_response
-from adapters.api.runs import views as run_views
+from adapters.api.runs.responses import _queue_payload
 from application.services.audit_log import record_audit_log
 from application.services.credential_state import is_credential_revoked
 from infrastructure.crypto.encryption import decrypt_api_key
@@ -281,7 +281,7 @@ def _run_payload(run: Run, graph_version: GraphVersion) -> dict[str, Any]:
         "graph_version_id": graph_version.id,
         "graph_version": graph_version.version,
         "status": run.status,
-        **run_views._queue_payload(run),
+        **_queue_payload(run),
         "started_at": run.started_at,
         "ended_at": run.ended_at,
         "input_json": run.input_json,

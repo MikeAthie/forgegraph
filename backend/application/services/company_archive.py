@@ -923,7 +923,10 @@ def _memory_refs(*, company: Graph, operation: Run | None) -> list[dict[str, Any
         graph_id=company.id,
     )
     if operation is not None:
-        queryset = queryset.filter(Q(run_id=operation.id) | Q(scope="graph"))
+        session_filter = Q()
+        if operation.thread_id:
+            session_filter = Q(session_id=operation.thread_id)
+        queryset = queryset.filter(Q(run_id=operation.id) | Q(scope="graph") | session_filter)
     memories = queryset.order_by("-last_seen_at", "-created_at")[:MAX_CONTEXT_MEMORIES]
     return [
         {

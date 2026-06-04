@@ -120,6 +120,13 @@ export function getMarketplacePackageSourcePath(pkg: MarketplacePackage): string
 export function getMarketplacePackageSetupFields(pkg: MarketplacePackage): string[] {
   const uiSchema = getReleaseUiSchema(pkg);
   const setupFields = uiSchema.setup_fields;
-  if (!Array.isArray(setupFields)) return [];
-  return setupFields.filter((field): field is string => typeof field === "string" && field.trim().length > 0);
+  const capabilityFields =
+    pkg.installed_release?.gateway_capability?.setup_requirements ??
+    pkg.latest_release?.gateway_capability?.setup_requirements ??
+    [];
+  const fields = [
+    ...(Array.isArray(setupFields) ? setupFields : []),
+    ...(Array.isArray(capabilityFields) ? capabilityFields : []),
+  ];
+  return fields.filter((field): field is string => typeof field === "string" && field.trim().length > 0);
 }

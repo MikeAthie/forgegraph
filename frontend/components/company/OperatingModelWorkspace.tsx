@@ -1676,7 +1676,13 @@ function ConnectorAvailabilityPanel({ controller }: { controller: OperatingModel
     );
   };
   const applySandboxCore = () => {
-    const core = ["email_connector", "social_connector", "analytics_connector"];
+    const core = [
+      "email_connector",
+      "social_connector",
+      "analytics_connector",
+      "whatsapp_connector",
+      "social_analytics_connector",
+    ];
     setSelected(candidates.filter((connectorId) => core.includes(connectorId)));
   };
   const saving = controller.busyAction === "connectors:update";

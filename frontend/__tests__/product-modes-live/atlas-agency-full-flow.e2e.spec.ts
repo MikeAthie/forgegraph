@@ -51,7 +51,7 @@ const liveAtlasFullFlowTimeoutMs = Number(
 const legacyCampaignRequest =
   "Can you create a campaign for Legacy DEPP GOLD with 10,000 MXN budget across email, WhatsApp, Instagram, Facebook, TikTok, and a landing page? Price is 599 MXN. Inventory is limited. Please create a strategy and execution plan?";
 const followUpCampaignRequest =
-  "Create the next Legacy DEPP GOLD campaign using prior approved learnings. Keep appointment proof central, avoid unverified WhatsApp exclusivity claims, and do not assume WhatsApp or landing-page connectors are available unless approved.";
+  "Create the next Legacy DEPP GOLD campaign using prior approved learnings. Keep appointment proof central, avoid unverified WhatsApp exclusivity claims, and use only approved local sandbox connector evidence unless live credentials are added.";
 const helperAssistedSteps = [
   "Follow-up memory uplift uses backend communication and phase APIs because guided follow-up campaign authoring and memory-review UI are not available yet.",
   "Isolation and durable-state checks use backend API to verify DB-owned state directly.",
@@ -385,6 +385,16 @@ type PerformanceContract = {
     routing_record_id?: string;
     blocked_reason_code?: string;
     metrics?: Record<string, unknown>;
+    baseline_metrics?: Record<string, unknown>;
+    target_metrics?: Record<string, unknown>;
+    variance?: Record<string, unknown>;
+    attribution_scope?: string;
+    evidence_mode?: string;
+    optimization_actions?: Array<Record<string, unknown>>;
+    receipt?: {
+      result?: Record<string, unknown>;
+      error?: Record<string, unknown> | null;
+    };
   }>;
   current_state: {
     metric_snapshot_id?: string;
@@ -756,8 +766,18 @@ test.describe("Live ATLAS agency full product loop", () => {
     const performance = await startPerformanceThroughUi(page, request, fixture, whiteboard.id, apiCalls);
     expect(performance.operation.status).toBe("completed");
     expect(performance.performance_contract.current_state.metric_snapshot_id).toBeTruthy();
-    expect(performance.performance_contract.sources.some((source) => source.tool_execution_id)).toBe(true);
-    expect(performance.performance_contract.sources.some((source) => source.status === "blocked")).toBe(true);
+    const performanceSources = Object.fromEntries(
+      performance.performance_contract.sources.map((source) => [source.id, source]),
+    );
+    for (const sourceId of ["email", "whatsapp", "social", "landing_page"]) {
+      expect(performanceSources[sourceId]?.status).toBe("collected");
+      expect(performanceSources[sourceId]?.tool_execution_id).toBeTruthy();
+      expect(Object.keys(performanceSources[sourceId]?.metrics ?? {}).length).toBeGreaterThan(0);
+      expect(Object.keys(performanceSources[sourceId]?.baseline_metrics ?? {}).length).toBeGreaterThan(0);
+      expect(Object.keys(performanceSources[sourceId]?.target_metrics ?? {}).length).toBeGreaterThan(0);
+      expect(performanceSources[sourceId]?.evidence_mode).toBe("sandbox");
+    }
+    expect(performance.performance_contract.sources.some((source) => source.status === "blocked")).toBe(false);
 
     const report = await reportPerformanceThroughUi(page, request, fixture, whiteboard.id, apiCalls);
     const reportOperation = report.operation;
@@ -766,7 +786,7 @@ test.describe("Live ATLAS agency full product loop", () => {
     const evaluation = await evaluatePerformanceThroughUi(page, request, fixture, whiteboard.id, apiCalls);
     const performanceEvaluationOperation = evaluation.operation;
     expect(evaluation.performance_contract.current_state.evaluation_id).toBeTruthy();
-    expect((evaluation.performance_contract.current_state.routing_record_ids ?? []).length).toBeGreaterThan(0);
+    expect(evaluation.performance_contract.sources.some((source) => source.status === "blocked")).toBe(false);
     const finalBoard = await fetchWhiteboardBoard(request, fixture, whiteboard.id, apiCalls);
     expect(finalBoard.cards.length).toBeGreaterThanOrEqual(onboardingBoard.cards.length);
     const finalLaneSlugs = finalBoard.lanes.map((lane) => lane.department_slug);
@@ -987,6 +1007,18 @@ test.describe("Live ATLAS agency full product loop", () => {
             reportRunId: evaluation.performance_contract.current_state.report_run_id,
             evaluationId: evaluation.performance_contract.current_state.evaluation_id,
             routingRecordIds: evaluation.performance_contract.current_state.routing_record_ids,
+            sources: evaluation.performance_contract.sources.map((source) => ({
+              id: source.id,
+              status: source.status,
+              toolExecutionId: source.tool_execution_id,
+              evidenceMode: source.evidence_mode,
+              attributionScope: source.attribution_scope,
+              metrics: source.metrics,
+              baselineMetrics: source.baseline_metrics,
+              targetMetrics: source.target_metrics,
+              variance: source.variance,
+              optimizationActions: source.optimization_actions,
+            })),
           },
           durableState,
           memoryReadiness,
@@ -1072,7 +1104,14 @@ async function configureAtlasAgencyConnectorAvailability(
   );
   await page.getByTestId("connector-save-button").click();
   await patchResponsePromise;
-  for (const connectorId of ["email_connector", "social_connector", "analytics_connector"]) {
+  const expectedSandboxConnectors = [
+    "email_connector",
+    "social_connector",
+    "analytics_connector",
+    "whatsapp_connector",
+    "social_analytics_connector",
+  ];
+  for (const connectorId of expectedSandboxConnectors) {
     await expect(page.getByTestId(`connector-toggle-${connectorId}`)).toBeChecked({ timeout: 30_000 });
   }
 
@@ -1088,9 +1127,7 @@ async function configureAtlasAgencyConnectorAvailability(
     packs.packs[0];
   expect(installation).toBeTruthy();
   const config = installation.public_config ?? installation.config ?? {};
-  expect(config.available_connectors).toEqual(
-    expect.arrayContaining(["email_connector", "social_connector", "analytics_connector"]),
-  );
+  expect(config.available_connectors).toEqual(expect.arrayContaining(expectedSandboxConnectors));
 }
 
 async function createLegacyRequestMessageThroughUi(
@@ -1264,13 +1301,20 @@ async function completeOnboarding(
     JSON.stringify(
       {
         requested_channels: ["email", "WhatsApp", "Instagram", "Facebook", "TikTok", "landing page"],
-        connectors: ["email_connector", "social_connector", "analytics_connector"],
+        connectors: [
+          "email_connector",
+          "social_connector",
+          "analytics_connector",
+          "whatsapp_connector",
+          "social_analytics_connector",
+        ],
         connector_readiness: {
-          email_connector: "sandbox",
-          social_connector: "sandbox",
-          analytics_connector: "sandbox",
-          whatsapp_connector: "not_configured",
-          landing_page_connector: "not_configured",
+          email_connector: "local_sandbox_send_receipt",
+          social_connector: "local_sandbox_publish_receipt",
+          analytics_connector: "local_sandbox_landing_metrics",
+          whatsapp_connector: "local_sandbox_message_receipt",
+          social_analytics_connector: "local_sandbox_social_metrics",
+          live_provider_credentials: "not_configured",
         },
       },
       null,
@@ -1280,7 +1324,7 @@ async function completeOnboarding(
   await page
     .getByTestId("whiteboard-context-assumptions")
     .fill(
-      "Email and social channels can be sandboxed; WhatsApp and landing-page connectors are not configured.\nSocial provider publishing remains disabled unless a generic social connector is explicitly configured.",
+      "Email, WhatsApp, social, and landing-page measurement use backend-owned local sandbox receipts; no live Gmail, WhatsApp, social, CMS, or analytics credentials are required.\nProduction provider publishing remains disabled unless generic connector credentials and approvals are explicitly configured.",
     );
   const patchResponsePromise = waitForBackendResponse(page, "PATCH", `/api/whiteboards/${whiteboardId}`, 30_000);
   await page.getByTestId("whiteboard-context-save-button").click();
@@ -1605,7 +1649,7 @@ async function assertBackendMemoryReadiness(
       type: "case",
       title: "Legacy follow-up approval learning",
       content:
-        "Prior approved learning: keep appointment-proof language, avoid unverified WhatsApp exclusivity claims, and stay within configured email/social sandbox connectors unless more connectors are approved.",
+        "Prior approved learning: keep appointment-proof language, avoid unverified WhatsApp exclusivity claims, and stay within backend-owned local sandbox connector evidence unless live credentials and approvals are added.",
       topic_key: "legacy-follow-up-approval-learning",
     },
     idempotency(testInfo, "memory-follow-up-approval-learning"),
@@ -1665,11 +1709,11 @@ async function runFollowUpMemoryUplift(
 ): Promise<MemoryUpliftEvidence> {
   const reusedLearnings = [
     "Keep appointment-proof language central to the offer.",
-    "Stay within configured email/social sandbox connectors unless more connectors are approved.",
+    "Stay within approved local sandbox connector evidence unless live credentials are added.",
   ];
   const avoidedRejectedItems = [
     "Avoid unverified WhatsApp exclusivity claims.",
-    "Do not assume WhatsApp or landing-page connectors are available.",
+    "Do not present local sandbox connector evidence as live provider delivery.",
   ];
   const namespace = liveProductModeRunNamespace(testInfo);
   const threadResponse = await postData<{ thread: CommunicationThread }>(
@@ -1741,7 +1785,7 @@ async function runFollowUpMemoryUplift(
         approved_learning: memoryReadiness.title,
         prior_memory_observation_id: memoryReadiness.observationId,
         rejected_claim: "unverified WhatsApp exclusivity claim",
-        connector_scope: "email/social sandbox only unless connector evidence changes",
+        connector_scope: "approved local sandbox connector evidence only unless live credentials are added",
       },
       target_audience: {
         segment: "Mexico City eyewear buyers who need proof of appointment availability before buying",
@@ -1756,17 +1800,18 @@ async function runFollowUpMemoryUplift(
       },
       channel_context: {
         requested: ["email", "Instagram", "Facebook", "TikTok"],
-        deferred_until_approved: ["WhatsApp", "landing page"],
+        local_sandbox_metric_sources: ["email", "WhatsApp", "social", "landing page"],
+        live_provider_sends_deferred_until_credentialed: ["WhatsApp", "landing page"],
       },
       known_facts: {
         client: liveLegacyCompanyName,
-        available_connector: "email and social sandbox",
+        available_connector: "email, WhatsApp, social, and landing-page local sandbox evidence",
         source_memory_observation_id: memoryReadiness.observationId,
         source_memory_content: memoryReadiness.content,
       },
       assumptions: [
         "Prior approved learning is reusable for this follow-up because it is graph-scoped memory.",
-        "WhatsApp and landing-page connectors remain unavailable unless backend connector evidence is added.",
+        "Local sandbox evidence is not live provider delivery and must not be represented as credentialed production sending.",
       ],
     },
     idempotency(testInfo, `follow-up-whiteboard-fill-${followUpWhiteboard.id}`),
@@ -1961,7 +2006,10 @@ function buildReleaseScoreSummary({
     connectorHonesty:
       blockedDeployment.length > 0 &&
       blockedDeployment.every((channel) => Boolean(channel.company_signal_id) && !channel.tool_execution_id),
-    measurementReady: Boolean(performanceContract.current_state.metric_snapshot_id),
+    measurementReady:
+      Boolean(performanceContract.current_state.metric_snapshot_id) &&
+      performanceContract.sources.every((source) => source.status === "collected") &&
+      performanceContract.sources.every((source) => source.evidence_mode === "sandbox"),
   };
   const operationEntries = Object.values(operationLifecycle);
   const systemReliability = {
@@ -2381,6 +2429,15 @@ function buildAtlasJudgeEvidencePacket(
         tool_execution_id: source.tool_execution_id ?? null,
         company_signal_id: source.company_signal_id ?? null,
         blocked_reason_code: source.blocked_reason_code ?? null,
+        evidence_mode: source.evidence_mode ?? null,
+        attribution_scope: source.attribution_scope ?? null,
+        metrics: source.metrics ?? {},
+        baseline_metrics: source.baseline_metrics ?? {},
+        target_metrics: source.target_metrics ?? {},
+        variance: source.variance ?? {},
+        optimization_actions: source.optimization_actions ?? [],
+        receipt_mode: source.receipt?.result?.mode ?? null,
+        receipt_evidence_mode: source.receipt?.result?.evidence_mode ?? null,
       })),
     },
     operations: compactEvidenceValue(context.operationLifecycle, 1800),
@@ -2943,16 +3000,26 @@ function validateAtlasJudgeImprovementPlan(
     }
     throw new Error(`${field}.improvement_plan must include at least one item.`);
   }
-  return planItems.map((item, index) => {
+  const normalizedPlanItems = flattenAtlasJudgeImprovementPlanItems(planItems);
+  return normalizedPlanItems.map((item, index) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       throw new Error(`${field}.improvement_plan.${index} must be an object.`);
     }
     const record = item as Record<string, unknown>;
-    const primitive = stringValue(record.primitive) || stringValue(record.type);
-    if (!isAtlasImprovementPrimitive(primitive)) {
+    const primitive = normalizeAtlasImprovementPrimitive(
+      record.primitive ?? record.type ?? record.kind ?? record.artifact,
+    );
+    if (!primitive) {
       throw new Error(`${field}.improvement_plan.${index}.primitive must be a generic ForgeGraph primitive.`);
     }
-    const description = stringValue(record.description) || stringValue(record.message) || stringValue(record.action);
+    const description =
+      stringValue(record.description) ||
+      stringValue(record.message) ||
+      stringValue(record.action) ||
+      stringValue(record.summary) ||
+      atlasJudgePlanText(record.item) ||
+      atlasJudgePlanText(record.content) ||
+      stringValue(record.name);
     const rationaleText = stringValue(record.rationale);
     const label = stringValue(record.label);
     const title = stringValue(record.title) || description || rationaleText || label;
@@ -2972,6 +3039,56 @@ function validateAtlasJudgeImprovementPlan(
         `${field}.improvement_plan.${index}.evidence_refs`,
       ),
     };
+  });
+}
+
+function atlasJudgePlanText(value: unknown): string {
+  const direct = stringValue(value);
+  if (direct) {
+    return direct;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    stringValue(record.description) ||
+    stringValue(record.summary) ||
+    stringValue(record.message) ||
+    stringValue(record.action) ||
+    stringValue(record.content) ||
+    stringValue(record.item) ||
+    stringValue(record.name) ||
+    stringValue(record.title)
+  );
+}
+
+function flattenAtlasJudgeImprovementPlanItems(planItems: unknown[]): unknown[] {
+  return planItems.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return [item];
+    }
+    const record = item as Record<string, unknown>;
+    if (
+      normalizeAtlasImprovementPrimitive(record.primitive ?? record.type ?? record.kind ?? record.artifact) ||
+      !Array.isArray(record.items)
+    ) {
+      return [item];
+    }
+    const title = stringValue(record.title);
+    const rationale = stringValue(record.rationale);
+    const target = record.target;
+    return record.items.map((child) => {
+      if (!child || typeof child !== "object" || Array.isArray(child)) {
+        return child;
+      }
+      return {
+        target,
+        title,
+        rationale,
+        ...(child as Record<string, unknown>),
+      };
+    });
   });
 }
 
@@ -3062,6 +3179,8 @@ function isInvariantHostileJudgeRecommendation(text: string): boolean {
   const safeNegationPatterns = [
     /\b(?:no|not|never|avoid|reject|forbid|forbidden|without|must not|should not)\b.{0,80}\b(?:engine|client|redis|kafka|websocket)\b.{0,80}\b(?:durable|authoritative|source of truth|ownership|own|state)\b/,
     /\b(?:engine|client|redis|kafka|websocket)\b.{0,80}\b(?:does not|must not|should not|cannot|can not)\b.{0,80}\b(?:own|store|persist|be authoritative|be source of truth)\b/,
+    /\bkeep\b.{0,80}\b(?:engine|client|redis|kafka|websocket)\b.{0,120}\b(?:transport|cache|non authoritative|nonauthoritative|non authoritative state)\b/,
+    /\b(?:engine|client|redis|kafka|websocket)\b.{0,120}\b(?:transport|cache)\b.{0,40}\bonly\b.{0,120}\b(?:do not|must not|should not|never)\b.{0,80}\b(?:assign|give|grant|treat)\b.{0,60}\b(?:durable|authoritative|ownership|source of truth)\b/,
   ];
   if (safeNegationPatterns.some((pattern) => pattern.test(normalized))) {
     return false;
@@ -3273,6 +3392,28 @@ function isAtlasImprovementPrimitive(value: string): value is AtlasRubricImprove
   );
 }
 
+function normalizeAtlasImprovementPrimitive(value: unknown): AtlasRubricImprovement["primitive"] | "" {
+  const compact = stringValue(value)
+    .replace(/[\s_-]+/g, "")
+    .toLowerCase();
+  if (compact === "companysignal") {
+    return "CompanySignal";
+  }
+  if (compact === "operationrecommendation") {
+    return "OperationRecommendation";
+  }
+  if (compact === "metricsnapshot") {
+    return "MetricSnapshot";
+  }
+  if (compact === "stateprojection") {
+    return "StateProjection";
+  }
+  if (compact === "workartifact") {
+    return "WorkArtifact";
+  }
+  return "";
+}
+
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
@@ -3349,6 +3490,12 @@ function buildConnectorProviderEvidence(
       status: source.status,
       hasToolExecution: Boolean(source.tool_execution_id),
       blockedReasonCode: source.blocked_reason_code,
+      evidenceMode: source.evidence_mode,
+      attributionScope: source.attribution_scope,
+      metricKeys: Object.keys(source.metrics ?? {}),
+      baselineKeys: Object.keys(source.baseline_metrics ?? {}),
+      targetKeys: Object.keys(source.target_metrics ?? {}),
+      optimizationActionCount: source.optimization_actions?.length ?? 0,
     })),
   };
 }
@@ -3422,7 +3569,14 @@ async function completeAgencyPhaseInDependencyOrderThroughUi(
     context: {
       company: liveLegacyCompanyName,
       product: "Legacy DEPP GOLD",
-      available_connectors: ["email_connector", "social_connector", "analytics_connector"],
+      available_connectors: [
+        "email_connector",
+        "social_connector",
+        "analytics_connector",
+        "whatsapp_connector",
+        "social_analytics_connector",
+      ],
+      credential_mode: "local_sandbox_evidence_only",
       missing_connectors_create_blockers: true,
     },
   });

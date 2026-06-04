@@ -236,6 +236,20 @@ department_tools:
     side_effects: none
     approval_required: false
     dry_run: true
+  - id: social.analytics_snapshot
+    label: Social Analytics Snapshot
+    department_id: analytics_performance
+    category: social_reporting
+    side_effects: read
+    approval_required: false
+    dry_run: true
+  - id: analytics.landing_page_snapshot
+    label: Landing Page Analytics Snapshot
+    department_id: analytics_performance
+    category: analytics
+    side_effects: read
+    approval_required: false
+    dry_run: true
   - id: qa_evaluator
     label: QA Evaluator
     department_id: qa_compliance

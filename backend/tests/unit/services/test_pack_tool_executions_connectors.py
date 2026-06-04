@@ -15,6 +15,7 @@ from application.services.social_connectors import FakeSocialProviderAdapter
 from application.services.whatsapp_connectors import FakeWhatsAppAdapter
 from infrastructure.orm.models import (
     CompanyOperatingModelInstallation,
+    GatewayMediaArtifact,
     Graph,
     GraphVersion,
     OperatingModelPackRelease,
@@ -211,6 +212,85 @@ def test_unsupported_connector_tool_id_fails_safely() -> None:
 
     assert exc.value.code == "tool_not_found"
     assert not ToolExecution.objects.filter(run=run).exists()
+
+
+@override_settings(
+    GATEWAY_CONNECTOR_ALLOW_REAL_SEND=True,
+    GATEWAY_RECIPIENT_ALLOWLIST=["chat-123"],
+)
+def test_gateway_tool_id_routes_to_backend_owned_tool_execution_receipt() -> None:
+    company, user, run = _company_run()
+
+    receipt = execute_deployment_connector_tool(
+        company=company,
+        user=user,
+        operation=run,
+        tool_id="gateway.telegram.send",
+        inputs={
+            "provider": "fake",
+            "to": "chat-123",
+            "text": "Approved gateway message",
+        },
+        dry_run=False,
+        idempotency_key="gateway-telegram-live",
+        approved=True,
+        approval_id="approval-gateway",
+        policy_allows_live=True,
+        operator_confirmed=True,
+    )
+
+    assert receipt["tool_id"] == "gateway.telegram.send"
+    assert receipt["status"] == "succeeded"
+    assert receipt["result"]["platform"] == "telegram"
+    assert receipt["result"]["provider"] == "fake"
+    assert receipt["result"]["status"] == "accepted"
+    execution = ToolExecution.objects.get(run=run, tool_name="gateway.telegram.send")
+    assert_tool_execution_company_scope(execution, company=company)
+    assert_tool_execution_receipt_sanitized(execution)
+
+
+@override_settings(
+    GATEWAY_CONNECTOR_ALLOW_REAL_SEND=True,
+    GATEWAY_RECIPIENT_ALLOWLIST=["chat-456"],
+)
+def test_gateway_tool_normalizes_outbound_media_artifacts() -> None:
+    company, user, run = _company_run()
+
+    receipt = execute_deployment_connector_tool(
+        company=company,
+        user=user,
+        operation=run,
+        tool_id="gateway.telegram.send",
+        inputs={
+            "provider": "fake",
+            "to": "chat-456",
+            "text": "Approved gateway media message",
+            "attachments": [
+                {
+                    "url": "https://provider.example/private-media?token=secret",
+                    "content_type": "image/png",
+                    "filename": "campaign.png",
+                    "token": "secret-token",
+                }
+            ],
+        },
+        dry_run=False,
+        idempotency_key="gateway-telegram-media-live",
+        approved=True,
+        approval_id="approval-gateway-media",
+        policy_allows_live=True,
+        operator_confirmed=True,
+    )
+
+    assert receipt["status"] == "succeeded"
+    media_ids = receipt["result"]["media_artifact_ids"]
+    assert len(media_ids) == 1
+    artifact = GatewayMediaArtifact.objects.get(id=media_ids[0])
+    assert artifact.direction == "outbound"
+    assert str(artifact.tool_execution_id) == receipt["tool_execution_id"]
+    assert "url" not in artifact.metadata_json
+    assert artifact.metadata_json["url_hash"].startswith("sha256:")
+    assert artifact.metadata_json["token_configured"] is True
 
 
 @override_settings(
