@@ -4,6 +4,7 @@ from django.urls import path
 
 from adapters.api.service_engagements.views import (
     AtlasDeliverableAssembleView,
+    AtlasLaunchReadinessView,
     ServiceCatalogDetailView,
     ServiceCatalogListCreateView,
     ServiceDeliverableListCreateView,
@@ -41,5 +42,10 @@ urlpatterns = [
         "whiteboards/<uuid:whiteboard_id>/atlas-deliverables/assemble",
         AtlasDeliverableAssembleView.as_view(),
         name="whiteboard-atlas-deliverables-assemble",
+    ),
+    path(
+        "whiteboards/<uuid:whiteboard_id>/atlas-launch/readiness",
+        AtlasLaunchReadinessView.as_view(),
+        name="whiteboard-atlas-launch-readiness",
     ),
 ]
