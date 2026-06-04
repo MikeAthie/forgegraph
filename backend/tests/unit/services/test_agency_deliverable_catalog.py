@@ -33,6 +33,38 @@ def test_mvp_catalog_contains_all_deliverable_types() -> None:
         assert definition.source_kinds
 
 
+def test_mvp_catalog_owner_department_slugs_are_atlas_department_slugs() -> None:
+    allowed_slugs = {
+        "strategy_research",
+        "brand_content",
+        "channel_execution",
+        "crm_lifecycle",
+        "analytics_performance",
+        "qa_compliance",
+        "client_approval_ops",
+    }
+    expected_mapping = {
+        "client_brief": "client_approval_ops",
+        "strategy_brief": "strategy_research",
+        "message_house": "brand_content",
+        "launch_readiness_checklist": "qa_compliance",
+        "connector_gap_report": "channel_execution",
+        "measurement_plan": "analytics_performance",
+        "approval_packet": "client_approval_ops",
+        "execution_receipt": "channel_execution",
+        "performance_report": "analytics_performance",
+        "campaign_launch_package": "client_approval_ops",
+    }
+
+    actual_mapping = {
+        definition.type: definition.owner_department_slug
+        for definition in list_deliverable_definitions()
+    }
+
+    assert set(actual_mapping.values()) <= allowed_slugs
+    assert actual_mapping == expected_mapping
+
+
 def test_get_deliverable_definition_returns_known_definition() -> None:
     definition = get_deliverable_definition("strategy_brief")
 

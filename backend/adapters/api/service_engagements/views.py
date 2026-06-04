@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 from uuid import UUID
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from adapters.api.responses import error_response, success_response
 from adapters.api.service_engagements.serializers import (
+    AtlasDeliverableAssembleSerializer,
     ServiceCatalogCreateSerializer,
     ServiceCatalogPatchSerializer,
     ServiceCatalogQuerySerializer,
@@ -21,6 +22,10 @@ from adapters.api.service_engagements.serializers import (
     ServiceEngagementCreateSerializer,
     ServiceEngagementPatchSerializer,
     ServiceEngagementQuerySerializer,
+)
+from application.services.agency_deliverables import (
+    assemble_atlas_deliverable,
+    assemble_atlas_mvp_deliverables,
 )
 from application.services.audit_log import record_audit_log
 from application.services.company_access import accessible_company_queryset, has_company_access
@@ -47,6 +52,7 @@ from infrastructure.orm.models import (
     ServiceDeliverable,
     ServiceEngagement,
     User,
+    WorkWhiteboard,
 )
 
 
@@ -369,6 +375,56 @@ class ServiceDeliverableListCreateView(APIView):
         )
 
 
+class AtlasDeliverableAssembleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, whiteboard_id: UUID) -> Response:
+        user = cast(User, request.user)
+        serializer = AtlasDeliverableAssembleSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        whiteboard = _whiteboard_for_user(user, whiteboard_id, minimum_role="member")
+        if whiteboard is None:
+            return _not_found("Whiteboard was not found.")
+
+        deliverable_type = serializer.validated_data.get("deliverable_type")
+        with transaction.atomic():
+            if deliverable_type:
+                deliverables = [
+                    assemble_atlas_deliverable(
+                        whiteboard=whiteboard,
+                        user=user,
+                        deliverable_type=str(deliverable_type),
+                    )
+                ]
+            else:
+                deliverables = assemble_atlas_mvp_deliverables(whiteboard=whiteboard, user=user)
+            engagement = deliverables[0].engagement
+            record_audit_log(
+                actor=user,
+                tenant_id=str(whiteboard.organization_id),
+                action="atlas_deliverables.assembled",
+                resource_type="work_whiteboard",
+                resource_id=str(whiteboard.id),
+                metadata={
+                    "company_id": str(whiteboard.company_id),
+                    "engagement_id": str(engagement.id),
+                    "deliverable_types": [
+                        deliverable.deliverable_type for deliverable in deliverables
+                    ],
+                },
+            )
+
+        return success_response(
+            {
+                "engagement": service_engagement_payload(engagement, include_internal=True),
+                "deliverables": [
+                    service_deliverable_payload(deliverable) for deliverable in deliverables
+                ],
+            }
+        )
+
+
 def _catalog_item_for_user(
     user: User,
     service_id: UUID,
@@ -412,6 +468,20 @@ def _engagement_for_user(
     return (
         ServiceEngagement.objects.filter(id=engagement_id, company__in=companies)
         .select_related("company", "catalog_item", "assigned_operator", "requested_by")
+        .first()
+    )
+
+
+def _whiteboard_for_user(
+    user: User,
+    whiteboard_id: UUID,
+    *,
+    minimum_role: str,
+) -> WorkWhiteboard | None:
+    companies = accessible_company_queryset(user, minimum_role=minimum_role)
+    return (
+        WorkWhiteboard.objects.filter(id=whiteboard_id, company__in=companies)
+        .select_related("company", "organization")
         .first()
     )
 
