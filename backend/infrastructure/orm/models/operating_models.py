@@ -521,6 +521,147 @@ class ServiceEngagement(models.Model):
         return f"{self.company_id} {self.catalog_item_id} ({self.status})"
 
 
+class ServiceEngagementBusinessSnapshot(models.Model):
+    """Backend-owned engagement economics, scope, and SLA snapshot."""
+
+    PROFITABILITY_BAND_CHOICES = [
+        ("unknown", "Unknown"),
+        ("strong", "Strong"),
+        ("healthy", "Healthy"),
+        ("thin", "Thin"),
+        ("break_even", "Break Even"),
+        ("loss", "Loss"),
+    ]
+    SCOPE_STATUS_CHOICES = [
+        ("unknown", "Unknown"),
+        ("on_track", "On Track"),
+        ("at_risk", "At Risk"),
+        ("over_limit", "Over Limit"),
+    ]
+    SLA_STATUS_CHOICES = [
+        ("unknown", "Unknown"),
+        ("met", "Met"),
+        ("at_risk", "At Risk"),
+        ("breached", "Breached"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="service_engagement_business_snapshots",
+    )
+    company = models.ForeignKey(
+        Graph,
+        on_delete=models.CASCADE,
+        related_name="service_engagement_business_snapshots",
+    )
+    engagement = models.ForeignKey(
+        ServiceEngagement,
+        on_delete=models.CASCADE,
+        related_name="business_snapshots",
+    )
+    source_key = models.CharField(max_length=255, blank=True, default="")
+    idempotency_key = models.CharField(max_length=255)
+    request_hash = models.CharField(max_length=64)
+    period_start = models.DateField(null=True, blank=True)
+    period_end = models.DateField(null=True, blank=True)
+    currency = models.CharField(max_length=3, default="USD")
+    revenue_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    delivery_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    pass_through_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tooling_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    gross_margin_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    gross_margin_percent = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    profitability_band = models.CharField(
+        max_length=32,
+        choices=PROFITABILITY_BAND_CHOICES,
+        default="unknown",
+    )
+    scope_unit = models.CharField(max_length=64, blank=True, default="")
+    scope_included_units = models.PositiveIntegerField(null=True, blank=True)
+    scope_used_units = models.PositiveIntegerField(null=True, blank=True)
+    scope_overage_units = models.PositiveIntegerField(default=0)
+    scope_utilization_percent = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    scope_status = models.CharField(
+        max_length=32,
+        choices=SCOPE_STATUS_CHOICES,
+        default="unknown",
+    )
+    sla_target_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    sla_elapsed_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    sla_breach_count = models.PositiveIntegerField(default=0)
+    sla_status = models.CharField(
+        max_length=32,
+        choices=SLA_STATUS_CHOICES,
+        default="unknown",
+    )
+    snapshot_json = models.JSONField(default=dict, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
+    recorded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_service_engagement_business_snapshots",
+    )
+    recorded_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "service_engagement_business_snapshots"
+        ordering = ["-recorded_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["engagement", "idempotency_key"],
+                name="svc_bus_snap_eng_idem_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["engagement", "source_key"],
+                condition=models.Q(source_key__gt=""),
+                name="svc_bus_snap_eng_src_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "recorded_at"], name="svc_bus_snap_org_time_idx"),
+            models.Index(fields=["company", "recorded_at"], name="svc_bus_snap_comp_time_idx"),
+            models.Index(
+                fields=["engagement", "recorded_at"],
+                name="svc_bus_snap_eng_time_idx",
+            ),
+            models.Index(
+                fields=["company", "profitability_band"],
+                name="svc_bus_snap_profit_idx",
+            ),
+            models.Index(fields=["company", "scope_status"], name="svc_bus_snap_scope_idx"),
+            models.Index(fields=["company", "sla_status"], name="svc_bus_snap_sla_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.engagement_id} {self.period_start or 'snapshot'} ({self.scope_status})"
+
+
 class AtlasLaunchAttempt(models.Model):
     """Backend-owned durable state for an Atlas campaign launch attempt."""
 
