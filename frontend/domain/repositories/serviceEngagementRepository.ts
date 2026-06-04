@@ -27,21 +27,35 @@ export const serviceEngagementRepository = {
     serviceEngagementsApi.listEngagements(params),
 
   createEngagement: (input: ServiceEngagementInput): Promise<ServiceEngagementDTO> =>
-    serviceEngagementsApi.createEngagement(input),
+    serviceEngagementsApi.createEngagement(input, {
+      idempotencyKey: makeClientIdempotencyKey("service-engagement-create"),
+    }),
 
   getEngagement: (engagementId: string): Promise<ServiceEngagementDTO> =>
     serviceEngagementsApi.getEngagement(engagementId),
 
   patchEngagement: (engagementId: string, input: ServiceEngagementPatchInput): Promise<ServiceEngagementDTO> =>
-    serviceEngagementsApi.patchEngagement(engagementId, input),
+    serviceEngagementsApi.patchEngagement(engagementId, input, {
+      idempotencyKey: makeClientIdempotencyKey(`service-engagement-update:${engagementId}`),
+    }),
 
   listDeliverables: (engagementId: string): Promise<ServiceDeliverableDTO[]> =>
     serviceEngagementsApi.listDeliverables(engagementId),
 
   createDeliverable: (engagementId: string, input: ServiceDeliverableInput): Promise<ServiceDeliverableDTO> =>
-    serviceEngagementsApi.createDeliverable(engagementId, input),
+    serviceEngagementsApi.createDeliverable(engagementId, input, {
+      idempotencyKey: makeClientIdempotencyKey(`service-deliverable-create:${engagementId}`),
+    }),
 };
 
 type ServiceEngagementRepository = typeof serviceEngagementRepository;
 
 export type { ServiceEngagementRepository };
+
+function makeClientIdempotencyKey(prefix: string): string {
+  const randomId =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}:${randomId}`;
+}

@@ -147,6 +147,50 @@ def test_expansion_opportunity_is_derived_from_company_opportunity_and_signal(us
     assert "private_note" not in rendered
 
 
+def test_expansion_signal_fallback_is_scoped_to_company(user) -> None:
+    company, _version = _company(user)
+    other_user = User.objects.create_user(
+        email="growth-signal-other@example.com",
+        password="testpassword123",
+    )
+    other_company, _other_version = _company(other_user)
+    other_organization = other_company.organization
+    assert other_organization is not None
+    leaked_signal = CompanySignal.objects.create(
+        organization=other_organization,
+        company=other_company,
+        created_by=other_user,
+        signal_type="lead",
+        signal_kind="opportunity",
+        domain_context="services",
+        status="closed",
+        source="manual",
+        title="Other tenant expansion request",
+        summary="This signal belongs to another company.",
+    )
+    organization = company.organization
+    assert organization is not None
+    CompanyOpportunity.objects.create(
+        organization=organization,
+        company=company,
+        signal=leaked_signal,
+        owner_user=user,
+        status="qualified",
+        title="Malformed cross-company opportunity",
+        summary="Should not pull the linked signal payload.",
+        estimated_value_amount=Decimal("300.00"),
+        currency="usd",
+    )
+
+    payload = build_agency_growth_signals(company)
+
+    assert payload["expansion"]["opportunities"][0]["source_signal_id"] == str(leaked_signal.id)
+    assert payload["expansion"]["signals"] == []
+    rendered = json.dumps(payload, sort_keys=True, default=str)
+    assert "Other tenant expansion request" not in rendered
+    assert "This signal belongs to another company." not in rendered
+
+
 def test_scope_creep_warning_from_requested_deliverables_over_package_limit(user) -> None:
     company, _version = _company(user)
     organization = company.organization

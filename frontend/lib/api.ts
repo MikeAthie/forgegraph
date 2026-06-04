@@ -6546,10 +6546,14 @@ export const serviceEngagementsApi = {
     );
     return response.data.data.engagements;
   },
-  createEngagement: async (input: ServiceEngagementInput): Promise<ServiceEngagementDTO> => {
+  createEngagement: async (
+    input: ServiceEngagementInput,
+    options?: IdempotencyOptions,
+  ): Promise<ServiceEngagementDTO> => {
     const response = await api.post<ApiSuccessResponse<{ engagement: ServiceEngagementDTO }>>(
       API_PATHS.services.engagements,
       input,
+      idempotencyConfig(options),
     );
     return response.data.data.engagement;
   },
@@ -6559,10 +6563,15 @@ export const serviceEngagementsApi = {
     );
     return response.data.data.engagement;
   },
-  patchEngagement: async (engagementId: string, input: ServiceEngagementPatchInput): Promise<ServiceEngagementDTO> => {
+  patchEngagement: async (
+    engagementId: string,
+    input: ServiceEngagementPatchInput,
+    options?: IdempotencyOptions,
+  ): Promise<ServiceEngagementDTO> => {
     const response = await api.patch<ApiSuccessResponse<{ engagement: ServiceEngagementDTO }>>(
       API_PATHS.services.engagement(engagementId),
       input,
+      idempotencyConfig(options),
     );
     return response.data.data.engagement;
   },
@@ -6572,10 +6581,15 @@ export const serviceEngagementsApi = {
     );
     return response.data.data.deliverables;
   },
-  createDeliverable: async (engagementId: string, input: ServiceDeliverableInput): Promise<ServiceDeliverableDTO> => {
+  createDeliverable: async (
+    engagementId: string,
+    input: ServiceDeliverableInput,
+    options?: IdempotencyOptions,
+  ): Promise<ServiceDeliverableDTO> => {
     const response = await api.post<ApiSuccessResponse<{ deliverable: ServiceDeliverableDTO }>>(
       API_PATHS.services.deliverables(engagementId),
       input,
+      idempotencyConfig(options),
     );
     return response.data.data.deliverable;
   },

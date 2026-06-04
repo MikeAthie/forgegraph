@@ -1,6 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 
-import { AgencyHealthPanel, type AgencyHealthSnapshot } from "@/components/company/AgencyHealthPanel";
+import {
+  AgencyHealthPanel,
+  agencyHealthSnapshotFromViewModel,
+  type AgencyHealthSnapshot,
+} from "@/components/company/AgencyHealthPanel";
 
 const snapshot: AgencyHealthSnapshot = {
   agencyName: "Atlas Studio",
@@ -77,6 +81,108 @@ const snapshot: AgencyHealthSnapshot = {
 };
 
 describe("AgencyHealthPanel", () => {
+  it("maps backend agency health view models into panel snapshots", () => {
+    const mapped = agencyHealthSnapshotFromViewModel(
+      {
+        companyId: "company-1",
+        generatedAt: "2026-06-04T12:00:00Z",
+        health: {
+          score: 72,
+          status: "monitor",
+          dimensions: [
+            {
+              slug: "connector_readiness",
+              label: "Connector readiness",
+              score: 45,
+              status: "attention",
+              weight: 20,
+              ownerDepartmentSlug: "channel_execution",
+              summary: "Required connector gaps are lowering account health.",
+            },
+          ],
+        },
+        onboardingItems: [
+          {
+            slug: "connector_setup",
+            label: "Connector setup",
+            status: "blocked",
+            ownerDepartmentSlug: "channel_execution",
+            message: "Required connectors are missing.",
+          },
+        ],
+        connectorReadiness: {
+          status: "blocked",
+          summary: {
+            total: 1,
+            required: 1,
+            ready: 0,
+            missing: 1,
+            degraded: 0,
+            disabled: 0,
+          },
+          connectors: [
+            {
+              slug: "whatsapp",
+              label: "WhatsApp",
+              category: "messaging",
+              required: true,
+              status: "missing",
+              readiness: "action_required",
+              ownerDepartmentSlug: "channel_execution",
+              source: "gateway_connection",
+              lastSeenAt: null,
+              lastHealthCheckAt: null,
+              message: "WhatsApp is not connected.",
+            },
+          ],
+        },
+        risks: [
+          {
+            slug: "missing_required_connectors",
+            label: "Required connectors missing",
+            severity: "high",
+            ownerDepartmentSlug: "channel_execution",
+            summary: "1 required connector is not ready.",
+          },
+        ],
+        opportunities: [],
+        nextActions: [
+          {
+            slug: "configure_whatsapp",
+            label: "Configure WhatsApp",
+            priority: "high",
+            ownerDepartmentSlug: "channel_execution",
+            reason: "WhatsApp is not connected.",
+          },
+        ],
+      },
+      "Atlas Studio",
+    );
+
+    expect(mapped.agencyName).toBe("Atlas Studio");
+    expect(mapped.status).toBe("watch");
+    expect(mapped.dimensions[0]).toEqual({
+      id: "connector_readiness",
+      label: "Connector readiness",
+      score: 45,
+      status: "attention",
+      summary: "Required connector gaps are lowering account health.",
+    });
+    expect(mapped.checklist[0]).toEqual({
+      id: "connector_setup",
+      label: "Connector setup",
+      complete: false,
+    });
+    expect(mapped.connectors.items[0]).toEqual({
+      id: "whatsapp",
+      label: "WhatsApp",
+      status: "missing",
+      detail: "WhatsApp is not connected.",
+    });
+    expect(mapped.nextActions[0].label).toBe("Configure WhatsApp");
+    expect(JSON.stringify(mapped)).not.toContain("api_key");
+  });
+
   it("renders the cockpit health summary without exposing raw metadata or connector secrets", () => {
     render(<AgencyHealthPanel snapshot={snapshot} audience="operator" />);
 
