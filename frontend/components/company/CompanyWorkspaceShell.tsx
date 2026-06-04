@@ -18,6 +18,7 @@ import { CommerceInventoryPanel } from "@/components/company/CommerceInventoryPa
 import { OperatingModelWorkspace } from "@/components/company/OperatingModelWorkspace";
 import { QuestGuide } from "@/components/company/QuestGuide";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { AgencyHealthPanel, buildAgencyHealthSnapshotFromWorkspace } from "@/components/company/AgencyHealthPanel";
 import {
   EmptyBlock,
   InspectorPanel,
@@ -1188,9 +1189,21 @@ function CompanyQuestGuides({ controller }: { controller: CompanyWorkspaceContro
 }
 
 function CompanyWorkspaceLoaded({ controller }: { controller: CompanyWorkspaceController }) {
+  const agencyHealthSnapshot = useMemo(
+    () =>
+      buildAgencyHealthSnapshotFromWorkspace({
+        company: controller.company,
+        displayedCompanyStatus: controller.displayedCompanyStatus,
+        operations: controller.operations,
+        pendingApprovalCount: controller.pendingApprovalCount,
+      }),
+    [controller.company, controller.displayedCompanyStatus, controller.operations, controller.pendingApprovalCount],
+  );
+
   return (
     <>
       <CompanyHeaderPanel controller={controller} />
+      <AgencyHealthPanel snapshot={agencyHealthSnapshot} audience="operator" />
       <OperatingModelWorkspace companyId={controller.companyId} companyName={controller.profile.companyName} />
       <div className="grid gap-6 2xl:grid-cols-[1.06fr_0.94fr]">
         <div data-guide-id="company-operations-panel">
