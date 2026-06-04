@@ -617,12 +617,30 @@ class AtlasLaunchReadinessView(APIView):
             idempotency_key=str(
                 validated.get("idempotency_key") or idempotency_key_from_request(request)
             ),
-            create_receipt=create_receipt,
+            create_receipt=False,
         )
-        receipt = readiness.get("receipt_deliverable")
         readiness_payload = {
             key: value for key, value in readiness.items() if key != "receipt_deliverable"
         }
+        if live_mode and readiness_payload.get("status") == "blocked":
+            return _launch_blocked_response(readiness_payload)
+
+        receipt: Any = None
+        if create_receipt:
+            readiness = CampaignLaunchReadiness().evaluate(
+                whiteboard=whiteboard,
+                user=user,
+                live_mode=live_mode,
+                idempotency_key=str(
+                    validated.get("idempotency_key") or idempotency_key_from_request(request)
+                ),
+                create_receipt=True,
+            )
+            receipt = readiness.get("receipt_deliverable")
+            readiness_payload = {
+                key: value for key, value in readiness.items() if key != "receipt_deliverable"
+            }
+
         payload: dict[str, Any] = {"readiness": readiness_payload}
         if isinstance(receipt, dict):
             payload["receipt_deliverable"] = receipt
@@ -772,6 +790,20 @@ def _service_error(exc: ServiceEngagementError) -> Response:
         exc.message,
         status=http_status.HTTP_400_BAD_REQUEST,
         details=exc.details,
+    )
+
+
+def _launch_blocked_response(readiness: dict[str, Any]) -> Response:
+    return error_response(
+        "ATLAS_LIVE_LAUNCH_BLOCKED",
+        "Live Atlas launch is blocked until all launch readiness blockers are resolved.",
+        status=http_status.HTTP_409_CONFLICT,
+        details=[
+            {
+                "readiness": readiness,
+                "blockers": list(readiness.get("blockers") or []),
+            }
+        ],
     )
 
 
