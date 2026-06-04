@@ -154,6 +154,27 @@ class ServiceEngagementPatchSerializer(ServiceEngagementCreateSerializer):
     )
 
 
+class ServiceEngagementBusinessSnapshotSerializer(serializers.Serializer[Any]):
+    period_start = serializers.DateField(required=False, allow_null=True)
+    period_end = serializers.DateField(required=False, allow_null=True)
+    economics = serializers.JSONField(required=False, default=dict)
+    scope = serializers.JSONField(required=False, default=dict)
+    sla = serializers.JSONField(required=False, default=dict)
+    metadata = serializers.JSONField(required=False, default=dict)
+    source_key = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    idempotency_key = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+
+
 class ServiceDeliverableCreateSerializer(serializers.Serializer[Any]):
     title = serializers.CharField(max_length=255)
     deliverable_type = serializers.CharField(

@@ -21,6 +21,7 @@ from adapters.api.service_engagements.serializers import (
     ServiceCatalogQuerySerializer,
     ServiceDeliverableActionSerializer,
     ServiceDeliverableCreateSerializer,
+    ServiceEngagementBusinessSnapshotSerializer,
     ServiceEngagementCreateSerializer,
     ServiceEngagementPatchSerializer,
     ServiceEngagementQuerySerializer,
@@ -46,6 +47,10 @@ from application.services.processed_commands import (
     replay_processed_command,
 )
 from application.services.rbac import has_min_role
+from application.services.service_engagement_snapshots import (
+    record_service_engagement_business_snapshot,
+    service_engagement_business_snapshot_payload,
+)
 from application.services.service_engagements import (
     ServiceEngagementError,
     apply_service_deliverable_action,
@@ -67,6 +72,7 @@ from infrastructure.orm.models import (
     ServiceCatalogItem,
     ServiceDeliverable,
     ServiceEngagement,
+    ServiceEngagementBusinessSnapshot,
     User,
     WorkWhiteboard,
 )
@@ -361,6 +367,90 @@ class ServiceEngagementDetailView(APIView):
             response=response,
             resource_type="service_engagement",
             resource_id=str(engagement.id),
+        )
+
+
+class ServiceEngagementBusinessSnapshotListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, engagement_id: UUID) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="viewer")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        include_internal = has_company_access(user, engagement.company, "member")
+        queryset = ServiceEngagementBusinessSnapshot.objects.filter(
+            engagement=engagement,
+        ).order_by("-recorded_at", "-created_at")
+        return success_response(
+            {
+                "snapshots": [
+                    service_engagement_business_snapshot_payload(
+                        snapshot,
+                        include_internal=include_internal,
+                    )
+                    for snapshot in queryset
+                ]
+            }
+        )
+
+    def post(self, request: Request, engagement_id: UUID) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="member")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        serializer = ServiceEngagementBusinessSnapshotSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        context, error = _command_context(
+            request=request,
+            company=engagement.company,
+            action=f"service_engagement.business_snapshot:{engagement_id}",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
+
+        idempotency_key = str(
+            serializer.validated_data.get("idempotency_key")
+            or idempotency_key_from_request(request)
+        )
+        try:
+            snapshot = record_service_engagement_business_snapshot(
+                engagement=engagement,
+                actor=user,
+                data=dict(serializer.validated_data),
+                idempotency_key=idempotency_key,
+            )
+        except ServiceEngagementError as exc:
+            if exc.code == "idempotency_conflict":
+                return error_response(
+                    "IDEMPOTENCY_CONFLICT",
+                    exc.message,
+                    status=http_status.HTTP_409_CONFLICT,
+                )
+            return _service_error(exc)
+
+        response = success_response(
+            {
+                "snapshot": service_engagement_business_snapshot_payload(
+                    snapshot,
+                    include_internal=True,
+                ),
+                "client_snapshot": service_engagement_business_snapshot_payload(snapshot),
+            },
+            status=http_status.HTTP_201_CREATED,
+        )
+        return record_processed_command(
+            context=context,
+            response=response,
+            resource_type="service_engagement_business_snapshot",
+            resource_id=str(snapshot.id),
         )
 
 

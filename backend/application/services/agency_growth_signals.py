@@ -8,11 +8,13 @@ from typing import Any
 from django.db.models import Q
 from django.utils import timezone
 
+from application.services.service_engagement_snapshots import latest_business_snapshot_for_company
 from infrastructure.orm.models import (
     CompanyOpportunity,
     CompanySignal,
     Graph,
     ServiceEngagement,
+    ServiceEngagementBusinessSnapshot,
 )
 
 OPEN_OPPORTUNITY_STATUSES = {"new", "qualified", "follow_up", "reserved"}
@@ -22,10 +24,11 @@ OPEN_SIGNAL_STATUSES = {"new", "qualified"}
 def build_agency_growth_signals(company: Graph) -> dict[str, Any]:
     """Return client-safe commercial and growth signals from backend records."""
 
+    snapshot = latest_business_snapshot_for_company(company)
     expansion = _expansion(company)
-    scope = _scope(company)
+    scope = _snapshot_scope(snapshot) if snapshot is not None else _scope(company)
     retention = _retention(company)
-    profit = _unknown_profit()
+    profit = _profit(snapshot)
     return {
         "company_id": str(company.id),
         "generated_at": timezone.now().isoformat(),
@@ -35,7 +38,7 @@ def build_agency_growth_signals(company: Graph) -> dict[str, Any]:
             "scope_warnings": len(scope["warnings"]),
             "retention_risks": len(retention["risks"]),
         },
-        "commercial": _unknown_commercial(),
+        "commercial": _commercial(snapshot),
         "retention": retention,
         "expansion": expansion,
         "scope": scope,
@@ -56,6 +59,53 @@ def _unknown_profit() -> dict[str, Any]:
         "status": "unknown",
         "gross_margin": {"status": "unknown", "value": None},
         "summary": "Profit cannot be derived until explicit margin inputs are recorded.",
+    }
+
+
+def _commercial(snapshot: ServiceEngagementBusinessSnapshot | None) -> dict[str, Any]:
+    if snapshot is None:
+        return _unknown_commercial()
+    snapshot_json = snapshot.snapshot_json if isinstance(snapshot.snapshot_json, dict) else {}
+    economics = _mapping(snapshot_json.get("economics"))
+    profitability = _mapping(snapshot_json.get("profitability"))
+    revenue = _mapping(economics.get("revenue"))
+    amount = revenue.get("amount")
+    currency = revenue.get("currency") or snapshot.currency
+    gross_margin_percent = profitability.get("gross_margin_percent")
+    if not amount:
+        return _unknown_commercial()
+    return {
+        "monthly_retainer": {
+            "status": "known",
+            "amount": str(amount),
+            "currency": str(currency),
+        },
+        "contract_value": {
+            "status": "known",
+            "amount": str(amount),
+            "currency": str(currency),
+        },
+        "gross_margin": {
+            "status": "known" if gross_margin_percent is not None else "unknown",
+            "value": str(gross_margin_percent) if gross_margin_percent is not None else None,
+            "band": snapshot.profitability_band,
+        },
+    }
+
+
+def _profit(snapshot: ServiceEngagementBusinessSnapshot | None) -> dict[str, Any]:
+    if snapshot is None:
+        return _unknown_profit()
+    snapshot_json = snapshot.snapshot_json if isinstance(snapshot.snapshot_json, dict) else {}
+    profitability = _mapping(snapshot_json.get("profitability"))
+    return {
+        "status": "known",
+        "profitability_band": snapshot.profitability_band,
+        "gross_margin": {
+            "amount": profitability.get("gross_margin_amount"),
+            "percent": profitability.get("gross_margin_percent"),
+        },
+        "summary": "Profitability is derived from the latest backend-owned engagement snapshot.",
     }
 
 
@@ -144,6 +194,36 @@ def _scope(company: Graph) -> dict[str, Any]:
     return {
         "status": "warning" if warnings else "ok" if known else "unknown",
         "warnings": warnings,
+    }
+
+
+def _snapshot_scope(snapshot: ServiceEngagementBusinessSnapshot) -> dict[str, Any]:
+    snapshot_json = snapshot.snapshot_json if isinstance(snapshot.snapshot_json, dict) else {}
+    scope = _mapping(snapshot_json.get("scope"))
+    warnings: list[dict[str, Any]] = []
+    if snapshot.scope_status in {"at_risk", "over_limit"}:
+        warnings.append(
+            {
+                "slug": "scope_utilization_over_plan",
+                "severity": "high" if snapshot.scope_status == "over_limit" else "medium",
+                "requested_deliverables": snapshot.scope_used_units,
+                "package_limit": snapshot.scope_included_units,
+                "summary": "Scope utilization is at or above the recorded package limit.",
+            }
+        )
+    return {
+        "status": "warning"
+        if snapshot.scope_status in {"at_risk", "over_limit"}
+        else "ok"
+        if snapshot.scope_status == "on_track"
+        else "unknown",
+        "warnings": warnings,
+        "unit": snapshot.scope_unit,
+        "included_units": snapshot.scope_included_units,
+        "used_units": snapshot.scope_used_units,
+        "overage_units": snapshot.scope_overage_units,
+        "utilization_percent": scope.get("utilization_percent"),
+        "source_snapshot_id": str(snapshot.id),
     }
 
 
