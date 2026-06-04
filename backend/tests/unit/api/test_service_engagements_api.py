@@ -11,6 +11,8 @@ from application.services.agency_deliverables import assemble_atlas_mvp_delivera
 from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     Asset,
+    AtlasLaunchAttempt,
+    AtlasLaunchCheckpoint,
     AuditLog,
     CompanyAccessPolicy,
     CompanyAssignment,
@@ -1168,6 +1170,18 @@ def test_atlas_launch_readiness_api_returns_sanitized_dry_run_payload_and_receip
     }
     assert receipt["deliverable_type"] == "campaign_launch_receipt"
     assert receipt["metadata"]["source"] == "atlas_launch_readiness"
+    attempt = payload["launch_attempt"]
+    assert attempt["status"] == "dry_run"
+    assert attempt["source_key"] == f"atlas-launch:{whiteboard.id}:atlas-launch-readiness-receipt"
+    assert attempt["receipt_deliverable_id"] == receipt["id"]
+    persisted_attempt = AtlasLaunchAttempt.objects.get(id=attempt["id"])
+    assert persisted_attempt.company == company
+    assert persisted_attempt.whiteboard == whiteboard
+    assert persisted_attempt.status == "dry_run"
+    checkpoint = AtlasLaunchCheckpoint.objects.get(attempt=persisted_attempt)
+    assert checkpoint.status == "dry_run"
+    assert checkpoint.blocker_snapshot_json == []
+    assert checkpoint.readiness_snapshot_json["status"] == "ready"
     assert receipt["metadata"]["dry_run"] is True
     assert receipt["metadata"]["live_execution_enabled"] is False
     rendered = json.dumps(response.data, sort_keys=True, default=str)
@@ -1237,6 +1251,8 @@ def test_atlas_launch_readiness_receipt_replays_and_rejects_conflict(
     assert replay.json()["data"]["duplicate"] is True
     assert conflict.status_code == 409
     assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert AtlasLaunchAttempt.objects.filter(company=company).count() == 1
+    assert AtlasLaunchCheckpoint.objects.filter(company=company).count() == 1
     assert (
         ServiceDeliverable.objects.filter(
             company=company,
@@ -1244,6 +1260,51 @@ def test_atlas_launch_readiness_receipt_replays_and_rejects_conflict(
         ).count()
         == 1
     )
+
+
+def test_atlas_launch_readiness_records_status_transition_checkpoints_and_sanitizes_attempt(
+    authenticated_client,
+    user,
+):
+    company = _company(user, "Atlas Launch Transition Client")
+    whiteboard = _whiteboard(company, user)
+    _mark_atlas_launch_ready(whiteboard, user)
+    source_key = f"atlas-launch-transition:{whiteboard.id}"
+
+    dry_run = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        {"source_key": source_key},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-transition-dry-run",
+    )
+    live = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        {"mode": "live", "source_key": source_key},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-transition-live",
+    )
+
+    assert dry_run.status_code == 200
+    assert live.status_code == 200
+    attempt = AtlasLaunchAttempt.objects.get(company=company, source_key=source_key)
+    assert attempt.status == "ready"
+    assert attempt.requested_mode == "live"
+    checkpoints = list(AtlasLaunchCheckpoint.objects.filter(attempt=attempt).order_by("sequence"))
+    assert [checkpoint.sequence for checkpoint in checkpoints] == [1, 2]
+    assert [checkpoint.status for checkpoint in checkpoints] == ["dry_run", "ready"]
+    assert checkpoints[1].requested_mode == "live"
+    rendered = json.dumps(
+        {
+            "attempt": attempt.readiness_snapshot_json,
+            "checkpoint": checkpoints[1].readiness_snapshot_json,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "email-secret" not in rendered
+    assert "access_token" not in rendered
+    assert "api_key" not in rendered
+    assert "private_key" not in rendered
 
 
 def test_atlas_launch_readiness_api_requires_auth_and_scopes_whiteboard(api_client, user):

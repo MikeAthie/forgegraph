@@ -14,6 +14,7 @@ from application.services.agency_launch_readiness import CampaignLaunchReadiness
 from infrastructure.orm.models import (
     Asset,
     AssetVersion,
+    AtlasLaunchAttempt,
     Graph,
     Organization,
     OrganizationMembership,
@@ -289,12 +290,15 @@ def test_api_dry_run_returns_client_safe_payload_without_receipt() -> None:
         reverse("whiteboard-atlas-launch-readiness", kwargs={"whiteboard_id": whiteboard.id}),
         {"mode": "dry_run"},
         format="json",
+        HTTP_IDEMPOTENCY_KEY="dry-run-readiness-key",
     )
 
     assert response.status_code == 200
     readiness = response.data["data"]["readiness"]
-    rendered = json.dumps(readiness, sort_keys=True, default=str)
+    launch_attempt = response.data["data"]["launch_attempt"]
+    rendered = json.dumps(response.data["data"], sort_keys=True, default=str)
     assert readiness["status"] == "ready"
+    assert launch_attempt["status"] == "dry_run"
     assert readiness["dry_run"] is True
     assert "receipt_deliverable" not in response.data["data"]
     assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
@@ -332,10 +336,13 @@ def test_api_live_unsafe_launch_is_hard_blocked_without_receipt_or_command() -> 
     error = response.data["error"]
     assert error["code"] == "ATLAS_LIVE_LAUNCH_BLOCKED"
     readiness = error["details"][0]["readiness"]
+    launch_attempt = error["details"][0]["launch_attempt"]
     assert readiness["requested_execution_mode"] == "live"
+    assert launch_attempt["status"] == "blocked"
     assert "approval_missing" in _codes(readiness["blockers"])
     assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
     assert ProcessedCommand.objects.count() == 0
+    assert AtlasLaunchAttempt.objects.filter(company=company, status="blocked").count() == 1
 
 
 def test_api_receipt_creation_replays_idempotently_and_conflicts_on_body_change() -> None:
