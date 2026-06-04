@@ -85,7 +85,9 @@ def _expansion(company: Graph) -> dict[str, Any]:
     if opportunity_signal_ids and not payload["signals"]:
         payload["signals"] = [
             _signal_payload(signal)
-            for signal in CompanySignal.objects.filter(company=company, id__in=opportunity_signal_ids)
+            for signal in CompanySignal.objects.filter(
+                company=company, id__in=opportunity_signal_ids
+            )
         ]
     return payload
 

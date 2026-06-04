@@ -682,9 +682,7 @@ def test_service_deliverable_action_submit_for_approval(authenticated_client, us
     assert engagement.customer_status == "review_ready"
 
 
-def test_service_deliverable_action_deliver_to_client_sets_delivered_at(
-    authenticated_client, user
-):
+def test_service_deliverable_action_deliver_to_client_sets_delivered_at(authenticated_client, user):
     company = _company(user, "Lifecycle Delivered Client")
     engagement = _engagement(user, company)
     deliverable = ServiceDeliverable.objects.create(
@@ -889,9 +887,7 @@ def test_atlas_deliverables_single_assemble_api(authenticated_client, user):
     assert response.status_code == 200
     payload = response.data["data"]
     assert payload["engagement"]["source_key"] == f"atlas-engagement:{whiteboard.id}"
-    assert [item["deliverable_type"] for item in payload["deliverables"]] == [
-        "performance_report"
-    ]
+    assert [item["deliverable_type"] for item in payload["deliverables"]] == ["performance_report"]
     assert ServiceDeliverable.objects.get(company=company).deliverable_type == "performance_report"
 
 
@@ -1053,10 +1049,13 @@ def test_atlas_launch_readiness_receipt_requires_idempotency_key(authenticated_c
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
-    assert ServiceDeliverable.objects.filter(
-        company=company,
-        deliverable_type="campaign_launch_receipt",
-    ).count() == 0
+    assert (
+        ServiceDeliverable.objects.filter(
+            company=company,
+            deliverable_type="campaign_launch_receipt",
+        ).count()
+        == 0
+    )
 
 
 def test_atlas_launch_readiness_receipt_replays_and_rejects_conflict(
@@ -1092,10 +1091,13 @@ def test_atlas_launch_readiness_receipt_replays_and_rejects_conflict(
     assert replay.json()["data"]["duplicate"] is True
     assert conflict.status_code == 409
     assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
-    assert ServiceDeliverable.objects.filter(
-        company=company,
-        deliverable_type="campaign_launch_receipt",
-    ).count() == 1
+    assert (
+        ServiceDeliverable.objects.filter(
+            company=company,
+            deliverable_type="campaign_launch_receipt",
+        ).count()
+        == 1
+    )
 
 
 def test_atlas_launch_readiness_api_requires_auth_and_scopes_whiteboard(api_client, user):
@@ -1133,4 +1135,6 @@ def test_atlas_launch_readiness_api_requires_auth_and_scopes_whiteboard(api_clie
 
     assert unauthenticated.status_code in {401, 403}
     assert scoped.status_code == 404
-    assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
+    assert (
+        ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
+    )

@@ -332,7 +332,9 @@ def _deliverable_metadata_payload(
             "passed": quality_gate.get("passed"),
             "score": quality_gate.get("score"),
             "visibility": {
-                "client_safe": visibility.get("client_safe") if isinstance(visibility, dict) else None,
+                "client_safe": visibility.get("client_safe")
+                if isinstance(visibility, dict)
+                else None,
                 "customer_visible": visibility.get("customer_visible")
                 if isinstance(visibility, dict)
                 else None,

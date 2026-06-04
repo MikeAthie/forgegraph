@@ -606,7 +606,9 @@ class AtlasLaunchReadinessView(APIView):
             whiteboard=whiteboard,
             user=user,
             live_mode=live_mode,
-            idempotency_key=str(validated.get("idempotency_key") or idempotency_key_from_request(request)),
+            idempotency_key=str(
+                validated.get("idempotency_key") or idempotency_key_from_request(request)
+            ),
             create_receipt=create_receipt,
         )
         receipt = readiness.get("receipt_deliverable")
@@ -681,7 +683,9 @@ def _deliverable_for_user(
     companies = accessible_company_queryset(user, minimum_role=minimum_role)
     return (
         ServiceDeliverable.objects.filter(id=deliverable_id, company__in=companies)
-        .select_related("company", "engagement", "engagement__catalog_item", "artifact", "report_run")
+        .select_related(
+            "company", "engagement", "engagement__catalog_item", "artifact", "report_run"
+        )
         .first()
     )
 
