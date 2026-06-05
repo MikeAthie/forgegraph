@@ -5,6 +5,8 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
+from django.urls import reverse
+from rest_framework.test import APIClient
 
 from application.services.agency_deliverable_catalog import MVP_DELIVERABLE_TYPES
 from application.services.agency_deliverables import assemble_atlas_mvp_deliverables
@@ -12,9 +14,11 @@ from application.services.agency_launch_readiness import CampaignLaunchReadiness
 from infrastructure.orm.models import (
     Asset,
     AssetVersion,
+    AtlasLaunchAttempt,
     Graph,
     Organization,
     OrganizationMembership,
+    ProcessedCommand,
     ServiceDeliverable,
     StateProjection,
     User,
@@ -275,3 +279,111 @@ def test_launch_receipt_deliverable_is_backend_owned_sanitized_and_idempotent() 
     assert "secret" not in rendered
     assert "api_key" not in rendered
     assert "access_token" not in rendered
+
+
+def test_api_dry_run_returns_client_safe_payload_without_receipt() -> None:
+    owner, whiteboard = _ready_launch_whiteboard()
+    client = APIClient()
+    client.force_authenticate(user=owner)
+
+    response = client.post(
+        reverse("whiteboard-atlas-launch-readiness", kwargs={"whiteboard_id": whiteboard.id}),
+        {"mode": "dry_run"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="dry-run-readiness-key",
+    )
+
+    assert response.status_code == 200
+    readiness = response.data["data"]["readiness"]
+    launch_attempt = response.data["data"]["launch_attempt"]
+    rendered = json.dumps(response.data["data"], sort_keys=True, default=str)
+    assert readiness["status"] == "ready"
+    assert launch_attempt["status"] == "dry_run"
+    assert readiness["dry_run"] is True
+    assert "receipt_deliverable" not in response.data["data"]
+    assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
+    assert "secret" not in rendered
+    assert "api_key" not in rendered
+    assert "access_token" not in rendered
+
+
+def test_api_live_unsafe_launch_is_hard_blocked_without_receipt_or_command() -> None:
+    org = Organization.objects.create(name="ATLAS")
+    owner = _user(org, "atlas-live-block@example.com")
+    company = _company(org, owner)
+    whiteboard = _whiteboard(company, owner, idempotency_key="live-block-key")
+    _connector_inventory(
+        whiteboard,
+        "email_connector",
+        "whatsapp_connector",
+        "social_connector",
+        "analytics_connector",
+    )
+    _qa(whiteboard)
+    _tracking(whiteboard)
+    assemble_atlas_mvp_deliverables(whiteboard=whiteboard, user=owner)
+    client = APIClient()
+    client.force_authenticate(user=owner)
+
+    response = client.post(
+        reverse("whiteboard-atlas-launch-readiness", kwargs={"whiteboard_id": whiteboard.id}),
+        {"mode": "live", "create_receipt": True},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="live-block-key",
+    )
+
+    assert response.status_code == 409
+    error = response.data["error"]
+    assert error["code"] == "ATLAS_LIVE_LAUNCH_BLOCKED"
+    readiness = error["details"][0]["readiness"]
+    launch_attempt = error["details"][0]["launch_attempt"]
+    assert readiness["requested_execution_mode"] == "live"
+    assert launch_attempt["status"] == "blocked"
+    assert "approval_missing" in _codes(readiness["blockers"])
+    assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
+    assert ProcessedCommand.objects.count() == 0
+    assert AtlasLaunchAttempt.objects.filter(company=company, status="blocked").count() == 1
+
+
+def test_api_receipt_creation_replays_idempotently_and_conflicts_on_body_change() -> None:
+    owner, whiteboard = _ready_launch_whiteboard()
+    client = APIClient()
+    client.force_authenticate(user=owner)
+    url = reverse("whiteboard-atlas-launch-readiness", kwargs={"whiteboard_id": whiteboard.id})
+    payload = {"mode": "dry_run", "create_receipt": True}
+
+    first = client.post(url, payload, format="json", HTTP_IDEMPOTENCY_KEY="receipt-replay-key")
+    second = client.post(url, payload, format="json", HTTP_IDEMPOTENCY_KEY="receipt-replay-key")
+    conflict = client.post(
+        url,
+        {"mode": "dry_run", "dry_run": True, "create_receipt": True},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="receipt-replay-key",
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert conflict.status_code == 409
+    assert first.data["data"]["idempotency"]["status"] == "applied"
+    assert second.data["data"]["idempotency"]["status"] == "already_applied"
+    assert conflict.data["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert first.data["data"]["receipt_deliverable"]["id"] == second.data["data"]["receipt_deliverable"]["id"]
+    assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 1
+    assert ProcessedCommand.objects.count() == 1
+
+
+def test_api_launch_readiness_is_scoped_to_whiteboard_organization() -> None:
+    _owner, whiteboard = _ready_launch_whiteboard()
+    other_org = Organization.objects.create(name="OTHER")
+    outsider = _user(other_org, "atlas-launch-outsider@example.com")
+    client = APIClient()
+    client.force_authenticate(user=outsider)
+
+    response = client.post(
+        reverse("whiteboard-atlas-launch-readiness", kwargs={"whiteboard_id": whiteboard.id}),
+        {"mode": "dry_run"},
+        format="json",
+    )
+
+    assert response.status_code == 404
+    assert response.data["error"]["code"] == "NOT_FOUND"

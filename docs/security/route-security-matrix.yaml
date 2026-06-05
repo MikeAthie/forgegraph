@@ -5414,6 +5414,36 @@ routes:
     rate_limit_scope: default
     request_size_limit: api_default
     sensitive_audit_action: service_deliverable.created
+  - id: service-deliverable-lifecycle-actions
+    names:
+      - service-deliverable-actions
+      - service-deliverable-mark-ready
+      - service-deliverable-submit-for-approval
+      - service-deliverable-deliver-to-client
+      - service-deliverable-accept
+    paths:
+      - /api/service-deliverables/<uuid:deliverable_id>/actions
+      - /api/service-deliverables/<uuid:deliverable_id>/mark-ready
+      - /api/service-deliverables/<uuid:deliverable_id>/submit-for-approval
+      - /api/service-deliverables/<uuid:deliverable_id>/deliver-to-client
+      - /api/service-deliverables/<uuid:deliverable_id>/accept
+      - /api/v1/service-deliverables/<uuid:deliverable_id>/actions
+      - /api/v1/service-deliverables/<uuid:deliverable_id>/mark-ready
+      - /api/v1/service-deliverables/<uuid:deliverable_id>/submit-for-approval
+      - /api/v1/service-deliverables/<uuid:deliverable_id>/deliver-to-client
+      - /api/v1/service-deliverables/<uuid:deliverable_id>/accept
+    methods:
+      - POST
+    auth_surface: jwt
+    required_role: member
+    org_scope: tenant
+    company_scope: required
+    company_role: member
+    expected: *company_ops_jwt_write_expected
+    rate_limit_scope: default
+    request_size_limit: api_default
+    idempotency_required: true
+    sensitive_audit_action: service_deliverable.lifecycle
   - id: communication-threads-read
     names:
       - communication-thread-list-create

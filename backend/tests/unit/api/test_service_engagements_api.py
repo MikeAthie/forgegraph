@@ -11,6 +11,8 @@ from application.services.agency_deliverables import assemble_atlas_mvp_delivera
 from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     Asset,
+    AtlasLaunchAttempt,
+    AtlasLaunchCheckpoint,
     AuditLog,
     CompanyAccessPolicy,
     CompanyAssignment,
@@ -836,6 +838,152 @@ def test_service_deliverable_action_deliver_to_client_blocks_quality_failures(
     assert deliverable.delivered_at is None
 
 
+def test_service_deliverable_first_class_lifecycle_endpoint_payload_and_noop(
+    authenticated_client, user
+):
+    company = _company(user, "Lifecycle Surface Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Lifecycle report",
+        deliverable_type="report",
+        status="draft",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Ready for customer review.",
+        metadata_json={"source_refs": {"whiteboard": "wb_123"}},
+        created_by=user,
+    )
+
+    first = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/mark-ready",
+        {},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-mark-ready-first-class",
+    )
+    noop = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/mark-ready",
+        {},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-mark-ready-noop",
+    )
+
+    assert first.status_code == 200
+    assert noop.status_code == 200
+    payload = noop.data["data"]["deliverable"]
+    deliverable.refresh_from_db()
+    assert deliverable.status == "ready"
+    assert payload["client_visible_status"] == "ready"
+    assert payload["ready_at"] is not None
+    assert payload["lifecycle"]["timestamps"]["ready_at"] == payload["ready_at"]
+    assert [item["action"] for item in payload["lifecycle"]["history"]] == [
+        "mark_ready"
+    ]
+    assert AuditLog.objects.filter(
+        action="service_deliverable.mark_ready",
+        resource_type="service_deliverable",
+        resource_id=str(deliverable.id),
+    ).count() == 1
+
+
+def test_service_deliverable_lifecycle_blocks_unsafe_downgrade(authenticated_client, user):
+    company = _company(user, "Lifecycle Unsafe Client")
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="Review packet",
+        deliverable_type="approval_packet",
+        status="in_review",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Approval packet ready for customer review.",
+        metadata_json={"requires_approval": True, "source_refs": {"approval": "packet_123"}},
+        created_by=user,
+    )
+
+    response = authenticated_client.post(
+        f"/api/service-deliverables/{deliverable.id}/actions",
+        {"action": "mark_ready"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="deliverable-block-downgrade",
+    )
+
+    assert response.status_code == 400
+    assert response.data["error"]["code"] == "INVALID_DELIVERABLE_TRANSITION"
+    deliverable.refresh_from_db()
+    assert deliverable.status == "in_review"
+
+
+def test_service_deliverable_lifecycle_viewer_read_member_mutate(api_client, user):
+    company = _company(user, "Lifecycle ACL Client")
+    viewer = _member_in_org(user, role="viewer")
+    member = _member_in_org(user, role="member")
+    CompanyAccessPolicy.objects.create(
+        organization=_organization(company),
+        company=company,
+        assignment_required=True,
+        org_admin_access_enabled=False,
+    )
+    CompanyAssignment.objects.create(
+        organization=_organization(company),
+        company=company,
+        user=viewer,
+        role="viewer",
+        status="active",
+        created_by=user,
+    )
+    CompanyAssignment.objects.create(
+        organization=_organization(company),
+        company=company,
+        user=member,
+        role="member",
+        status="active",
+        created_by=user,
+    )
+    engagement = _engagement(user, company)
+    deliverable = ServiceDeliverable.objects.create(
+        organization=_organization(company),
+        company=company,
+        engagement=engagement,
+        title="ACL report",
+        deliverable_type="report",
+        status="draft",
+        visibility="customer",
+        artifact=_artifact(company),
+        summary="Ready for customer review.",
+        metadata_json={"source_refs": {"whiteboard": "wb_123"}},
+        created_by=user,
+    )
+
+    api_client.force_authenticate(user=viewer)
+    read_response = api_client.get(f"/api/service-engagements/{engagement.id}/deliverables")
+    mutate_response = api_client.post(
+        f"/api/service-deliverables/{deliverable.id}/mark-ready",
+        {},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="viewer-mutate-blocked",
+    )
+    assert read_response.status_code == 200
+    assert read_response.data["data"]["deliverables"][0]["client_visible_status"] == "working"
+    assert mutate_response.status_code == 404
+
+    api_client.force_authenticate(user=member)
+    member_response = api_client.post(
+        f"/api/service-deliverables/{deliverable.id}/mark-ready",
+        {},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="member-mutate-allowed",
+    )
+    assert member_response.status_code == 200
+    payload = member_response.data["data"]["deliverable"]
+    assert payload["status"] == "ready"
+    assert payload["lifecycle"]["history"][0]["actor_id"] == str(member.id)
+
+
 def test_atlas_deliverables_batch_assemble_api(authenticated_client, user):
     company = _company(user, "Atlas Batch Client")
     whiteboard = _whiteboard(company, user)
@@ -1022,6 +1170,18 @@ def test_atlas_launch_readiness_api_returns_sanitized_dry_run_payload_and_receip
     }
     assert receipt["deliverable_type"] == "campaign_launch_receipt"
     assert receipt["metadata"]["source"] == "atlas_launch_readiness"
+    attempt = payload["launch_attempt"]
+    assert attempt["status"] == "dry_run"
+    assert attempt["source_key"] == f"atlas-launch:{whiteboard.id}:atlas-launch-readiness-receipt"
+    assert attempt["receipt_deliverable_id"] == receipt["id"]
+    persisted_attempt = AtlasLaunchAttempt.objects.get(id=attempt["id"])
+    assert persisted_attempt.company == company
+    assert persisted_attempt.whiteboard == whiteboard
+    assert persisted_attempt.status == "dry_run"
+    checkpoint = AtlasLaunchCheckpoint.objects.get(attempt=persisted_attempt)
+    assert checkpoint.status == "dry_run"
+    assert checkpoint.blocker_snapshot_json == []
+    assert checkpoint.readiness_snapshot_json["status"] == "ready"
     assert receipt["metadata"]["dry_run"] is True
     assert receipt["metadata"]["live_execution_enabled"] is False
     rendered = json.dumps(response.data, sort_keys=True, default=str)
@@ -1091,6 +1251,8 @@ def test_atlas_launch_readiness_receipt_replays_and_rejects_conflict(
     assert replay.json()["data"]["duplicate"] is True
     assert conflict.status_code == 409
     assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert AtlasLaunchAttempt.objects.filter(company=company).count() == 1
+    assert AtlasLaunchCheckpoint.objects.filter(company=company).count() == 1
     assert (
         ServiceDeliverable.objects.filter(
             company=company,
@@ -1098,6 +1260,51 @@ def test_atlas_launch_readiness_receipt_replays_and_rejects_conflict(
         ).count()
         == 1
     )
+
+
+def test_atlas_launch_readiness_records_status_transition_checkpoints_and_sanitizes_attempt(
+    authenticated_client,
+    user,
+):
+    company = _company(user, "Atlas Launch Transition Client")
+    whiteboard = _whiteboard(company, user)
+    _mark_atlas_launch_ready(whiteboard, user)
+    source_key = f"atlas-launch-transition:{whiteboard.id}"
+
+    dry_run = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        {"source_key": source_key},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-transition-dry-run",
+    )
+    live = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        {"mode": "live", "source_key": source_key},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-transition-live",
+    )
+
+    assert dry_run.status_code == 200
+    assert live.status_code == 200
+    attempt = AtlasLaunchAttempt.objects.get(company=company, source_key=source_key)
+    assert attempt.status == "ready"
+    assert attempt.requested_mode == "live"
+    checkpoints = list(AtlasLaunchCheckpoint.objects.filter(attempt=attempt).order_by("sequence"))
+    assert [checkpoint.sequence for checkpoint in checkpoints] == [1, 2]
+    assert [checkpoint.status for checkpoint in checkpoints] == ["dry_run", "ready"]
+    assert checkpoints[1].requested_mode == "live"
+    rendered = json.dumps(
+        {
+            "attempt": attempt.readiness_snapshot_json,
+            "checkpoint": checkpoints[1].readiness_snapshot_json,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "email-secret" not in rendered
+    assert "access_token" not in rendered
+    assert "api_key" not in rendered
+    assert "private_key" not in rendered
 
 
 def test_atlas_launch_readiness_api_requires_auth_and_scopes_whiteboard(api_client, user):

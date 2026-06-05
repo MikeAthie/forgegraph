@@ -30,6 +30,11 @@ from application.services.agency_deliverables import (
     assemble_atlas_mvp_deliverables,
 )
 from application.services.agency_launch_readiness import CampaignLaunchReadiness
+from application.services.atlas_launch_attempts import (
+    launch_attempt_payload,
+    launch_status_from_readiness,
+    record_launch_attempt_checkpoint,
+)
 from application.services.audit_log import record_audit_log
 from application.services.company_access import accessible_company_queryset, has_company_access
 from application.services.departments import can_mutate_department_work
@@ -369,7 +374,7 @@ class ServiceDeliverableListCreateView(APIView):
             return _not_found("Service engagement was not found.")
         queryset = ServiceDeliverable.objects.filter(engagement=engagement).order_by("-updated_at")
         if not has_company_access(user, engagement.company, "member"):
-            queryset = queryset.exclude(visibility="internal")
+            queryset = queryset.exclude(visibility__in=["internal", "operator"])
         include_internal = has_company_access(user, engagement.company, "member")
         return success_response(
             {
@@ -452,9 +457,17 @@ class ServiceDeliverableListCreateView(APIView):
 class ServiceDeliverableActionView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request, deliverable_id: UUID) -> Response:
+    def post(
+        self,
+        request: Request,
+        deliverable_id: UUID,
+        lifecycle_action: str | None = None,
+    ) -> Response:
         user = cast(User, request.user)
-        serializer = ServiceDeliverableActionSerializer(data=request.data)
+        request_data = dict(request.data)
+        if lifecycle_action is not None:
+            request_data["action"] = lifecycle_action.replace("-", "_")
+        serializer = ServiceDeliverableActionSerializer(data=request_data)
         if not serializer.is_valid():
             return _validation_error(serializer.errors)
         deliverable = _deliverable_for_user(user, deliverable_id, minimum_role="member")
@@ -587,43 +600,94 @@ class AtlasLaunchReadinessView(APIView):
             or not bool(validated.get("dry_run", True))
         )
         create_receipt = bool(validated.get("create_receipt"))
-        context = None
-        if create_receipt:
-            context, error = _command_context(
-                request=request,
-                company=whiteboard.company,
-                action=f"atlas.launch_readiness.receipt:{whiteboard_id}",
-            )
-            if error is not None:
-                return error
-            try:
-                replay = replay_processed_command(context)
-            except IdempotencyConflict as exc:
-                return _idempotency_conflict_response(exc)
-            if replay is not None:
-                return replay
+        context, error = _command_context(
+            request=request,
+            company=whiteboard.company,
+            action=f"atlas.launch_attempt:{whiteboard_id}",
+        )
+        if error is not None:
+            return error
+        try:
+            replay = replay_processed_command(context)
+        except IdempotencyConflict as exc:
+            return _idempotency_conflict_response(exc)
+        if replay is not None:
+            return replay
+
+        idempotency_key = str(validated.get("idempotency_key") or idempotency_key_from_request(request))
+        source_key = str(validated.get("source_key") or f"atlas-launch:{whiteboard.id}:{idempotency_key}")
+        requested_mode = "live" if live_mode else "dry_run"
         readiness = CampaignLaunchReadiness().evaluate(
             whiteboard=whiteboard,
             user=user,
             live_mode=live_mode,
-            idempotency_key=str(
-                validated.get("idempotency_key") or idempotency_key_from_request(request)
-            ),
-            create_receipt=create_receipt,
+            idempotency_key=idempotency_key,
+            create_receipt=False,
         )
-        receipt = readiness.get("receipt_deliverable")
         readiness_payload = {
             key: value for key, value in readiness.items() if key != "receipt_deliverable"
         }
-        payload: dict[str, Any] = {"readiness": readiness_payload}
+        receipt: Any = None
+        receipt_deliverable = None
+
+        if live_mode and readiness_payload.get("status") == "blocked":
+            attempt = record_launch_attempt_checkpoint(
+                whiteboard=whiteboard,
+                user=user,
+                idempotency_key=idempotency_key,
+                source_key=source_key,
+                requested_mode=requested_mode,
+                status="blocked",
+                readiness=readiness_payload,
+            )
+            response = _launch_blocked_response(
+                readiness_payload,
+                launch_attempt=launch_attempt_payload(attempt),
+            )
+            return record_processed_command(
+                context=context,
+                response=response,
+                resource_type="atlas_launch_attempt",
+                resource_id=str(attempt.id),
+            )
+
+        if create_receipt:
+            readiness = CampaignLaunchReadiness().evaluate(
+                whiteboard=whiteboard,
+                user=user,
+                live_mode=live_mode,
+                idempotency_key=idempotency_key,
+                create_receipt=True,
+            )
+            receipt = readiness.get("receipt_deliverable")
+            readiness_payload = {
+                key: value for key, value in readiness.items() if key != "receipt_deliverable"
+            }
+            if isinstance(receipt, dict) and receipt.get("id"):
+                receipt_deliverable = ServiceDeliverable.objects.filter(id=receipt["id"]).first()
+
+        attempt = record_launch_attempt_checkpoint(
+            whiteboard=whiteboard,
+            user=user,
+            idempotency_key=idempotency_key,
+            source_key=source_key,
+            requested_mode=requested_mode,
+            status=launch_status_from_readiness(readiness_payload, live_mode=live_mode),
+            readiness=readiness_payload,
+            receipt_deliverable=receipt_deliverable,
+        )
+        payload: dict[str, Any] = {
+            "readiness": readiness_payload,
+            "launch_attempt": launch_attempt_payload(attempt),
+        }
         if isinstance(receipt, dict):
             payload["receipt_deliverable"] = receipt
         response = success_response(payload)
         return record_processed_command(
             context=context,
             response=response,
-            resource_type="service_deliverable",
-            resource_id=str(receipt.get("id") if isinstance(receipt, dict) else ""),
+            resource_type="atlas_launch_attempt",
+            resource_id=str(attempt.id),
         )
 
 
@@ -764,6 +828,25 @@ def _service_error(exc: ServiceEngagementError) -> Response:
         exc.message,
         status=http_status.HTTP_400_BAD_REQUEST,
         details=exc.details,
+    )
+
+
+def _launch_blocked_response(
+    readiness: dict[str, Any],
+    *,
+    launch_attempt: dict[str, Any] | None = None,
+) -> Response:
+    detail: dict[str, Any] = {
+        "readiness": readiness,
+        "blockers": list(readiness.get("blockers") or []),
+    }
+    if launch_attempt is not None:
+        detail["launch_attempt"] = launch_attempt
+    return error_response(
+        "ATLAS_LIVE_LAUNCH_BLOCKED",
+        "Live Atlas launch is blocked until all launch readiness blockers are resolved.",
+        status=http_status.HTTP_409_CONFLICT,
+        details=[detail],
     )
 
 

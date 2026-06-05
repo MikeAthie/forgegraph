@@ -85,6 +85,8 @@ Hard constraints:
    - `GET/POST /api/service-engagements`
    - `GET/PATCH /api/service-engagements/{id}`
    - `GET/POST /api/service-engagements/{id}/deliverables`
+   - `POST /api/service-deliverables/{id}/actions` with `{ "action": "mark_ready" | "submit_for_approval" | "deliver_to_client" | "accept" }`
+   - First-class lifecycle aliases: `POST /api/service-deliverables/{id}/mark-ready`, `/submit-for-approval`, `/deliver-to-client`, and `/accept`
 3. Enforce organization membership first, then company access for engagements and deliverables.
 4. Add route security matrix entries.
 5. Add wrong-company and secret-redaction tests.
