@@ -77,3 +77,4 @@ tasks-*.md
 
 # Local reference dump
 /src/
+.hermes/codex_session_workdir/
