@@ -365,11 +365,16 @@ class HermesBridgeWhatsAppAdapter:
     def session_status(self) -> str:
         if not self.credentials_configured():
             return "missing"
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "forgegraph-whatsapp-hermes-bridge/1.0",
+            "X-ForgeGraph-Session-Ref": self.session_ref,
+        }
         for endpoint in ("health", "status"):
             try:
                 response = self.session.get(
                     urljoin(f"{self.bridge_url}/", endpoint),
-                    params={"session_ref": self.session_ref},
+                    headers=headers,
                     timeout=self.timeout_seconds,
                 )
             except requests.RequestException:
@@ -721,6 +726,7 @@ def validate_real_send_allowed(
             mode=WHATSAPP_MODE_REAL_SEND,
             blocked_before_provider_call=True,
         )
+    validate_recipient_allowlist(request.all_recipients(), provider=request.provider)
     session_status = selected_adapter.session_status()
     if (
         request.provider in {WHATSAPP_PROVIDER_OPEN_WA_WEB, WHATSAPP_PROVIDER_HERMES_BRIDGE}
@@ -733,7 +739,6 @@ def validate_real_send_allowed(
             mode=WHATSAPP_MODE_REAL_SEND,
             blocked_before_provider_call=True,
         )
-    validate_recipient_allowlist(request.all_recipients(), provider=request.provider)
 
 
 def validate_recipient_allowlist(recipients: list[str], *, provider: str = "") -> None:
@@ -889,11 +894,10 @@ def _provider_error_details(payload: Any, *, response: Any, status_code: int) ->
     if isinstance(payload, dict):
         raw_error = payload.get("error")
         error = raw_error if isinstance(raw_error, dict) else payload
-        code = str(error.get("name") or error.get("code") or code)
-        message = str(error.get("message") or message)
+        code = _safe_error_code(error.get("name") or error.get("code") or code)
     elif getattr(response, "reason", ""):
-        message = str(response.reason)
-    return _safe_key(code), _safe_error_message(message)
+        code = _safe_error_code(response.reason)
+    return code, message
 
 
 def _open_wa_body(request: WhatsAppSendRequest, *, session_ref: str) -> dict[str, Any]:
@@ -1060,6 +1064,15 @@ def _safe_error_message(value: str) -> str:
 
 def _safe_key(value: str) -> str:
     return re.sub(r"[^a-z0-9_.-]+", "_", str(value or "").strip().lower())[:80]
+
+
+def _safe_error_code(value: Any) -> str:
+    sanitized = _safe_error_message(str(value or ""))
+    sanitized = _PHONE_TOKEN_RE.sub("", sanitized)
+    key = _safe_key(sanitized)
+    if not key or key in {"redacted-phone", "redacted-session", "redacted-token"}:
+        return "provider_http_error"
+    return key
 
 
 def _safe_session_status(value: Any) -> str:

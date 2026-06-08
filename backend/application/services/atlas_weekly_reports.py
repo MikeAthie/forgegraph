@@ -231,7 +231,8 @@ def _rate(numerator: int, denominator: int) -> Decimal:
 def _economics_are_acceptable(summary: Payload) -> bool:
     explicit = summary.get("economics_acceptable")
     if explicit is not None:
-        return bool(explicit)
+        parsed = _explicit_bool(explicit)
+        return True if parsed is None else parsed
 
     roi = _to_decimal(summary.get("roi") or summary.get("return_on_investment"))
     if roi is not None:
@@ -295,9 +296,9 @@ def _results_lines(funnel: Payload, summary: Payload) -> list[str]:
             f"{funnel['quotes_or_appointments']} cotizaciones/citas y {funnel['wins']} ventas."
         )
     ]
-    if revenue != "0":
+    if _money_decimal(summary, "revenue", "new_business_revenue", "sales_value") > 0:
         lines.append(f"Nuevo negocio reportado: {revenue}.")
-    if commission != "0":
+    if _money_decimal(summary, "commission", "success_fee") > 0:
         lines.append(f"Comisión atribuible: {commission}.")
     return lines
 
@@ -512,6 +513,27 @@ def _money_value(summary: Payload, *aliases: str) -> str:
             currency = summary.get("currency", "MXN")
             return f"{currency} {_format_decimal(value)}"
     return "0"
+
+
+def _money_decimal(summary: Payload, *aliases: str) -> Decimal:
+    for alias in aliases:
+        value = _to_decimal(summary.get(alias))
+        if value is not None:
+            return value
+    return Decimal("0")
+
+
+def _explicit_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, Decimal)) and not isinstance(value, bool):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y", "si", "sí"}:
+        return True
+    if text in {"false", "0", "no", "n"}:
+        return False
+    return None
 
 
 def _format_decimal(value: Decimal) -> str:

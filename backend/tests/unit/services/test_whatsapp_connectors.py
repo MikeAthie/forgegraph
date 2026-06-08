@@ -281,6 +281,8 @@ def test_hermes_bridge_session_status_falls_back_to_status_endpoint() -> None:
 
     assert status == "connected"
     assert [call["url"].rsplit("/", 1)[-1] for call in session.calls] == ["health", "status"]
+    assert all("params" not in call for call in session.calls)
+    assert all(call["headers"]["X-ForgeGraph-Session-Ref"] == "session-secret" for call in session.calls)
     assert "session-secret" not in status
     assert "+15550101234" not in status
 
@@ -331,6 +333,29 @@ def test_real_send_blocked_when_recipient_not_allowlisted() -> None:
         validate_recipient_allowlist(["+15550101234"], provider="fake")
 
     assert exc.value.code == "recipient_not_allowlisted"
+
+
+@override_settings(
+    WHATSAPP_CONNECTOR_PROVIDER=WHATSAPP_PROVIDER_HERMES_BRIDGE,
+    WHATSAPP_CONNECTOR_ALLOW_REAL_SEND=True,
+    WHATSAPP_HERMES_BRIDGE_ENABLED=True,
+    WHATSAPP_HERMES_BRIDGE_URL="http://hermes-bridge",
+    WHATSAPP_HERMES_BRIDGE_SESSION_REF="session-secret",
+    WHATSAPP_RECIPIENT_ALLOWLIST=["+15550109999"],
+)
+def test_hermes_bridge_blocks_unallowlisted_recipient_before_status_call() -> None:
+    session = _FakeSession(health={"status": "ready"})
+    with pytest.raises(WhatsAppConnectorError) as exc:
+        validate_real_send_allowed(
+            _real_request(provider=WHATSAPP_PROVIDER_HERMES_BRIDGE),
+            approved=True,
+            policy_allows_live=True,
+            adapter=HermesBridgeWhatsAppAdapter(session=session),
+        )
+
+    assert exc.value.code == "recipient_not_allowlisted"
+    assert exc.value.blocked_before_provider_call is True
+    assert session.calls == []
 
 
 @override_settings(WHATSAPP_WEB_AUTOMATION_MAX_RECIPIENTS=1)
@@ -449,6 +474,45 @@ def test_hermes_bridge_request_failure_is_retryable_and_sanitized() -> None:
     assert error["retryable"] is True
     assert "+1 555 010 1234" not in persisted
     assert "Private approved notice" not in persisted
+    assert "session-secret" not in persisted
+
+
+@override_settings(
+    WHATSAPP_CONNECTOR_PROVIDER=WHATSAPP_PROVIDER_HERMES_BRIDGE,
+    WHATSAPP_CONNECTOR_ALLOW_REAL_SEND=True,
+    WHATSAPP_HERMES_BRIDGE_ENABLED=True,
+    WHATSAPP_HERMES_BRIDGE_URL="http://hermes-bridge",
+    WHATSAPP_HERMES_BRIDGE_SESSION_REF="session-secret",
+    WHATSAPP_RECIPIENT_ALLOWLIST=["+15550101234"],
+)
+def test_hermes_bridge_http_error_does_not_persist_provider_echoed_message_text() -> None:
+    adapter = HermesBridgeWhatsAppAdapter(
+        session=_FakeSession(
+            health={"status": "ready"},
+            send_status_code=500,
+            send={
+                "error": {
+                    "code": "bridge_send_failed",
+                    "message": "failed for +1 555 010 1234 Private approved notice session-secret",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(WhatsAppConnectorError) as exc:
+        send_whatsapp(
+            _real_request(provider=WHATSAPP_PROVIDER_HERMES_BRIDGE),
+            approved=True,
+            policy_allows_live=True,
+            adapter=adapter,
+        )
+
+    error = sanitize_provider_error(exc.value)
+    persisted = str(error)
+    assert exc.value.code == "bridge_send_failed"
+    assert exc.value.message == "Messaging provider request failed with HTTP 500."
+    assert "Private approved notice" not in persisted
+    assert "+1 555 010 1234" not in persisted
     assert "session-secret" not in persisted
 
 

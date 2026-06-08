@@ -99,6 +99,50 @@ def test_wins_scenario_recommends_scale_with_guardrails():
     assert "success fee" in guardrails
 
 
+def test_wins_with_false_string_economics_does_not_scale():
+    report = build_atlas_weekly_report(
+        campaign_summary={"name": "Atlas winback"},
+        activity_list=[{"description": "reactivacion de clientes dormidos"}],
+        funnel_metrics_by_stage={
+            "contacted": 90,
+            "replies": 24,
+            "qualified": 12,
+            "quotes": 5,
+            "wins": 2,
+        },
+        lead_revenue_commission_summary={
+            "revenue": 28000,
+            "commission": 2800,
+            "currency": "MXN",
+            "economics_acceptable": "false",
+        },
+        blockers_approvals_needed=[],
+    )
+
+    assert report["diagnosis"]["bottleneck"] != BOTTLENECK_SCALE
+    assert report["operator_payload"]["recommendation"] == "kill"
+
+
+def test_zero_revenue_and_commission_are_not_reported_as_new_business_results():
+    report = build_atlas_weekly_report(
+        campaign_summary={"name": "Atlas semanal"},
+        activity_list=[{"description": "seguimiento"}],
+        funnel_metrics_by_stage={
+            "contacted": 40,
+            "replies": 8,
+            "qualified": 4,
+            "quotes": 2,
+            "wins": 0,
+        },
+        lead_revenue_commission_summary={"revenue": 0, "commission": 0, "currency": "MXN"},
+        blockers_approvals_needed=[],
+    )
+
+    results = _section(report, "Qué resultados vimos")["body"]
+    assert "Nuevo negocio reportado: MXN 0." not in results
+    assert "Comisión atribuible: MXN 0." not in results
+
+
 def test_report_includes_explicit_next_actions_and_commission_summary():
     report = build_atlas_weekly_report(
         campaign_summary={"name": "Atlas semanal"},
