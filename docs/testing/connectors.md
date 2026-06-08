@@ -25,7 +25,7 @@ Receipts may store sanitized evidence such as counts, domains, hashes, safe inte
 ## Safe Defaults
 
 - Email: `EMAIL_CONNECTOR_PROVIDER=fake`, dry-run enabled, `EMAIL_CONNECTOR_ALLOW_REAL_SEND=false`.
-- WhatsApp: `WHATSAPP_CONNECTOR_PROVIDER=fake`, web automation disabled, real send disabled.
+- WhatsApp: `WHATSAPP_CONNECTOR_PROVIDER=fake`, web automation and Hermes bridge providers disabled, real send disabled.
 - Social: `SOCIAL_CONNECTOR_PROVIDER=fake`, provider publish disabled, manual evidence allowed only when policy permits it.
 
 All real sends/publishes require explicit env permission and allowlists.
@@ -47,9 +47,12 @@ Provider integration tests skip unless explicitly enabled:
 
 - Resend: `RUN_EMAIL_CONNECTOR_INTEGRATION=true`, `EMAIL_CONNECTOR_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_CONNECTOR_RECIPIENT_ALLOWLIST`
 - WhatsApp web automation: `RUN_WHATSAPP_WEB_AUTOMATION_INTEGRATION=true`, session/sidecar config, `WHATSAPP_RECIPIENT_ALLOWLIST`
+- WhatsApp Hermes bridge: `WHATSAPP_CONNECTOR_PROVIDER=hermes_bridge`, `WHATSAPP_HERMES_BRIDGE_ENABLED=true`, `WHATSAPP_HERMES_BRIDGE_URL`, `WHATSAPP_HERMES_BRIDGE_SESSION_REF`, `WHATSAPP_RECIPIENT_ALLOWLIST`
 - Meta social: `RUN_SOCIAL_CONNECTOR_INTEGRATION=true`, `SOCIAL_CONNECTOR_PROVIDER=meta_graph`, `META_GRAPH_ACCESS_TOKEN`, account/page allowlist
 
 Default integration checks perform dry-run/config validation only. Real external sends/publishes are not part of the default suite.
+
+The Hermes bridge provider is a generic HTTP adapter boundary for an operator-run WhatsApp bridge with a Hermes Agent-style Node/Baileys shape. Hermes Agent is MIT-licensed; ForgeGraph does not vendor or launch the bridge process. Treat the bridge like experimental web automation: it must stay opt-in, approval-gated, operator-confirmed, allowlisted, recipient-capped, and isolated from persisted receipts that contain raw phone numbers, message text, session refs, QR tokens, or provider response bodies.
 
 ## Useful Commands
 

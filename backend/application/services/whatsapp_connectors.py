@@ -28,6 +28,7 @@ WHATSAPP_CONNECTOR_IDS = {"whatsapp_connector", "whatsapp_web_automation_connect
 
 WHATSAPP_PROVIDER_FAKE = "fake"
 WHATSAPP_PROVIDER_OPEN_WA_WEB = "open_wa_web"
+WHATSAPP_PROVIDER_HERMES_BRIDGE = "hermes_bridge"
 WHATSAPP_PROVIDER_CLOUD_API = "whatsapp_cloud_api"
 
 WHATSAPP_MODE_DRY_RUN = "dry_run"
@@ -43,6 +44,7 @@ _PHONE_TOKEN_RE = re.compile(r"(?<!\w)\+?\d[\d\s().-]{6,}\d(?!\w)")
 _SESSION_SECRET_RE = re.compile(
     r"(?i)\b(?:session|qr)[_-]?(?:secret|token|ref)[A-Za-z0-9._~+/=-]*\b"
 )
+_READY_SESSION_STATUSES = {"ready", "authenticated", "connected"}
 
 
 class WhatsAppConnectorError(RuntimeError):
@@ -286,7 +288,7 @@ class OpenWaWebAutomationAdapter:
                 blocked_before_provider_call=True,
             )
         status = self.session_status()
-        if status not in {"ready", "authenticated", "connected"}:
+        if status not in _READY_SESSION_STATUSES:
             raise WhatsAppConnectorError(
                 "whatsapp_session_unhealthy",
                 "Messaging web automation session is not ready.",
@@ -309,6 +311,120 @@ class OpenWaWebAutomationAdapter:
             raise WhatsAppConnectorError(
                 "provider_request_failed",
                 "Messaging web automation request failed.",
+                provider=self.provider,
+                mode=request.mode,
+                retryable=True,
+            ) from exc
+        payload = _provider_json_or_error(
+            response, provider=self.provider, mode=request.mode
+        )
+        return sanitize_provider_response(
+            payload, provider=self.provider, request=request, session_status=status
+        )
+
+
+class HermesBridgeWhatsAppAdapter:
+    """HTTP adapter for Hermes-style WhatsApp bridge sidecars."""
+
+    provider = WHATSAPP_PROVIDER_HERMES_BRIDGE
+
+    def __init__(
+        self,
+        *,
+        bridge_url: str | None = None,
+        session_ref: str | None = None,
+        enabled: bool | None = None,
+        timeout_seconds: float | None = None,
+        session: Any = None,
+    ) -> None:
+        self.bridge_url = (
+            bridge_url
+            if bridge_url is not None
+            else getattr(settings, "WHATSAPP_HERMES_BRIDGE_URL", "")
+        ).strip().rstrip("/")
+        self.session_ref = (
+            session_ref
+            if session_ref is not None
+            else getattr(settings, "WHATSAPP_HERMES_BRIDGE_SESSION_REF", "")
+        ).strip()
+        self.enabled = bool(
+            enabled
+            if enabled is not None
+            else getattr(settings, "WHATSAPP_HERMES_BRIDGE_ENABLED", False)
+        )
+        self.timeout_seconds = float(
+            timeout_seconds
+            if timeout_seconds is not None
+            else getattr(settings, "WHATSAPP_CONNECTOR_TIMEOUT_SECONDS", 10)
+        )
+        self.session = session or requests.Session()
+
+    def credentials_configured(self) -> bool:
+        return bool(self.enabled and self.bridge_url and self.session_ref)
+
+    def session_status(self) -> str:
+        if not self.credentials_configured():
+            return "missing"
+        for endpoint in ("health", "status"):
+            try:
+                response = self.session.get(
+                    urljoin(f"{self.bridge_url}/", endpoint),
+                    params={"session_ref": self.session_ref},
+                    timeout=self.timeout_seconds,
+                )
+            except requests.RequestException:
+                return "unreachable"
+            status_code = int(getattr(response, "status_code", 0) or 0)
+            if endpoint == "health" and status_code in {404, 405}:
+                continue
+            return _session_status_from_response(response)
+        return "unknown"
+
+    def send(self, request: WhatsAppSendRequest) -> WhatsAppSendReceipt:
+        if not self.credentials_configured():
+            raise WhatsAppConnectorError(
+                "whatsapp_session_missing",
+                "Messaging bridge session is not configured.",
+                provider=self.provider,
+                mode=request.mode,
+                blocked_before_provider_call=True,
+            )
+        status = self.session_status()
+        if status not in _READY_SESSION_STATUSES:
+            raise WhatsAppConnectorError(
+                "whatsapp_session_unhealthy",
+                "Messaging bridge session is not ready.",
+                provider=self.provider,
+                mode=request.mode,
+                blocked_before_provider_call=True,
+            )
+        body = _hermes_bridge_body(request, session_ref=self.session_ref)
+        try:
+            response = self.session.post(
+                urljoin(f"{self.bridge_url}/", "send-message"),
+                json=body,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": "forgegraph-whatsapp-hermes-bridge/1.0",
+                },
+                timeout=self.timeout_seconds,
+            )
+            if int(getattr(response, "status_code", 0) or 0) in {404, 405}:
+                response = self.session.post(
+                    urljoin(f"{self.bridge_url}/", "send"),
+                    json=body,
+                    headers={
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                        "User-Agent": "forgegraph-whatsapp-hermes-bridge/1.0",
+                    },
+                    timeout=self.timeout_seconds,
+                )
+        except requests.RequestException as exc:
+            raise WhatsAppConnectorError(
+                "provider_request_failed",
+                "Messaging bridge request failed.",
                 provider=self.provider,
                 mode=request.mode,
                 retryable=True,
@@ -422,6 +538,8 @@ def get_whatsapp_provider_adapter(
     )
     if selected == WHATSAPP_PROVIDER_OPEN_WA_WEB:
         return OpenWaWebAutomationAdapter(session=session)
+    if selected == WHATSAPP_PROVIDER_HERMES_BRIDGE:
+        return HermesBridgeWhatsAppAdapter(session=session)
     if selected == WHATSAPP_PROVIDER_CLOUD_API:
         return WhatsAppCloudApiAdapter(session=session)
     if selected == WHATSAPP_PROVIDER_FAKE:
@@ -604,11 +722,10 @@ def validate_real_send_allowed(
             blocked_before_provider_call=True,
         )
     session_status = selected_adapter.session_status()
-    if request.provider == WHATSAPP_PROVIDER_OPEN_WA_WEB and session_status not in {
-        "ready",
-        "authenticated",
-        "connected",
-    }:
+    if (
+        request.provider in {WHATSAPP_PROVIDER_OPEN_WA_WEB, WHATSAPP_PROVIDER_HERMES_BRIDGE}
+        and session_status not in _READY_SESSION_STATUSES
+    ):
         raise WhatsAppConnectorError(
             "whatsapp_session_unhealthy",
             "Messaging web automation session is not ready.",
@@ -664,12 +781,7 @@ def sanitize_provider_response(
     request: WhatsAppSendRequest,
     session_status: str = "ready",
 ) -> WhatsAppSendReceipt:
-    message_id = str(
-        response_json.get("id")
-        or response_json.get("message_id")
-        or response_json.get("messageId")
-        or ""
-    )[:255]
+    message_id = _provider_message_id(response_json)
     evidence = recipient_evidence(request.all_recipients(), allowlist_matched=True)
     completed_at = timezone.now().isoformat()
     evidence_mode = (
@@ -685,7 +797,7 @@ def sanitize_provider_response(
         provider_message_id=message_id,
         accepted_recipients_count=evidence["recipient_count"],
         rejected_recipients_count=0,
-        session_required=provider == WHATSAPP_PROVIDER_OPEN_WA_WEB,
+        session_required=provider in {WHATSAPP_PROVIDER_OPEN_WA_WEB, WHATSAPP_PROVIDER_HERMES_BRIDGE},
         session_status=_safe_session_status(session_status),
         completed_at=completed_at,
         sent_at=completed_at,
@@ -747,6 +859,30 @@ def _provider_json_or_error(response: Any, *, provider: str, mode: str) -> dict[
     return payload
 
 
+def _provider_message_id(response_json: dict[str, Any]) -> str:
+    direct = response_json.get("id") or response_json.get("message_id") or response_json.get("messageId")
+    if direct:
+        return _safe_provider_message_id(direct)
+    for container_key in ("message", "result"):
+        container = response_json.get(container_key)
+        if isinstance(container, dict):
+            nested = container.get("id") or container.get("message_id") or container.get("messageId")
+            if nested:
+                return _safe_provider_message_id(nested)
+    messages = response_json.get("messages")
+    if isinstance(messages, list):
+        for message in messages:
+            if isinstance(message, dict):
+                nested = message.get("id") or message.get("message_id") or message.get("messageId")
+                if nested:
+                    return _safe_provider_message_id(nested)
+    return ""
+
+
+def _safe_provider_message_id(value: Any) -> str:
+    return _safe_error_message(str(value or ""))[:255]
+
+
 def _provider_error_details(payload: Any, *, response: Any, status_code: int) -> tuple[str, str]:
     code = "provider_http_error"
     message = f"Messaging provider request failed with HTTP {status_code}."
@@ -767,6 +903,43 @@ def _open_wa_body(request: WhatsAppSendRequest, *, session_ref: str) -> dict[str
         "message": str(request.text or ""),
         "idempotency_key": request.idempotency_key[:256],
     }
+
+
+def _hermes_bridge_body(request: WhatsAppSendRequest, *, session_ref: str) -> dict[str, Any]:
+    recipients = _normalized_recipients(request.to)
+    return {
+        "session_ref": session_ref,
+        "to": recipients[0] if len(recipients) == 1 else recipients,
+        "recipients": recipients,
+        "message": str(request.text or ""),
+        "text": str(request.text or ""),
+        "idempotency_key": request.idempotency_key[:256],
+    }
+
+
+def _session_status_from_response(response: Any) -> str:
+    if len(getattr(response, "content", b"") or b"") > _MAX_PROVIDER_RESPONSE_BYTES:
+        return "unknown"
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    status_code = int(getattr(response, "status_code", 0) or 0)
+    if status_code >= 400:
+        return "unhealthy"
+    if not isinstance(payload, dict):
+        return "unknown"
+    session_payload = payload.get("session") if isinstance(payload.get("session"), dict) else {}
+    connected = payload.get("connected") is True or payload.get("isConnected") is True
+    return _safe_session_status(
+        payload.get("status")
+        or payload.get("session_status")
+        or payload.get("state")
+        or payload.get("connection_status")
+        or session_payload.get("status")
+        or session_payload.get("state")
+        or ("connected" if connected else "unknown")
+    )
 
 
 def _validate_recipient(value: str, *, provider: str, mode: str) -> None:

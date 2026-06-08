@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+import requests
 from django.test import override_settings
 from django.utils import timezone
 
@@ -13,12 +14,16 @@ from application.services.pack_tool_executions import (
 )
 from application.services.whatsapp_connectors import (
     WHATSAPP_MODE_REAL_SEND,
+    WHATSAPP_PROVIDER_HERMES_BRIDGE,
     FakeWhatsAppAdapter,
+    HermesBridgeWhatsAppAdapter,
     OpenWaWebAutomationAdapter,
     WhatsAppConnectorError,
     WhatsAppSendRequest,
     dry_run_whatsapp,
+    get_whatsapp_provider_adapter,
     sanitize_provider_error,
+    send_whatsapp,
     validate_real_send_allowed,
     validate_recipient_allowlist,
     validate_whatsapp_request,
@@ -29,7 +34,13 @@ pytestmark = pytest.mark.django_db
 
 
 class _FakeResponse:
-    def __init__(self, *, status_code: int, payload: dict[str, Any], reason: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        status_code: int,
+        payload: dict[str, Any],
+        reason: str = "",
+    ) -> None:
         self.status_code = status_code
         self._payload = payload
         self.reason = reason
@@ -41,23 +52,46 @@ class _FakeResponse:
 
 class _FakeSession:
     def __init__(
-        self, *, health: dict[str, Any] | None = None, send: dict[str, Any] | None = None
+        self,
+        *,
+        health: dict[str, Any] | None = None,
+        send: dict[str, Any] | None = None,
+        health_status_code: int = 200,
+        status: dict[str, Any] | None = None,
+        status_status_code: int = 200,
+        send_status_code: int = 200,
+        send_reason: str = "",
+        post_exception: requests.RequestException | None = None,
     ) -> None:
         self.health = health or {"status": "ready"}
         self.send = send or {"id": "open-wa-message-123"}
+        self.health_status_code = health_status_code
+        self.status = status or {"status": "ready"}
+        self.status_status_code = status_status_code
+        self.send_status_code = send_status_code
+        self.send_reason = send_reason
+        self.post_exception = post_exception
         self.calls: list[dict[str, Any]] = []
 
     def get(self, url: str, **kwargs: Any) -> _FakeResponse:
         kwargs["url"] = url
         kwargs["method"] = "GET"
         self.calls.append(kwargs)
-        return _FakeResponse(status_code=200, payload=self.health)
+        if url.rstrip("/").endswith("/status"):
+            return _FakeResponse(status_code=self.status_status_code, payload=self.status)
+        return _FakeResponse(status_code=self.health_status_code, payload=self.health)
 
     def post(self, url: str, **kwargs: Any) -> _FakeResponse:
         kwargs["url"] = url
         kwargs["method"] = "POST"
         self.calls.append(kwargs)
-        return _FakeResponse(status_code=200, payload=self.send)
+        if self.post_exception is not None:
+            raise self.post_exception
+        return _FakeResponse(
+            status_code=self.send_status_code,
+            payload=self.send,
+            reason=self.send_reason,
+        )
 
 
 def _user(org: Organization) -> User:
@@ -131,6 +165,49 @@ def test_open_wa_provider_disabled_blocks_before_provider_call() -> None:
     assert exc.value.blocked_before_provider_call is True
 
 
+@override_settings(WHATSAPP_CONNECTOR_PROVIDER=WHATSAPP_PROVIDER_HERMES_BRIDGE)
+def test_hermes_bridge_provider_selection_returns_bridge_adapter() -> None:
+    adapter = get_whatsapp_provider_adapter()
+
+    assert isinstance(adapter, HermesBridgeWhatsAppAdapter)
+    assert adapter.provider == WHATSAPP_PROVIDER_HERMES_BRIDGE
+
+
+@pytest.mark.parametrize(
+    ("enabled", "bridge_url", "session_ref"),
+    [
+        (False, "http://hermes-bridge", "session-secret"),
+        (True, "", "session-secret"),
+        (True, "http://hermes-bridge", ""),
+    ],
+)
+def test_hermes_bridge_disabled_or_missing_config_blocks_before_provider_call(
+    enabled: bool,
+    bridge_url: str,
+    session_ref: str,
+) -> None:
+    session = _FakeSession()
+    with override_settings(
+        WHATSAPP_CONNECTOR_PROVIDER=WHATSAPP_PROVIDER_HERMES_BRIDGE,
+        WHATSAPP_CONNECTOR_ALLOW_REAL_SEND=True,
+        WHATSAPP_HERMES_BRIDGE_ENABLED=enabled,
+        WHATSAPP_HERMES_BRIDGE_URL=bridge_url,
+        WHATSAPP_HERMES_BRIDGE_SESSION_REF=session_ref,
+        WHATSAPP_RECIPIENT_ALLOWLIST=["+15550101234"],
+    ):
+        with pytest.raises(WhatsAppConnectorError) as exc:
+            validate_real_send_allowed(
+                _real_request(provider=WHATSAPP_PROVIDER_HERMES_BRIDGE),
+                approved=True,
+                policy_allows_live=True,
+                adapter=HermesBridgeWhatsAppAdapter(session=session),
+            )
+
+    assert exc.value.code == "whatsapp_session_missing"
+    assert exc.value.blocked_before_provider_call is True
+    assert session.calls == []
+
+
 @override_settings(
     WHATSAPP_CONNECTOR_PROVIDER="open_wa_web",
     WHATSAPP_WEB_AUTOMATION_ALLOW_REAL_SEND=True,
@@ -150,6 +227,62 @@ def test_missing_session_blocks_before_provider_call() -> None:
 
     assert exc.value.code == "whatsapp_session_missing"
     assert exc.value.blocked_before_provider_call is True
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"status": "ready", "phone": "+15550101234"}, "ready"),
+        (
+            {"session_status": "authenticated", "session_ref": "session-secret"},
+            "authenticated",
+        ),
+        ({"state": "connected", "qr_token": "qr-secret"}, "connected"),
+        ({"connected": True, "phone": "+1 555 010 1234"}, "connected"),
+    ],
+)
+@override_settings(
+    WHATSAPP_HERMES_BRIDGE_ENABLED=True,
+    WHATSAPP_HERMES_BRIDGE_URL="http://hermes-bridge",
+    WHATSAPP_HERMES_BRIDGE_SESSION_REF="session-secret",
+)
+def test_hermes_bridge_session_status_maps_safe_values(
+    payload: dict[str, Any], expected: str
+) -> None:
+    adapter = HermesBridgeWhatsAppAdapter(session=_FakeSession(health=payload))
+
+    status = adapter.session_status()
+
+    assert status == expected
+    assert "+15550101234" not in status
+    assert "+1 555 010 1234" not in status
+    assert "session-secret" not in status
+    assert "qr-secret" not in status
+
+
+@override_settings(
+    WHATSAPP_HERMES_BRIDGE_ENABLED=True,
+    WHATSAPP_HERMES_BRIDGE_URL="http://hermes-bridge",
+    WHATSAPP_HERMES_BRIDGE_SESSION_REF="session-secret",
+)
+def test_hermes_bridge_session_status_falls_back_to_status_endpoint() -> None:
+    session = _FakeSession(
+        health={"status": "session-secret +15550101234"},
+        health_status_code=404,
+        status={
+            "session_status": "connected",
+            "session_ref": "session-secret",
+            "phone": "+15550101234",
+        },
+    )
+    adapter = HermesBridgeWhatsAppAdapter(session=session)
+
+    status = adapter.session_status()
+
+    assert status == "connected"
+    assert [call["url"].rsplit("/", 1)[-1] for call in session.calls] == ["health", "status"]
+    assert "session-secret" not in status
+    assert "+15550101234" not in status
 
 
 @override_settings(WHATSAPP_WEB_AUTOMATION_ALLOW_REAL_SEND=False)
@@ -240,6 +373,83 @@ def test_open_wa_adapter_returns_web_automation_receipt_without_session_material
     assert "+15550101234" not in persisted
     assert "Private" not in persisted
     assert session.calls[-1]["json"]["idempotency_key"] == "message-send"
+
+
+@override_settings(
+    WHATSAPP_CONNECTOR_PROVIDER=WHATSAPP_PROVIDER_HERMES_BRIDGE,
+    WHATSAPP_CONNECTOR_ALLOW_REAL_SEND=True,
+    WHATSAPP_HERMES_BRIDGE_ENABLED=True,
+    WHATSAPP_HERMES_BRIDGE_URL="http://hermes-bridge",
+    WHATSAPP_HERMES_BRIDGE_SESSION_REF="session-secret",
+    WHATSAPP_RECIPIENT_ALLOWLIST=["+15550101234"],
+)
+def test_hermes_bridge_send_returns_sanitized_receipt() -> None:
+    session = _FakeSession(
+        health={"status": "connected", "phone": "+15550101234"},
+        send={
+            "messageId": "hermes-message-123",
+            "to": "+15550101234",
+            "text": "Private approved notice",
+            "session_ref": "session-secret",
+        },
+    )
+    adapter = HermesBridgeWhatsAppAdapter(session=session)
+
+    receipt = send_whatsapp(
+        _real_request(provider=WHATSAPP_PROVIDER_HERMES_BRIDGE),
+        approved=True,
+        policy_allows_live=True,
+        adapter=adapter,
+    ).as_dict()
+
+    assert receipt["provider"] == WHATSAPP_PROVIDER_HERMES_BRIDGE
+    assert receipt["mode"] == "real_send"
+    assert receipt["evidence_mode"] == "web_automation"
+    assert receipt["status"] == "accepted"
+    assert receipt["provider_message_id"] == "hermes-message-123"
+    assert receipt["session_required"] is True
+    persisted = str(receipt)
+    assert "session-secret" not in persisted
+    assert "+15550101234" not in persisted
+    assert "Private approved notice" not in persisted
+    assert session.calls[-1]["json"]["idempotency_key"] == "message-send"
+
+
+@override_settings(
+    WHATSAPP_CONNECTOR_PROVIDER=WHATSAPP_PROVIDER_HERMES_BRIDGE,
+    WHATSAPP_CONNECTOR_ALLOW_REAL_SEND=True,
+    WHATSAPP_HERMES_BRIDGE_ENABLED=True,
+    WHATSAPP_HERMES_BRIDGE_URL="http://hermes-bridge",
+    WHATSAPP_HERMES_BRIDGE_SESSION_REF="session-secret",
+    WHATSAPP_RECIPIENT_ALLOWLIST=["+15550101234"],
+)
+def test_hermes_bridge_request_failure_is_retryable_and_sanitized() -> None:
+    adapter = HermesBridgeWhatsAppAdapter(
+        session=_FakeSession(
+            health={"status": "ready"},
+            post_exception=requests.Timeout(
+                "failed for +1 555 010 1234 Private approved notice session-secret"
+            ),
+        )
+    )
+
+    with pytest.raises(WhatsAppConnectorError) as exc:
+        send_whatsapp(
+            _real_request(provider=WHATSAPP_PROVIDER_HERMES_BRIDGE),
+            approved=True,
+            policy_allows_live=True,
+            adapter=adapter,
+        )
+
+    assert exc.value.code == "provider_request_failed"
+    assert exc.value.retryable is True
+    error = sanitize_provider_error(exc.value)
+    persisted = str(error)
+    assert error["sanitized"] is True
+    assert error["retryable"] is True
+    assert "+1 555 010 1234" not in persisted
+    assert "Private approved notice" not in persisted
+    assert "session-secret" not in persisted
 
 
 @override_settings(
