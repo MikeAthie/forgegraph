@@ -1,0 +1,75 @@
+IMPLEMENTATION MODE. Make code changes. Follow strict TDD where practical: add/update focused tests first, run them to see the current ad-hoc behavior fail against the new expectation, then implement, then verify.
+
+Repository: C:/Users/mathi/projects/forgegraph
+
+Context:
+- A generic ForgeGraph formatting layer has already been added:
+  - backend/application/services/deliverable_format_profiles.py
+  - backend/application/services/deliverable_format_quality.py
+  - backend/application/services/deliverable_format_renderers.py
+  - backend/application/services/deliverable_formatting.py
+  - backend/config/format_profiles/*.json
+- It turns ServiceDeliverable source artifacts into persisted derived AssetVersions for markdown_report, manifest, and zip_package with profile/provenance/quality metadata.
+- Current ad-hoc handoff scripts/package generation still exist. We want the real Legacy/Codex handoff path to use the generic formatter rather than hand-rolling package files.
+- UI is not important. Priority is production-level output packaging, provenance, and quality gates.
+
+Goal for this run:
+Replace or refactor the Legacy/Codex handoff package path so it uses `format_service_deliverables` and `format_profile:legacy.client_handoff@1` for the real run artifacts.
+
+Likely files to inspect first:
+- backend/scripts/prepare_legacy_handoff_email.py
+- backend/scripts/run_legacy_codex_company_run.py
+- backend/application/services/legacy_weekend_pipeline.py
+- backend/tests/unit/services/test_legacy_weekend_pipeline.py
+- backend/tests/unit/services/test_deliverable_formatting.py
+- backend/application/services/deliverable_formatting.py
+
+Implementation requirements:
+1. The handoff package/email-prep path should source its package from the generic formatter result, not reimplement markdown/manifest/zip packaging in a separate ad-hoc script.
+2. The selected format profile must be `format_profile:legacy.client_handoff@1` either explicitly or from engagement/program metadata.
+3. The generated package must have a generic formatter manifest with:
+   - schema_version `deliverable_format_manifest.v1`
+   - profile ref/hash
+   - source deliverable ids/source hashes
+   - output entries
+   - quality result
+   - deferred formats listing pdf/email
+4. The generated zip must be the `zip_package` artifact produced by the generic formatter.
+5. Persisted derived `AssetVersion`s should be visible in DB metadata/provenance under `source: deliverable_formatting`.
+6. Do not add DB models or migrations.
+7. Do not implement PDF rendering or production email refactor in this run.
+8. Do not hardcode renderer behavior to Legacy/Atlas/marketing; Legacy-specific configuration belongs in profile config or script input only.
+9. Preserve the operator-friendly local evidence output under `.hermes/legacy_client_handoff_email/` if useful, but it should copy/export the generic formatter artifact rather than create its own independent package.
+10. If the real Legacy/Codex run may fail due Codex/network/runtime, add a deterministic test fixture path that proves existing generated ServiceDeliverables can be formatted without running Codex.
+
+Tests to add/update:
+- A focused unit test that creates Legacy-style source deliverables and verifies the handoff preparation uses `format_service_deliverables` output/provenance, not ad-hoc package metadata.
+- A regression test that the zip artifact contains the formatter markdown report + manifest and the manifest has the correct profile/ref/quality data.
+- Keep the consulting/non-marketing formatter tests passing.
+
+Verification commands from `backend/`:
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python -m pytest tests/unit/services/test_deliverable_format_profiles.py tests/unit/services/test_deliverable_format_quality.py tests/unit/services/test_deliverable_format_renderers.py tests/unit/services/test_deliverable_formatting.py tests/unit/services/test_legacy_weekend_pipeline.py -q
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run ruff check application/services/deliverable_format_profiles.py application/services/deliverable_format_quality.py application/services/deliverable_format_renderers.py application/services/deliverable_formatting.py scripts/prepare_legacy_handoff_email.py tests/unit/services/test_deliverable_format_profiles.py tests/unit/services/test_deliverable_format_quality.py tests/unit/services/test_deliverable_format_renderers.py tests/unit/services/test_deliverable_formatting.py tests/unit/services/test_legacy_weekend_pipeline.py
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python manage.py check
+```
+
+After implementation, also run the script in a local deterministic mode if available. If no deterministic mode exists, add one. It must print JSON that includes:
+- recipient
+- subject
+- package_path
+- package_asset_version_id
+- markdown_asset_version_id
+- manifest_asset_version_id
+- profile_ref
+- quality_status
+- source_deliverable_count
+
+Do not send email in this run.
+
+Report:
+- files changed
+- exact verification output
+- evidence path/package path
+- DB artifact ids if produced
+- any deferred work

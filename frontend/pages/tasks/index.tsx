@@ -5,15 +5,8 @@ import { Play, Save, Scale, Trash2 } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  KeyValueGrid,
-  Panel,
-  SectionHeader,
-  SelectionList,
-  StatusBadge,
-  formatDateTime,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, KeyValueGrid, Panel, SectionHeader, SelectionList, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { operationRepository } from "@/domain/repositories";
@@ -407,6 +400,11 @@ function TasksInspector({ selectedTask }: { selectedTask: TaskVM | null }) {
 }
 
 function TaskQueuePanel({ controller }: { controller: TasksPageController }) {
+  const emptyState = useMemo(
+    () => <EmptyBlock title="Queue is clear" description="There are no projected tasks in the current time window." />,
+    [],
+  );
+
   return (
     <Panel title="Activity queue" description="Select a task to inspect its current state and next action.">
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
@@ -418,9 +416,7 @@ function TaskQueuePanel({ controller }: { controller: TasksPageController }) {
         items={controller.tasks}
         selectedId={controller.selectedTask?.id ?? null}
         onSelect={controller.selectTask}
-        empty={
-          <EmptyBlock title="Queue is clear" description="There are no projected tasks in the current time window." />
-        }
+        empty={emptyState}
       >
         {(task, { selected }) => <TaskQueueItem task={task} selected={selected} />}
       </SelectionList>
@@ -838,10 +834,11 @@ function TasksLoadedContent({ controller }: { controller: TasksPageController })
 
 export default function TasksPage() {
   const controller = useTasksPageController();
+  const inspector = useMemo(() => <TasksInspector selectedTask={controller.selectedTask} />, [controller.selectedTask]);
 
   return (
     <ProtectedRoute>
-      <DashboardLayout inspector={<TasksInspector selectedTask={controller.selectedTask} />}>
+      <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <SectionHeader
             eyebrow="Activity"

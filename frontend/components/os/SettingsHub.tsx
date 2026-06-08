@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import Link from "next/link";
 import { Building2, FileSearch, KeyRound, LifeBuoy, ReceiptText, Scale, ShieldCheck, Store, Vault } from "lucide-react";
 
@@ -90,36 +91,38 @@ type SettingsHubProps = {
 export default function SettingsHub({ mode }: SettingsHubProps) {
   const { user } = useAuth();
   const canManage = user?.organization_role === "owner" || user?.organization_role === "admin";
+  const inspector = useMemo(
+    () => (
+      <InspectorPanel
+        title={mode === "settings" ? "Settings posture" : "Governance posture"}
+        subtitle="This hub is the configuration counterpart to the operating shell. It keeps policy, identity, billing, and credentials grouped instead of spread across unrelated navigation."
+        sections={[
+          {
+            title: "Access level",
+            content: (
+              <StatusBadge
+                status={canManage ? "active" : "pending"}
+                label={canManage ? "Admin-capable" : "Read-only on governed surfaces"}
+              />
+            ),
+          },
+          {
+            title: "Scope",
+            content: user?.default_organization_id ? "Workspace settings" : "Personal workspace settings",
+          },
+          {
+            title: "Current role",
+            content: user?.organization_role ?? "member",
+          },
+        ]}
+      />
+    ),
+    [canManage, mode, user?.default_organization_id, user?.organization_role],
+  );
 
   return (
     <ProtectedRoute>
-      <DashboardLayout
-        inspector={
-          <InspectorPanel
-            title={mode === "settings" ? "Settings posture" : "Governance posture"}
-            subtitle="This hub is the configuration counterpart to the operating shell. It keeps policy, identity, billing, and credentials grouped instead of spread across unrelated navigation."
-            sections={[
-              {
-                title: "Access level",
-                content: (
-                  <StatusBadge
-                    status={canManage ? "active" : "pending"}
-                    label={canManage ? "Admin-capable" : "Read-only on governed surfaces"}
-                  />
-                ),
-              },
-              {
-                title: "Scope",
-                content: user?.default_organization_id ? "Workspace settings" : "Personal workspace settings",
-              },
-              {
-                title: "Current role",
-                content: user?.organization_role ?? "member",
-              },
-            ]}
-          />
-        }
-      >
+      <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <SectionHeader
             eyebrow={mode === "settings" ? "Settings" : "Governance"}

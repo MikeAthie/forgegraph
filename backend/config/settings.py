@@ -404,6 +404,10 @@ MANAGED_LLM_RATE_LIMIT_PER_USER_PER_MIN = int(
     os.environ.get("MANAGED_LLM_RATE_LIMIT_PER_USER_PER_MIN", "600")
 )
 MANAGED_LLM_DAILY_COST_CAP_USD = os.environ.get("MANAGED_LLM_DAILY_COST_CAP_USD", "10.00")
+ENABLE_CODEX_SESSION_RUNTIME = _get_bool_env("ENABLE_CODEX_SESSION_RUNTIME", False)
+CODEX_SESSION_COMMAND = os.environ.get("CODEX_SESSION_COMMAND", "codex").strip() or "codex"
+CODEX_SESSION_WORKDIR = os.environ.get("CODEX_SESSION_WORKDIR", str(BASE_DIR.parent)).strip()
+CODEX_SESSION_TIMEOUT_SECONDS = int(os.environ.get("CODEX_SESSION_TIMEOUT_SECONDS", "180"))
 
 # Run queue configuration
 RUN_QUEUE_ENABLED = os.environ.get("RUN_QUEUE_ENABLED", "false").lower() in {"1", "true", "yes"}
@@ -790,7 +794,7 @@ RUN_STREAM_ALLOW_QUERY_ACCESS_TOKEN = _get_bool_env("RUN_STREAM_ALLOW_QUERY_ACCE
 ALLOWED_LLM_PROVIDERS = [
     provider.strip().lower()
     for provider in os.environ.get(
-        "ALLOWED_LLM_PROVIDERS", "openai,anthropic,google,openrouter"
+        "ALLOWED_LLM_PROVIDERS", "openai,anthropic,google,openrouter,codex"
     ).split(",")
     if provider.strip()
 ]

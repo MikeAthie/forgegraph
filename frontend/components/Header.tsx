@@ -18,22 +18,22 @@ import {
   ThemeToggle,
 } from "@/components/ui";
 
+const NAV_ITEMS = [
+  { href: "/companies", label: "Companies" },
+  { href: "/overview", label: "Command Center" },
+  { href: "/approvals", label: "Approvals" },
+  { href: "/departments", label: "Departments" },
+  { href: "/tasks", label: "Activity" },
+  { href: "/memory", label: "Knowledge" },
+  { href: "/runs", label: "Operations" },
+] as const;
+
 export default function Header() {
   const router = useRouter();
   const { push } = router;
   const { user, isAuthenticated, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
-
-  const navItems = [
-    { href: "/companies", label: "Companies" },
-    { href: "/overview", label: "Command Center" },
-    { href: "/approvals", label: "Approvals" },
-    { href: "/departments", label: "Departments" },
-    { href: "/tasks", label: "Activity" },
-    { href: "/memory", label: "Knowledge" },
-    { href: "/runs", label: "Operations" },
-  ] as const;
 
   const canManageOrg = user?.organization_role === "owner" || user?.organization_role === "admin";
   const canViewAuditLogs = canManageOrg;
@@ -111,7 +111,7 @@ export default function Header() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-44">
-                    {navItems.map((item) => (
+                    {NAV_ITEMS.map((item) => (
                       <DropdownMenuItem
                         key={item.href}
                         onSelect={(event) => {
@@ -146,7 +146,7 @@ export default function Header() {
 
             {isAuthenticated && (
               <div className="hidden sm:ml-8 sm:flex sm:gap-x-1">
-                {navItems.map((item) => (
+                {NAV_ITEMS.map((item) => (
                   <Button key={item.href} variant={activeHref === item.href ? "secondary" : "ghost"} asChild>
                     <Link
                       href={item.href}

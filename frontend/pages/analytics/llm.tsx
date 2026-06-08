@@ -477,20 +477,15 @@ export default function LLMAnalyticsPage() {
                           <span className="text-muted-foreground">Monthly limit</span>
                           <span className="font-semibold">{formatCurrency(budgetLimitValue)}</span>
                         </div>
-                        <div
-                          className="h-3 overflow-hidden rounded-full bg-muted/60"
-                          role="progressbar"
+                        <progress
+                          className="h-3 w-full appearance-none overflow-hidden rounded-full bg-muted/60 [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-emerald-500 [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-muted/60 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-emerald-500"
                           aria-label="Monthly LLM budget usage"
-                          aria-valuemin={0}
-                          aria-valuemax={budgetLimitValue ?? undefined}
-                          aria-valuenow={budgetUsed}
                           aria-valuetext={`${budgetStatusLabel}. ${budgetProgressPercent}% of monthly budget used.`}
+                          value={budgetUsed}
+                          max={Math.max(budgetLimitValue ?? budgetUsed, 1)}
                         >
-                          <div
-                            className="h-full bg-emerald-500 transition-[width] duration-200 motion-reduce:transition-none"
-                            style={{ width: `${budgetProgressPercent}%` }}
-                          />
-                        </div>
+                          {budgetProgressPercent}%
+                        </progress>
                         <div className="text-xs text-muted-foreground">
                           {budgetStatusLabel}. {budgetProgressPercent}% used. Warning at{" "}
                           {formatPercent(budget?.budget?.warning_threshold_pct)}.

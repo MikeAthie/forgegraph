@@ -1,6 +1,7 @@
 import { CheckCircle2, RotateCcw } from "lucide-react";
 
-import { StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import { Button } from "@/components/ui";
 import type { OpsDeadLetter } from "@/lib/api";
 import { cn } from "@/lib/utils";

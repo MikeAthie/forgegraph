@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -391,6 +391,112 @@ function MemoryLedgerPanels({
   );
 }
 
+function MemoryBrowserContent({
+  availableTypes,
+  canDeleteObservations,
+  canExportMemoryData,
+  canManageRetention,
+  currentRole,
+  detailError,
+  detailLoading,
+  freshestSeenAt,
+  inspector,
+  listError,
+  listLoading,
+  modeLabel,
+  observations,
+  queryDraft,
+  scopeFilter,
+  selectedObservation,
+  selectedObservationId,
+  typeFilter,
+  visibleScopes,
+  onQueryDraftChange,
+  onQuerySearch,
+  onRefresh,
+  onScopeChange,
+  onSelectObservation,
+  onTypeChange,
+}: {
+  availableTypes: string[];
+  canDeleteObservations: boolean;
+  canExportMemoryData: boolean;
+  canManageRetention: boolean;
+  currentRole: string;
+  detailError: string | null;
+  detailLoading: boolean;
+  freshestSeenAt: string | null;
+  inspector: ReactNode;
+  listError: string | null;
+  listLoading: boolean;
+  modeLabel: string;
+  observations: MemoryObservationVM[];
+  queryDraft: string;
+  scopeFilter: string;
+  selectedObservation: MemoryObservationVM | null;
+  selectedObservationId: string | null;
+  typeFilter: string;
+  visibleScopes: number;
+  onQueryDraftChange: (value: string) => void;
+  onQuerySearch: (value: string) => void;
+  onRefresh: () => void;
+  onScopeChange: (value: string) => void;
+  onSelectObservation: (observation: MemoryObservationVM) => void;
+  onTypeChange: (value: string) => void;
+}) {
+  return (
+    <ProtectedRoute>
+      <DashboardLayout inspector={inspector}>
+        <div className="space-y-6">
+          <MemoryBrowserHeader />
+
+          <MemoryMetricsGrid
+            observationsCount={observations.length}
+            modeLabel={modeLabel}
+            visibleScopes={visibleScopes}
+            freshestSeenAt={freshestSeenAt}
+            currentRole={currentRole}
+            canManageRetention={canManageRetention}
+          />
+
+          <MemoryAccessAlert
+            currentRole={currentRole}
+            canDeleteObservations={canDeleteObservations}
+            canManageRetention={canManageRetention}
+            canExportMemoryData={canExportMemoryData}
+          />
+
+          {listError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{listError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <MemoryLedgerPanels
+            availableTypes={availableTypes}
+            detailError={detailError}
+            detailLoading={detailLoading}
+            listLoading={listLoading}
+            modeLabel={modeLabel}
+            observations={observations}
+            queryDraft={queryDraft}
+            scopeFilter={scopeFilter}
+            selectedObservation={selectedObservation}
+            selectedObservationId={selectedObservationId}
+            typeFilter={typeFilter}
+            onQueryDraftChange={onQueryDraftChange}
+            onQuerySearch={onQuerySearch}
+            onRefresh={onRefresh}
+            onScopeChange={onScopeChange}
+            onSelectObservation={onSelectObservation}
+            onTypeChange={onTypeChange}
+          />
+        </div>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+}
+
 export default function MemoryBrowserPage() {
   const router = useRouter();
   const { replace } = router;
@@ -628,65 +734,45 @@ export default function MemoryBrowserPage() {
   const canExportMemoryData =
     governance?.current_role_capabilities.can_export_memory_data ??
     (currentRole === "owner" || currentRole === "admin");
+  const inspector = useMemo(
+    () => (
+      <MemoryPostureInspector
+        currentRole={currentRole}
+        canDeleteObservations={canDeleteObservations}
+        canManageRetention={canManageRetention}
+        canExportMemoryData={canExportMemoryData}
+      />
+    ),
+    [canDeleteObservations, canExportMemoryData, canManageRetention, currentRole],
+  );
 
   return (
-    <ProtectedRoute>
-      <DashboardLayout
-        inspector={
-          <MemoryPostureInspector
-            currentRole={currentRole}
-            canDeleteObservations={canDeleteObservations}
-            canManageRetention={canManageRetention}
-            canExportMemoryData={canExportMemoryData}
-          />
-        }
-      >
-        <div className="space-y-6">
-          <MemoryBrowserHeader />
-
-          <MemoryMetricsGrid
-            observationsCount={observations.length}
-            modeLabel={modeLabel}
-            visibleScopes={visibleScopes}
-            freshestSeenAt={freshestSeenAt}
-            currentRole={currentRole}
-            canManageRetention={canManageRetention}
-          />
-
-          <MemoryAccessAlert
-            currentRole={currentRole}
-            canDeleteObservations={canDeleteObservations}
-            canManageRetention={canManageRetention}
-            canExportMemoryData={canExportMemoryData}
-          />
-
-          {listError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{listError}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <MemoryLedgerPanels
-            availableTypes={availableTypes}
-            detailError={detailError}
-            detailLoading={detailLoading}
-            listLoading={listLoading}
-            modeLabel={modeLabel}
-            observations={observations}
-            queryDraft={queryDraft}
-            scopeFilter={scopeFilter}
-            selectedObservation={selectedObservation}
-            selectedObservationId={selectedObservationId}
-            typeFilter={typeFilter}
-            onQueryDraftChange={(value) => dispatchMemory({ type: "query-draft", queryDraft: value })}
-            onQuerySearch={handleQuerySearch}
-            onRefresh={() => void refreshObservations()}
-            onScopeChange={handleScopeChange}
-            onSelectObservation={handleSelectObservation}
-            onTypeChange={handleTypeChange}
-          />
-        </div>
-      </DashboardLayout>
-    </ProtectedRoute>
+    <MemoryBrowserContent
+      availableTypes={availableTypes}
+      canDeleteObservations={canDeleteObservations}
+      canExportMemoryData={canExportMemoryData}
+      canManageRetention={canManageRetention}
+      currentRole={currentRole}
+      detailError={detailError}
+      detailLoading={detailLoading}
+      freshestSeenAt={freshestSeenAt}
+      inspector={inspector}
+      listError={listError}
+      listLoading={listLoading}
+      modeLabel={modeLabel}
+      observations={observations}
+      queryDraft={queryDraft}
+      scopeFilter={scopeFilter}
+      selectedObservation={selectedObservation}
+      selectedObservationId={selectedObservationId}
+      typeFilter={typeFilter}
+      visibleScopes={visibleScopes}
+      onQueryDraftChange={(value) => dispatchMemory({ type: "query-draft", queryDraft: value })}
+      onQuerySearch={handleQuerySearch}
+      onRefresh={() => void refreshObservations()}
+      onScopeChange={handleScopeChange}
+      onSelectObservation={handleSelectObservation}
+      onTypeChange={handleTypeChange}
+    />
   );
 }

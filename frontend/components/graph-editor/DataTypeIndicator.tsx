@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import { Type, Braces, List, Hash, ToggleLeft, Image, File, Asterisk, Circle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DataType, DATA_TYPE_INFO, getDataTypeInfo } from "@/lib/data-types";
+import { DataType, getDataTypeInfo } from "@/lib/data-types";
 
 /**
  * Icon mapping for data types
@@ -18,6 +17,18 @@ const TYPE_ICONS: Record<DataType, React.ComponentType<{ className?: string }>> 
   [DataType.FILE]: File,
   [DataType.ANY]: Asterisk,
   [DataType.VOID]: Circle,
+};
+
+const SIZE_CLASSES = {
+  sm: "size-4 text-[10px]",
+  md: "size-5 text-xs",
+  lg: "size-6 text-sm",
+};
+
+const ICON_SIZE_CLASSES = {
+  sm: "size-2.5",
+  md: "size-3",
+  lg: "size-4",
 };
 
 interface DataTypeIndicatorProps {
@@ -41,18 +52,6 @@ export function DataTypeIndicator({
   const typeInfo = getDataTypeInfo(type);
   const IconComponent = TYPE_ICONS[type] || Asterisk;
 
-  const sizeClasses = {
-    sm: "size-4 text-[10px]",
-    md: "size-5 text-xs",
-    lg: "size-6 text-sm",
-  };
-
-  const iconSizeClasses = {
-    sm: "size-2.5",
-    md: "size-3",
-    lg: "size-4",
-  };
-
   const tooltipText = `${typeInfo.label}: ${typeInfo.description}${isInferred ? " (inferred)" : ""}`;
 
   return (
@@ -60,13 +59,13 @@ export function DataTypeIndicator({
       className={cn(
         "inline-flex items-center gap-1 rounded-full cursor-help",
         typeInfo.bgColor,
-        sizeClasses[size],
+        SIZE_CLASSES[size],
         showLabel ? "px-2 py-0.5" : "p-1",
         className,
       )}
       title={tooltipText}
     >
-      <IconComponent className={cn(typeInfo.color, iconSizeClasses[size])} />
+      <IconComponent className={cn(typeInfo.color, ICON_SIZE_CLASSES[size])} />
       {showLabel && <span className={cn("font-medium", typeInfo.color)}>{typeInfo.label}</span>}
       {isInferred && <span className="text-neutral-400 text-[8px]">?</span>}
     </div>

@@ -7,13 +7,8 @@ import { DeadLetterTable } from "@/components/ops/DeadLetterTable";
 import { EventSpoolPanel } from "@/components/ops/EventSpoolPanel";
 import { ProjectionLagPanel } from "@/components/ops/ProjectionLagPanel";
 import {
-  InspectorPanel,
-  KeyValueGrid,
-  MetricCard,
-  Panel,
-  StatusBadge,
-  formatDateTime,
-} from "@/components/os/operations-ui";
+  InspectorPanel, KeyValueGrid, MetricCard, Panel, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Textarea } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,30 +30,30 @@ export default function OpsPage() {
   const [reason, setReason] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const deadLettersQuery = useQuery({
+  const { data: deadLettersData } = useQuery({
     queryKey: [...OPS_QUERY_ROOT, "deadLetters", organizationId],
     queryFn: opsApi.getDeadLetters,
     enabled,
   });
-  const projectionLagQuery = useQuery({
+  const { data: projectionLagData } = useQuery({
     queryKey: [...OPS_QUERY_ROOT, "projectionLag", organizationId],
     queryFn: opsApi.getProjectionLag,
     enabled,
   });
-  const eventSpoolQuery = useQuery({
+  const { data: eventSpoolData } = useQuery({
     queryKey: [...OPS_QUERY_ROOT, "eventSpool", organizationId],
     queryFn: opsApi.getEventSpool,
     enabled,
   });
-  const runtimeLagQuery = useQuery({
+  const { data: runtimeLagData } = useQuery({
     queryKey: [...OPS_QUERY_ROOT, "runtimeIntentLag", organizationId],
     queryFn: opsApi.getRuntimeIntentLag,
     enabled,
   });
 
-  const items = useMemo(() => deadLettersQuery.data?.items ?? [], [deadLettersQuery.data?.items]);
+  const items = useMemo(() => deadLettersData?.items ?? [], [deadLettersData?.items]);
   const selected = useMemo(() => items.find((item) => item.id === selectedId) ?? items[0] ?? null, [items, selectedId]);
-  const selectedDetailQuery = useQuery({
+  const { data: selectedDetail } = useQuery({
     queryKey: [...OPS_QUERY_ROOT, "deadLetter", selected?.id ?? "none", organizationId],
     queryFn: () => opsApi.getDeadLetter(selected?.id ?? ""),
     enabled: enabled && Boolean(selected?.id),
@@ -111,8 +106,8 @@ export default function OpsPage() {
     resolveMutation.mutate(item);
   };
 
-  const activeCount = deadLettersQuery.data?.counts.active ?? 0;
-  const projectionStatus = projectionLagQuery.data?.projection.status ?? "unknown";
+  const activeCount = deadLettersData?.counts.active ?? 0;
+  const projectionStatus = projectionLagData?.projection.status ?? "unknown";
   const degraded = activeCount > 0 || ["stale", "rebuilding", "degraded"].includes(projectionStatus);
   const actionId =
     replayMutation.variables?.id && replayMutation.isPending
@@ -121,49 +116,52 @@ export default function OpsPage() {
         ? resolveMutation.variables.id
         : null;
 
-  const inspector = (
-    <InspectorPanel
-      title="Recovery Detail"
-      subtitle="Dead-letter detail, redacted payload, and backend audit trail."
-      sections={[
-        {
-          title: "Selected failure",
-          content: selectedDetailQuery.data ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span>Status</span>
-                <StatusBadge status={selectedDetailQuery.data.status} />
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Kind</span>
-                <span className="capitalize">{selectedDetailQuery.data.kind.replace(/_/g, " ")}</span>
-              </div>
-              <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{selectedDetailQuery.data.reason}</p>
-            </div>
-          ) : (
-            "Select a dead letter to inspect recovery options."
-          ),
-        },
-        {
-          title: "Audit trail",
-          content: selectedDetailQuery.data?.operator_actions.length ? (
-            <div className="space-y-3">
-              {selectedDetailQuery.data.operator_actions.slice(0, 5).map((action) => (
-                <div key={action.id} className="rounded-xl border border-zinc-900/8 p-3 dark:border-white/8">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium">{action.action}</span>
-                    <StatusBadge status={action.status} />
-                  </div>
-                  <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{formatDateTime(action.created_at)}</p>
+  const inspector = useMemo(
+    () => (
+      <InspectorPanel
+        title="Recovery Detail"
+        subtitle="Dead-letter detail, redacted payload, and backend audit trail."
+        sections={[
+          {
+            title: "Selected failure",
+            content: selectedDetail ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span>Status</span>
+                  <StatusBadge status={selectedDetail.status} />
                 </div>
-              ))}
-            </div>
-          ) : (
-            "No recovery actions have been recorded for this item."
-          ),
-        },
-      ]}
-    />
+                <div className="flex items-center justify-between">
+                  <span>Kind</span>
+                  <span className="capitalize">{selectedDetail.kind.replace(/_/g, " ")}</span>
+                </div>
+                <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{selectedDetail.reason}</p>
+              </div>
+            ) : (
+              "Select a dead letter to inspect recovery options."
+            ),
+          },
+          {
+            title: "Audit trail",
+            content: selectedDetail?.operator_actions.length ? (
+              <div className="space-y-3">
+                {selectedDetail.operator_actions.slice(0, 5).map((action) => (
+                  <div key={action.id} className="rounded-xl border border-zinc-900/8 p-3 dark:border-white/8">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium">{action.action}</span>
+                      <StatusBadge status={action.status} />
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{formatDateTime(action.created_at)}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              "No recovery actions have been recorded for this item."
+            ),
+          },
+        ]}
+      />
+    ),
+    [selectedDetail],
   );
 
   return (
@@ -201,21 +199,21 @@ export default function OpsPage() {
               <MetricCard
                 eyebrow="Projection"
                 value={projectionStatus}
-                delta={`seq ${(projectionLagQuery.data?.projection.last_sequence ?? 0).toLocaleString()}`}
+                delta={`seq ${(projectionLagData?.projection.last_sequence ?? 0).toLocaleString()}`}
                 tone={projectionStatus === "fresh" ? "emerald" : "amber"}
                 icon={<CheckCircle2 className="size-4" />}
               />
               <MetricCard
                 eyebrow="Runtime backlog"
-                value={(runtimeLagQuery.data?.backlog ?? 0).toLocaleString()}
-                delta={`${runtimeLagQuery.data?.pending ?? 0} pending · ${runtimeLagQuery.data?.lag ?? 0} lag`}
-                tone={(runtimeLagQuery.data?.backlog ?? 0) > 0 ? "amber" : "slate"}
+                value={(runtimeLagData?.backlog ?? 0).toLocaleString()}
+                delta={`${runtimeLagData?.pending ?? 0} pending · ${runtimeLagData?.lag ?? 0} lag`}
+                tone={(runtimeLagData?.backlog ?? 0) > 0 ? "amber" : "slate"}
                 icon={<RotateCcw className="size-4" />}
               />
               <MetricCard
                 eyebrow="Event spool"
-                value={(eventSpoolQuery.data?.domain_events.count ?? 0).toLocaleString()}
-                delta={`state v${(eventSpoolQuery.data?.state_feed_events.latest_state_version ?? 0).toLocaleString()}`}
+                value={(eventSpoolData?.domain_events.count ?? 0).toLocaleString()}
+                delta={`state v${(eventSpoolData?.state_feed_events.latest_state_version ?? 0).toLocaleString()}`}
                 tone="cyan"
               />
             </div>
@@ -275,11 +273,11 @@ export default function OpsPage() {
 
           <div className="grid gap-6 2xl:grid-cols-[0.95fr_1.05fr]">
             <Panel title="Projection lag" description="Cursor and lag state derived from backend projection metadata.">
-              <ProjectionLagPanel data={projectionLagQuery.data} />
+              <ProjectionLagPanel data={projectionLagData} />
             </Panel>
 
             <Panel title="Event spool" description="Recent backend event and state-feed metadata without raw secrets.">
-              <EventSpoolPanel spool={eventSpoolQuery.data} runtime={runtimeLagQuery.data} />
+              <EventSpoolPanel spool={eventSpoolData} runtime={runtimeLagData} />
             </Panel>
           </div>
         </div>

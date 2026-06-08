@@ -482,7 +482,6 @@ def test_service_deliverable_can_reference_company_report(authenticated_client, 
     assert response.status_code == 201
     assert response.data["data"]["deliverable"]["report_run_id"] == str(report.id)
 
-
 def test_service_deliverable_create_requires_idempotency_key(authenticated_client, user):
     company = _company(user, "Deliverable Idempotency Required")
     engagement = _engagement(user, company)
@@ -574,7 +573,6 @@ def test_service_deliverable_action_mark_ready_runs_quality_gate(authenticated_c
         resource_type="service_deliverable",
         resource_id=str(deliverable.id),
     ).exists()
-
 
 def test_service_deliverable_action_requires_idempotency_key(authenticated_client, user):
     company = _company(user, "Action Idempotency Required")
@@ -680,7 +678,6 @@ def test_service_deliverable_action_submit_for_approval(authenticated_client, us
     assert deliverable.status == "in_review"
     assert engagement.status == "waiting_on_customer"
     assert engagement.customer_status == "review_ready"
-
 
 def test_service_deliverable_action_deliver_to_client_sets_delivered_at(authenticated_client, user):
     company = _company(user, "Lifecycle Delivered Client")

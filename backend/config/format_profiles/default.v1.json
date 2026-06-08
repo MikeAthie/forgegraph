@@ -1,0 +1,46 @@
+{
+  "profile_id": "default",
+  "version": 1,
+  "display_name": "Default Client Handoff",
+  "business_domain": "general",
+  "formats": ["markdown_report", "pdf_report", "manifest", "zip_package"],
+  "voice": {
+    "audience": "client_reviewer",
+    "tone": "direct, evidence-led, concise",
+    "forbidden_phrases": ["as an AI", "I cannot", "placeholder"],
+    "naming": {
+      "client_display_name": "Client",
+      "provider_display_name": "ForgeGraph"
+    }
+  },
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Executive Summary",
+      "required": true,
+      "source_roles": ["summary", "context", "strategy"]
+    },
+    {
+      "id": "evidence",
+      "title": "Evidence",
+      "required": true,
+      "source_roles": ["evidence", "source", "finding", "facts"]
+    },
+    {
+      "id": "recommendations",
+      "title": "Recommendations",
+      "required": true,
+      "source_roles": ["recommendation", "next_step"]
+    }
+  ],
+  "quality_gates": ["client_handoff@1"],
+  "connector_policy": {
+    "require_caveats_for_unverified_sources": false,
+    "require_approval_language": false
+  },
+  "layout": {
+    "heading_style": "professional_report",
+    "include_manifest_link": true,
+    "require_evidence_recommendation_separation": true
+  }
+}

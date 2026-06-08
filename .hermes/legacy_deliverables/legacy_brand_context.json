@@ -1,0 +1,148 @@
+{
+  "brand": {
+    "name": "Legacy",
+    "category": "Luxury glasswear / sunglasses",
+    "origin": "Mexico City",
+    "positioning": "Optical Noir: restrained luxury, CDMX night energy, severe black/ivory contrast, editorial product photography.",
+    "site_repo": "C:\\Users\\mathi\\projects\\legacy\\front",
+    "hero": "public/editorial/legacy-crew-hero.webp",
+    "colors": {
+      "ink": "#050505",
+      "ivory": "#F6F0E4",
+      "bone": "#E6D8C0",
+      "amber": "#C78346",
+      "lens_green": "#17382B",
+      "copper": "#A65A34"
+    }
+  },
+  "products": [
+    {
+      "slug": "lennon",
+      "name": "LENNON",
+      "code": "GR-8024",
+      "color": "BLUE",
+      "price": 700,
+      "status": "Disponible",
+      "image": "public/catalog/lennon/gallery-1.webp"
+    },
+    {
+      "slug": "monroe",
+      "name": "MONROE",
+      "code": "JS-60033",
+      "color": "BLACK",
+      "price": 660,
+      "status": "Disponible",
+      "image": "public/catalog/monroe/gallery-1.webp"
+    },
+    {
+      "slug": "hendrix",
+      "name": "HENDRIX",
+      "code": "NC-29026",
+      "color": "GOLD",
+      "price": 660,
+      "status": "Pocas piezas",
+      "image": "public/catalog/hendrix/gallery-1.webp"
+    },
+    {
+      "slug": "gaga",
+      "name": "GAGA",
+      "code": "NC-29046",
+      "color": "RED",
+      "price": 740,
+      "status": "Pocas piezas",
+      "image": "public/catalog/gaga/gallery-1.webp"
+    },
+    {
+      "slug": "winehouse",
+      "name": "WINEHOUSE",
+      "code": "YD-GN1127T",
+      "color": "BLACK/CRYSTAL",
+      "price": 780,
+      "status": "Pocas piezas",
+      "image": "public/catalog/winehouse/gallery-1.webp"
+    },
+    {
+      "slug": "depp",
+      "name": "DEPP",
+      "code": "ZD-8809T",
+      "color": "GOLD",
+      "price": 590,
+      "status": "Disponible",
+      "image": "public/catalog/depp/gallery-1.webp"
+    }
+  ],
+  "posts": [
+    {
+      "id": "legacy-post-01",
+      "date": "2026-06-05",
+      "format": "Instagram feed square",
+      "theme": "Brand launch / editorial",
+      "headline": "La noche empieza antes de salir.",
+      "sub": "Legacy — lentes importados para CDMX",
+      "asset": "legacy_ig_01_launch.png",
+      "source": "public/editorial/legacy-crew-hero.webp",
+      "caption": "La noche empieza antes de salir. Legacy reúne siluetas importadas, presencia medida y entrega directa en CDMX. Explora modelos desde $590 MXN.\n\n#LegacyCDMX #LentesDeSol #CDMX #OpticalNoir",
+      "cta": "Elegir mi Legacy"
+    },
+    {
+      "id": "legacy-post-02",
+      "date": "2026-06-06",
+      "format": "Instagram feed square",
+      "theme": "Product spotlight",
+      "headline": "MONROE / BLACK",
+      "sub": "Negro limpio. Presencia inmediata. $660 MXN",
+      "asset": "legacy_ig_02_monroe.png",
+      "source": "public/catalog/monroe/gallery-1.webp",
+      "caption": "MONROE en negro: una silueta limpia para entrar sin explicar demasiado. Disponible en Legacy.\n\n#LegacyMonroe #LentesCDMX #LuxurySunglasses",
+      "cta": "Apartar para la noche"
+    },
+    {
+      "id": "legacy-post-03",
+      "date": "2026-06-07",
+      "format": "Instagram feed square",
+      "theme": "Low stock urgency",
+      "headline": "Pocas piezas. Mucha presencia.",
+      "sub": "HENDRIX / GAGA / WINEHOUSE",
+      "asset": "legacy_ig_03_low_stock.png",
+      "source": "public/catalog/gaga/gallery-1.webp",
+      "caption": "Las piezas con más carácter no se quedan esperando. Hendrix, Gaga y Winehouse están en pocas piezas. Consulta color y disponibilidad.\n\n#LegacyDrop #CDMXStyle #LentesDeSol",
+      "cta": "Consultar disponibilidad"
+    },
+    {
+      "id": "legacy-post-04",
+      "date": "2026-06-08",
+      "format": "Instagram feed square",
+      "theme": "Editorial archive",
+      "headline": "CDMX privada.",
+      "sub": "Un archivo para moverse después de oscuro.",
+      "asset": "legacy_ig_04_editorial.png",
+      "source": "public/editorial/whatsapp/legacy-whatsapp-13.webp",
+      "caption": "No es solo el modelo: es la forma de entrar. Legacy trabaja con una estética Optical Noir: negro, marfil, geometría y noche de CDMX.\n\n#OpticalNoir #LegacyCDMX",
+      "cta": "Ver novedades"
+    },
+    {
+      "id": "legacy-post-05",
+      "date": "2026-06-09",
+      "format": "Instagram feed square",
+      "theme": "Buyer guide",
+      "headline": "Elige por actitud, no por tendencia.",
+      "sub": "Azul / Negro / Oro / Crystal",
+      "asset": "legacy_ig_05_guide.png",
+      "source": "public/catalog/lennon/gallery-1.webp",
+      "caption": "Guía rápida Legacy: azul para contraste, negro para presencia directa, oro para luz nocturna, crystal para precisión. El modelo correcto se nota antes de hablar.\n\n#GuiaLegacy #SunglassesMX",
+      "cta": "Explorar modelos"
+    },
+    {
+      "id": "legacy-post-06",
+      "date": "2026-06-10",
+      "format": "Instagram feed square",
+      "theme": "Promo / entry price",
+      "headline": "Desde $590 MXN.",
+      "sub": "DEPP / GOLD — entrada al universo Legacy",
+      "asset": "legacy_ig_06_promo.png",
+      "source": "public/catalog/depp/gallery-1.webp",
+      "caption": "Entrar al universo Legacy no tiene que esperar. Modelos seleccionados desde $590 MXN, con entrega coordinada desde CDMX.\n\n#LegacyPromo #LentesImportados",
+      "cta": "Entrar a promos"
+    }
+  ]
+}

@@ -1,0 +1,250 @@
+{
+  "client": "Legacy",
+  "company": {
+    "external_ref": "legacy-glasswear-cdmx",
+    "external_source": "atlas_client",
+    "id": "585eb1a4-c026-4a60-a44c-59475e60e3f4",
+    "name": "Legacy"
+  },
+  "deliverable_count": 14,
+  "deliverables": [
+    {
+      "artifact_id": "d395bbb8-489d-4a3d-98de-f4a4d48dcea9",
+      "asset_version_count": 1,
+      "department": "strategy_research",
+      "file_path": "/app/.hermes/legacy_deliverables/legacy_brand_context.json",
+      "id": "f7fc8782-3233-41bb-944f-ee6c1d2c38ea",
+      "status": "ready",
+      "title": "Legacy Brand Context Pack",
+      "type": "brand_context_pack",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "24a65732-6a10-4479-ac0b-e6a398a5833c",
+      "asset_version_count": 1,
+      "department": "strategy_research",
+      "file_path": "/app/.hermes/legacy_deliverables/legacy_marketing_strategy.md",
+      "id": "4f1c97ba-5028-4be1-8de9-023171e16450",
+      "status": "ready",
+      "title": "Legacy Marketing Strategy Sprint",
+      "type": "strategy_brief",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "ab4166a1-c767-47ec-805b-9cac3d238ac7",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/legacy_social_media_calendar.md",
+      "id": "2a58c6e9-0e96-4152-8ce4-341d26f4faca",
+      "status": "ready",
+      "title": "Legacy 10-Day Social Media Calendar",
+      "type": "content_calendar",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "3892b897-13e1-477c-8a7a-ecc8b1f27654",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/legacy_instagram_copy_pack.md",
+      "id": "6a238490-5795-4be4-be46-3959682afb85",
+      "status": "ready",
+      "title": "Legacy Instagram Copy Pack",
+      "type": "channel_copy_pack",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "bf4311bb-8866-4336-ae00-7047c6296465",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/legacy_creative_direction_brief.md",
+      "id": "7f3232e1-8678-41e4-b319-41514dc001e4",
+      "status": "ready",
+      "title": "Legacy Creative Direction Brief",
+      "type": "creative_direction_brief",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "3b9e2b70-4fae-4372-80bd-1a222a59bf89",
+      "asset_version_count": 1,
+      "department": "client_approval_ops",
+      "file_path": "/app/.hermes/legacy_deliverables/legacy_client_approval_packet.md",
+      "id": "d1d2e68a-b99d-4081-8c83-b69e97ea8b11",
+      "status": "ready",
+      "title": "Legacy Client Approval Packet",
+      "type": "approval_packet",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "a4946d68-c339-43cb-a655-c1c6178c675c",
+      "asset_version_count": 1,
+      "department": "client_approval_ops",
+      "file_path": "/app/.hermes/legacy_deliverables/legacy_campaign_launch_package.md",
+      "id": "abab9133-49fd-4bf3-aca5-25b2554bdd1d",
+      "status": "ready",
+      "title": "Legacy Campaign Launch Package",
+      "type": "campaign_launch_package",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "e05722c7-e87c-469d-972d-2e77b98ea020",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/media/legacy_ig_01_launch.png",
+      "id": "306c891e-50fa-41f9-9314-76a30ef33bff",
+      "status": "ready",
+      "title": "Legacy Instagram Asset \u2014 Brand launch / editorial",
+      "type": "instagram_post_media:legacy-post-01",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "b49db8cc-eed3-475d-81fc-7a412b99dfa0",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/media/legacy_ig_02_monroe.png",
+      "id": "2fc6376b-27ed-4778-9f83-71d50b092843",
+      "status": "ready",
+      "title": "Legacy Instagram Asset \u2014 Product spotlight",
+      "type": "instagram_post_media:legacy-post-02",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "aa86bc55-682a-4f5f-b66f-dad55aade19f",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/media/legacy_ig_03_low_stock.png",
+      "id": "419b8a3d-2df7-48af-b0fe-31741d8fb695",
+      "status": "ready",
+      "title": "Legacy Instagram Asset \u2014 Low stock urgency",
+      "type": "instagram_post_media:legacy-post-03",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "05e1f5f2-3bff-416e-84c5-119ca7899ace",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/media/legacy_ig_04_editorial.png",
+      "id": "10de8cf6-3b39-4554-9ae0-98a28d002919",
+      "status": "ready",
+      "title": "Legacy Instagram Asset \u2014 Editorial archive",
+      "type": "instagram_post_media:legacy-post-04",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "9b82e022-597a-4cee-8c75-d9b9e540b367",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/media/legacy_ig_05_guide.png",
+      "id": "3c3755f8-2335-4c02-9405-2db59b0e46a6",
+      "status": "ready",
+      "title": "Legacy Instagram Asset \u2014 Buyer guide",
+      "type": "instagram_post_media:legacy-post-05",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "7d3fc98e-cec6-4d93-9ac6-c20c962c3886",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/media/legacy_ig_06_promo.png",
+      "id": "c47340ce-a93e-4aab-a6d9-b02090751cf7",
+      "status": "ready",
+      "title": "Legacy Instagram Asset \u2014 Promo / entry price",
+      "type": "instagram_post_media:legacy-post-06",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "cd397d04-84dd-4c25-b75d-f2f2415d6bce",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "file_path": "/app/.hermes/legacy_deliverables/media/legacy_reel_01_optical_noir.mp4",
+      "id": "8db58993-163e-4429-a157-5b58b766ddb4",
+      "status": "ready",
+      "title": "Legacy Optical Noir Reel \u2014 First Cut",
+      "type": "reel_video:first_cut",
+      "visibility": "customer"
+    }
+  ],
+  "deliverables_root": "C:/Users/mathi/projects/forgegraph/backend/.hermes/legacy_deliverables",
+  "operating_model_version": {
+    "id": "0181d865-5db0-4d72-97a0-5296cabbf2b8",
+    "version": 4
+  },
+  "organization": {
+    "id": "3cd7cc65-9bdf-4bc5-b014-d7157c3947db",
+    "name": "Intuition Labs"
+  },
+  "pack": {
+    "installation_id": "f9cec522-1c84-4231-a1b9-a51349cd294b",
+    "installed": true,
+    "pack_id": "digital_marketing_pro.v1"
+  },
+  "ready_customer_deliverable_count": 14,
+  "scheduled_task_count": 6,
+  "scheduled_tasks": [
+    {
+      "asset": "legacy_ig_01_launch.png",
+      "department": "brand_content",
+      "due_at": "2026-06-05T16:00:00+00:00",
+      "id": "03a32e04-c33a-4499-b787-bd6648cf6afb",
+      "priority": "high",
+      "reason": "Prepare/publish scheduled Legacy social post: Brand launch / editorial \u2014 La noche empieza antes de salir.",
+      "status": "ready_for_review"
+    },
+    {
+      "asset": "legacy_ig_02_monroe.png",
+      "department": "brand_content",
+      "due_at": "2026-06-06T16:00:00+00:00",
+      "id": "e354535f-8d19-421c-83bd-d2d53e3fa411",
+      "priority": "high",
+      "reason": "Prepare/publish scheduled Legacy social post: Product spotlight \u2014 MONROE / BLACK",
+      "status": "ready_for_review"
+    },
+    {
+      "asset": "legacy_ig_03_low_stock.png",
+      "department": "brand_content",
+      "due_at": "2026-06-07T16:00:00+00:00",
+      "id": "b842aba5-bd53-4867-9d72-f30f20fb57e5",
+      "priority": "normal",
+      "reason": "Prepare/publish scheduled Legacy social post: Low stock urgency \u2014 Pocas piezas. Mucha presencia.",
+      "status": "ready_for_review"
+    },
+    {
+      "asset": "legacy_ig_04_editorial.png",
+      "department": "brand_content",
+      "due_at": "2026-06-08T16:00:00+00:00",
+      "id": "df1a72ea-ec6b-4f2d-b233-630710eb7c4a",
+      "priority": "normal",
+      "reason": "Prepare/publish scheduled Legacy social post: Editorial archive \u2014 CDMX privada.",
+      "status": "ready_for_review"
+    },
+    {
+      "asset": "legacy_ig_05_guide.png",
+      "department": "brand_content",
+      "due_at": "2026-06-09T16:00:00+00:00",
+      "id": "adabf865-31d9-4d49-b240-6099728ba0b6",
+      "priority": "normal",
+      "reason": "Prepare/publish scheduled Legacy social post: Buyer guide \u2014 Elige por actitud, no por tendencia.",
+      "status": "ready_for_review"
+    },
+    {
+      "asset": "legacy_ig_06_promo.png",
+      "department": "brand_content",
+      "due_at": "2026-06-10T16:00:00+00:00",
+      "id": "c8461a5a-f48c-47f2-9175-e26f017efda5",
+      "priority": "normal",
+      "reason": "Prepare/publish scheduled Legacy social post: Promo / entry price \u2014 Desde $590 MXN.",
+      "status": "ready_for_review"
+    }
+  ],
+  "service_engagement": {
+    "customer_status": "review_ready",
+    "id": "c06824ef-f689-4c55-b59b-e769d244867f",
+    "status": "in_progress"
+  },
+  "source_repo": "C:/Users/mathi/projects/legacy/front",
+  "whiteboard": {
+    "id": "0e5ad6b4-5eea-4141-af9c-2a8209857ce0",
+    "project_name": "Legacy Weekend Social Launch Sprint",
+    "status": "in_approval",
+    "work_status": "review"
+  }
+}

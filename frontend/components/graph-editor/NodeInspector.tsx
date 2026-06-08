@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useEffectEvent, useReducer, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useReducer, useState } from "react";
 import type { Edge, Node } from "@xyflow/react";
 import { ChevronDown, ChevronRight, CircleDot } from "lucide-react";
 import { NODE_TYPES, type RetryPolicy } from "../../lib/graph-types";
@@ -122,15 +122,14 @@ function useNodeInspectorMetadata({
     return () => clearTimeout(timer);
   }, [shouldDeferGraphText]);
 
-  const notifyEditingMetadataChange = useEffectEvent((editing: boolean) => {
+  const notifyEditingMetadataChange = useCallback((editing: boolean) => {
     onEditingMetadataChange?.(editing);
-  });
+  }, [onEditingMetadataChange]);
 
   useEffect(() => {
     if ((!selectedNode && !selectedEdge) || !editingMetadata) return;
     dispatchInspectorState({ patch: { editingMetadata: false } });
-    notifyEditingMetadataChange(false);
-  }, [editingMetadata, notifyEditingMetadataChange, selectedEdge, selectedNode]);
+  }, [editingMetadata, selectedEdge, selectedNode]);
 
   const saveMetadata = async () => {
     dispatchInspectorState({ patch: { savingMetadata: true } });

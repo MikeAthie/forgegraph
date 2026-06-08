@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from application.services.audit_log import record_audit_log
+from application.services.company_run_task_routing import bootstrap_task_routing_for_program
 from application.services.operating_model_packs import load_pack_definition
 from application.services.run_state_machine import create_backend_owned_run
 from application.services.task_lifecycle import initialize_lifecycle_tasks_for_run
@@ -104,6 +105,15 @@ def create_program(
                 state_json={"template": stage},
                 started_at=timezone.now() if stage_id == first_stage_id else None,
             )
+        bootstrap_task_routing_for_program(
+            program,
+            created_by=user,
+            run_context={
+                "source": "company_programs.create_program",
+                "template_id": template_id,
+                "pack_id": program.pack_id,
+            },
+        )
     record_audit_log(
         actor=user,
         tenant_id=str(company.organization_id),

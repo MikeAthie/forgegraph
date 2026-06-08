@@ -1,39 +1,46 @@
 "use client";
 
+import { useCallback } from "react";
+
 import { Separator } from "@/components/ui/separator";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import type { NodeFormProps } from "../NodeConfigDialog";
-import {
-  ObservationSourceField,
-  updateObservationNumberField,
-  useObservationErrors,
-  validateObservationSource,
-} from "./observation-form-utils";
+import { compactObservationErrors, updateObservationNumberField, validateObservationSource } from "./observation-form-helpers";
+import { ObservationSourceField } from "./observation-form-utils";
 
 export function ObservationContextNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const contextConfig = config as Record<string, unknown>;
 
-  const computedErrors = {
-    query: validateObservationSource(
-      contextConfig,
-      "query",
-      {
-        value: "query",
-        path: "query_path",
-        template: "query_template",
-      },
-      { required: true },
-    ),
-    agent_id: validateObservationSource(
-      contextConfig,
-      "agent filter",
-      { value: "agent_id", path: "agent_id_path" },
-      { required: false },
-    ),
-  };
-
-  useObservationErrors(errors, setErrors, computedErrors);
+  const validateConfig = useCallback(
+    (nextConfig: Record<string, unknown>) =>
+      compactObservationErrors({
+        query: validateObservationSource(
+          nextConfig,
+          "query",
+          {
+            value: "query",
+            path: "query_path",
+            template: "query_template",
+          },
+          { required: true },
+        ),
+        agent_id: validateObservationSource(
+          nextConfig,
+          "agent filter",
+          { value: "agent_id", path: "agent_id_path" },
+          { required: false },
+        ),
+      }),
+    [],
+  );
+  const updateConfig = useCallback(
+    (nextConfig: Record<string, unknown>) => {
+      onChange(nextConfig);
+      setErrors(validateConfig(nextConfig));
+    },
+    [onChange, setErrors, validateConfig],
+  );
 
   return (
     <div className="space-y-6">
@@ -58,7 +65,7 @@ export function ObservationContextNodeForm({ config, onChange, errors, setErrors
           template: "query_template",
         }}
         errors={errors}
-        onChange={onChange}
+        onChange={updateConfig}
       />
 
       <Separator />
@@ -72,7 +79,7 @@ export function ObservationContextNodeForm({ config, onChange, errors, setErrors
           config={contextConfig}
           keys={{ value: "agent_id", path: "agent_id_path" }}
           errors={errors}
-          onChange={onChange}
+          onChange={updateConfig}
         />
 
         <FormField
@@ -85,7 +92,9 @@ export function ObservationContextNodeForm({ config, onChange, errors, setErrors
             type="number"
             min={1}
             value={String(contextConfig.limit ?? "")}
-            onChange={(event) => onChange(updateObservationNumberField(contextConfig, "limit", event.target.value))}
+            onChange={(event) =>
+              updateConfig(updateObservationNumberField(contextConfig, "limit", event.target.value))
+            }
             placeholder="5"
             className="text-sm"
           />

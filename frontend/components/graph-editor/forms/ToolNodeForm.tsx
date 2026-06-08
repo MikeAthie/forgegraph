@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -68,6 +68,19 @@ const PROVIDERS = [
   { value: "yuanbao", label: "Yuanbao" },
 ];
 
+function validateToolConfig(toolConfig: ToolConfig): Record<string, string> {
+  const nextErrors: Record<string, string> = {};
+
+  if (toolConfig.input_schema) {
+    const schemaError = validateJson(toolConfig.input_schema, "Input Schema");
+    if (schemaError) {
+      nextErrors.input_schema = schemaError.message;
+    }
+  }
+
+  return nextErrors;
+}
+
 export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const toolConfig = config as ToolConfig;
   const { credentials, loading: credentialsLoading, error: credentialsError } = useCredentialOptions();
@@ -87,23 +100,29 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
 
   const handleChange = useCallback(
     <K extends keyof ToolConfig>(field: K, value: ToolConfig[K]) => {
-      onChange({ ...config, [field]: value });
+      const nextConfig = { ...toolConfig, [field]: value };
+      onChange(nextConfig);
+      setErrors(validateToolConfig(nextConfig));
     },
-    [config, onChange],
+    [onChange, setErrors, toolConfig],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
-      onChange({ ...config, ...agentConfig });
+      const nextConfig = { ...toolConfig, ...agentConfig };
+      onChange(nextConfig);
+      setErrors(validateToolConfig(nextConfig));
     },
-    [config, onChange],
+    [onChange, setErrors, toolConfig],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
-      onChange({ ...config, ...advancedConfig });
+      const nextConfig = { ...toolConfig, ...advancedConfig };
+      onChange(nextConfig);
+      setErrors(validateToolConfig(nextConfig));
     },
-    [config, onChange],
+    [onChange, setErrors, toolConfig],
   );
 
   const handleProviderChange = useCallback(
@@ -113,25 +132,10 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
         delete nextConfig.credential_id;
       }
       onChange(nextConfig);
+      setErrors(validateToolConfig(nextConfig));
     },
-    [onChange, provider, toolConfig],
+    [onChange, provider, setErrors, toolConfig],
   );
-
-  const reportErrors = useCallback((nextErrors: Record<string, string>) => setErrors(nextErrors), [setErrors]);
-
-  // Validate input schema on change
-  useEffect(() => {
-    const newErrors: Record<string, string> = {};
-
-    if (toolConfig.input_schema) {
-      const schemaError = validateJson(toolConfig.input_schema, "Input Schema");
-      if (schemaError) {
-        newErrors.input_schema = schemaError.message;
-      }
-    }
-
-    reportErrors(newErrors);
-  }, [reportErrors, toolConfig.input_schema]);
 
   const isCustomTool = !toolConfig.tool_name || toolConfig.tool_name === "custom";
 

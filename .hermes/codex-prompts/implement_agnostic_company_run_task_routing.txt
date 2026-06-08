@@ -1,0 +1,71 @@
+Implement this now. The previous plan was too Legacy/marketing-specific in wording. Clarify and implement the fix as an automatic, business-agnostic company-run task routing layer.
+
+Repository: C:/Users/mathi/projects/forgegraph
+
+Goal:
+When any ForgeGraph company run / department pipeline starts from a single prompt, the backend should automatically create visible task cards/routing records for the planned work, independent of business type. Today we are dogfooding a marketing agency for Legacy; tomorrow the same mechanism should work for a consulting firm, accounting firm, support operation, etc.
+
+Critical correction:
+- Do NOT hard-code "Legacy", "marketing agency", or the 7 Atlas department slugs inside the routing layer.
+- The routing layer must derive tasks from the active `CompanyProgram` / `ProgramStageState` pipeline stage definitions and stage metadata.
+- Legacy/Codex scripts may pass a run context, but the generic service should be reusable for any ordered stage plan.
+- Card/task creation should be automatic at pipeline creation/bootstrap time, not manually authored per vertical.
+
+Use existing primitives only:
+- TaskRoutingRecord for visible durable task cards/routing trail.
+- ProgramStageState.state_json for task/card cross-links and per-stage run state.
+- ServiceDeliverable.metadata_json and AssetVersion.provenance_json for produced output provenance.
+- WorkWhiteboard metadata/state as a denormalized backend-owned read snapshot, not source of truth.
+- No new DB models/migrations unless absolutely unavoidable.
+
+Likely implementation shape:
+1. Add a generic service, probably `backend/application/services/company_run_task_routing.py`, with helpers such as:
+   - `bootstrap_task_routing_for_program(program, *, whiteboard=None, created_by=None, run_context=None)`
+   - `mark_task_running(stage_state, *, actor=None)`
+   - `attach_deliverable_to_stage_task(stage_state, deliverable, *, asset_versions=None, runtime_provider=None)`
+   - `mark_task_completed(stage_state, *, actor=None)`
+   - `mark_task_failed(stage_state, error, *, actor=None)`
+   - `refresh_whiteboard_task_snapshot(whiteboard, program)`
+2. The bootstrap helper should create/find one TaskRoutingRecord per ProgramStageState, using stable idempotency derived from program id + stage id.
+3. Dependencies should be derived generically from stage order and/or existing stage dependency metadata if present. If no dependency metadata exists, use sequence order as the default chain.
+4. Statuses should be generic: blocked, ready, running, completed, failed.
+5. Task titles should come from stage state metadata when available; fallback to a humanized stage_id.
+6. Assigned department should use existing department_slug/department_id metadata when available; fallback to stage_id.
+7. Runtime provider should be optional metadata, e.g. codex_session_runtime for local dogfooding.
+8. Hook this generic bootstrap into department pipeline creation so cards exist automatically when a pipeline/program is created.
+9. Hook the Legacy/Codex company run into the generic helpers, but keep Legacy-specific prompt/deliverable logic outside the generic routing service.
+10. Extend codex_session_runtime so deliverables can include task routing provenance when a stage has a linked routing task.
+
+Files to inspect and likely edit:
+- backend/application/services/company_run_task_routing.py (new, if useful)
+- backend/application/services/department_pipeline.py
+- backend/application/services/codex_session_runtime.py
+- backend/application/services/legacy_weekend_pipeline.py
+- backend/scripts/run_legacy_codex_company_run.py
+- backend/infrastructure/orm/models/routing.py
+- backend/infrastructure/orm/models/operating_models.py
+- WorkWhiteboard model file
+- backend/tests/unit/services/test_department_pipeline.py
+- backend/tests/unit/services/test_codex_session_runtime.py
+- Add focused tests for the new generic routing service.
+
+Testing expectations:
+- Add/adjust unit tests first if practical.
+- Test generic behavior with synthetic/non-marketing stages like `discovery`, `analysis`, `recommendation` or similar, proving no Legacy/marketing hard-code.
+- Test Legacy/Codex compatibility: 7 stage cards are created automatically and deliverables link back to their cards.
+- Run targeted pytest, ruff, and Django check using:
+  `UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run pytest ... -q`
+  `UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run ruff check <changed files>`
+  `UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python manage.py check`
+
+Important platform notes:
+- Windows/Git Bash host.
+- If Codex sandbox fails with `windows sandbox: spawn setup refresh`, retry with `--dangerously-bypass-approvals-and-sandbox`; user explicitly asked to start implementation via Codex.
+- Do not print secrets or credential file contents.
+
+Definition of done:
+- Automatic, agnostic task card creation occurs from pipeline/program stage state, not Legacy-specific code.
+- Running the Legacy/Codex company flow creates visible TaskRoutingRecord records automatically.
+- Each produced deliverable/asset version contains task routing provenance.
+- Whiteboard metadata/state has a backend-owned task trail snapshot suitable for future UI cards.
+- Tests/lint/check pass.

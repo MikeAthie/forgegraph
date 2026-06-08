@@ -4,7 +4,8 @@ import { useRouter } from "next/router";
 import { Plus, RefreshCw } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
-import { InspectorPanel, Panel, SectionHeader, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { InspectorPanel, Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getApiErrorMessage, graphsApi, type GraphListItem, type GraphVersionSummary } from "../lib/api";
 import { showSuccess, showError } from "../lib/toast";
@@ -352,6 +353,8 @@ function GraphsInspector() {
     />
   );
 }
+
+const GRAPHS_INSPECTOR = <GraphsInspector />;
 
 function GraphsHeader({
   loading,
@@ -780,7 +783,7 @@ export default function GraphsPage() {
 
   return (
     <ProtectedRoute>
-      <DashboardLayout inspector={<GraphsInspector />}>
+      <DashboardLayout inspector={GRAPHS_INSPECTOR}>
         <GraphsContent controller={controller} />
         <GraphDialogs controller={controller} />
       </DashboardLayout>

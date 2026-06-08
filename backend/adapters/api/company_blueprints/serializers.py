@@ -9,7 +9,7 @@ from rest_framework import serializers
 from application.services.company_blueprints import DEFAULT_BLUEPRINT_ID
 
 AUTONOMY_MODES = ("manual", "assisted", "autonomous")
-AI_ACCESS_MODES = ("managed", "byok")
+AI_ACCESS_MODES = ("managed", "byok", "codex_session")
 
 
 class CompanyBlueprintCompileSerializer(serializers.Serializer[Any]):

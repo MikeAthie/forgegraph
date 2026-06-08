@@ -3,40 +3,25 @@
 import {
   useCallback,
   useEffect,
-  useEffectEvent,
   useReducer,
   useRef,
   useState,
-  type Ref,
   type SetStateAction,
 } from "react";
-import Link from "next/link";
 import { useRouter } from "next/router";
 import {
-  ReactFlow,
-  Controls,
-  Background,
-  MiniMap,
   useNodesState,
   useEdgesState,
   addEdge,
-  SelectionMode,
-  MarkerType,
   type OnNodeDrag,
   type Connection,
   type Node,
   type Edge,
-  type NodeTypes,
-  type EdgeTypes,
-  BackgroundVariant,
-  Panel,
 } from "@xyflow/react";
-import { Brain, Play, Plus, Save as SaveIcon, LayoutGrid, Redo2, Undo2, Wand2 } from "lucide-react";
 
-import { WizardProvider, useWizard } from "@/contexts/WizardContext";
-import { ValidationProvider, useValidation } from "@/contexts/ValidationContext";
-import { AgentWizard, type AgentWizardCompletePayload } from "./wizard";
-import { ValidationOverlay, ValidationStatusBar } from "./validation";
+import { WizardProvider } from "@/contexts/WizardContext";
+import { ValidationProvider } from "@/contexts/ValidationContext";
+import type { AgentWizardCompletePayload } from "./wizard/AgentWizard";
 
 import type { GraphJson, NodeType, NodeConfig } from "../../lib/graph-types";
 import { NODE_TYPES, PHASE2_NODE_TYPES, createEmptyGraphJson, isValidNodeType } from "../../lib/graph-types";
@@ -47,12 +32,10 @@ import {
   graphsApi,
   marketplaceApi,
   runsApi,
-  type AgentTrace,
   type MarketplacePackage,
   type NodeRunItem,
   type RunDetail,
 } from "../../lib/api";
-import { formatJsonForDisplay } from "../../lib/json";
 import { canAddMarketplacePackageToEditor, getMarketplacePackageReason } from "../../lib/marketplace-runtime";
 import { showError, showInfo, showSuccess } from "../../lib/toast";
 import { ERROR_FALLBACKS } from "../../lib/error-messages";
@@ -68,59 +51,11 @@ import {
   OBSERVATION_CONTEXT_PLACEHOLDER,
   type AgentWizardBlueprint,
 } from "../../lib/agent-wizard-presets";
-import { NodePalette } from "./NodePalette";
-import { NodeInspector } from "./NodeInspector";
-import { GraphNode as GraphNodeComponent } from "./nodes/GraphNode";
-import { NoteNode as NoteNodeComponent } from "./nodes/NoteNode";
-import { PromptNodeWizardDialog } from "./PromptNodeWizardDialog";
-import { NodeConfigDialog } from "./NodeConfigDialog";
-import { MemoryConfigDialog } from "./dialogs/MemoryConfigDialog";
-import { getNodeFormComponent, getNodeTypeInfo } from "./forms/node-form-registry";
-import { TypedEdge } from "./TypedEdge";
-import { QuickToolBar } from "./QuickToolBar";
+import { getNodeTypeInfo } from "./forms/node-form-registry";
+import { GraphEditorShell } from "./GraphEditorShell";
 import { useEdgeTypes } from "@/hooks/useEdgeTypes";
-import { AgentTracePanel } from "../runs/AgentTracePanel";
 
 const NOTE_NODE_TYPE = "note";
-
-const getNodeRunAgentTrace = (nodeRun: NodeRunItem | null): AgentTrace | null => {
-  if (!nodeRun || String(nodeRun.node_type) !== "agent") {
-    return null;
-  }
-  if (nodeRun.agent_trace && typeof nodeRun.agent_trace === "object") {
-    return nodeRun.agent_trace;
-  }
-  const nestedOutput = nodeRun.output_json?.output;
-  if (nestedOutput && typeof nestedOutput === "object") {
-    return nestedOutput as AgentTrace;
-  }
-  return null;
-};
-
-// Custom edge types for React Flow
-const edgeTypes: EdgeTypes = {
-  typed: TypedEdge,
-};
-
-// Custom node types for React Flow
-const nodeTypes: NodeTypes = {
-  [NODE_TYPES.AGENT]: GraphNodeComponent,
-  [NODE_TYPES.PROMPT]: GraphNodeComponent,
-  [NODE_TYPES.HTTP]: GraphNodeComponent,
-  [NODE_TYPES.TRANSFORM]: GraphNodeComponent,
-  [NODE_TYPES.OUTPUT]: GraphNodeComponent,
-  [NODE_TYPES.BRANCH]: GraphNodeComponent,
-  [NODE_TYPES.MERGE]: GraphNodeComponent,
-  [NODE_TYPES.HUMAN_GATE]: GraphNodeComponent,
-  [NODE_TYPES.MEMORY]: GraphNodeComponent,
-  [NODE_TYPES.OBSERVATION_SAVE]: GraphNodeComponent,
-  [NODE_TYPES.OBSERVATION_SEARCH]: GraphNodeComponent,
-  [NODE_TYPES.OBSERVATION_CONTEXT]: GraphNodeComponent,
-  [NODE_TYPES.OBSERVATION_TIMELINE]: GraphNodeComponent,
-  [NODE_TYPES.TOOL]: GraphNodeComponent,
-  [NODE_TYPES.SUBGRAPH]: GraphNodeComponent,
-  [NOTE_NODE_TYPE]: NoteNodeComponent,
-};
 
 interface GraphEditorProps {
   graphId: string;
@@ -270,55 +205,6 @@ const isTerminalRunStatus = (status: string) => {
   return status === "succeeded" || status === "failed" || status === "canceled";
 };
 
-const formatDuration = (durationMs: number | null | undefined) => {
-  if (durationMs === null || durationMs === undefined) return "-";
-  if (durationMs < 1000) return `${durationMs}ms`;
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${totalSeconds}s`;
-};
-
-// Wizard button component - uses wizard context
-interface WizardButtonProps {
-  buttonRef?: Ref<HTMLButtonElement>;
-  onBeforeStart?: () => void;
-}
-
-function WizardButton({ buttonRef, onBeforeStart }: WizardButtonProps) {
-  const { startWizard, state } = useWizard();
-
-  return (
-    <button
-      ref={buttonRef}
-      type="button"
-      aria-label="Operating Model Wizard"
-      onClick={() => {
-        onBeforeStart?.();
-        startWizard(false);
-      }}
-      disabled={state.isActive}
-      title="Open Operating Model Wizard (Ctrl+W / Ctrl+Shift+W)"
-      className="bg-violet-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
-    >
-      <Wand2 aria-hidden="true" className="size-4" />
-      <span className="hidden sm:inline">Wizard</span>
-    </button>
-  );
-}
-
-// Validation trigger component - triggers validation on node/edge changes
-function ValidationTrigger({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
-  const { validate } = useValidation();
-
-  useEffect(() => {
-    validate(nodes, edges);
-  }, [nodes, edges, validate]);
-
-  return null;
-}
-
 function useGraphEditorController({
   graphId,
   graphName,
@@ -407,14 +293,26 @@ function useGraphEditorController({
     },
     [],
   );
-  const setSelectedNodeId = useCallback(
-    (value: SetStateAction<string | null>) => setUiField("selectedNodeId", value),
-    [setUiField],
-  );
-  const setSelectedEdgeId = useCallback(
-    (value: SetStateAction<string | null>) => setUiField("selectedEdgeId", value),
-    [setUiField],
-  );
+  const setSelectedNodeId = useCallback((value: SetStateAction<string | null>) => {
+    dispatchUiState({
+      patch: (state) => {
+        const selectedNodeId = resolveStateAction(value, state.selectedNodeId);
+        return selectedNodeId === state.selectedNodeId
+          ? { selectedNodeId }
+          : { selectedNodeId, isEditingMetadata: false };
+      },
+    });
+  }, []);
+  const setSelectedEdgeId = useCallback((value: SetStateAction<string | null>) => {
+    dispatchUiState({
+      patch: (state) => {
+        const selectedEdgeId = resolveStateAction(value, state.selectedEdgeId);
+        return selectedEdgeId === state.selectedEdgeId
+          ? { selectedEdgeId }
+          : { selectedEdgeId, isEditingMetadata: false };
+      },
+    });
+  }, []);
   const setIsDirty = useCallback((value: SetStateAction<boolean>) => setUiField("isDirty", value), [setUiField]);
   const setIsEditingMetadata = useCallback(
     (value: SetStateAction<boolean>) => setUiField("isEditingMetadata", value),
@@ -488,9 +386,9 @@ function useGraphEditorController({
   const paletteSearchRef = useRef<HTMLInputElement>(null);
   const wizardButtonRef = useRef<HTMLButtonElement>(null);
   const memoryButtonRef = useRef<HTMLButtonElement>(null);
-  const palettePanelRef = useRef<HTMLDivElement>(null);
-  const canvasPanelRef = useRef<HTMLDivElement>(null);
-  const inspectorPanelRef = useRef<HTMLDivElement>(null);
+  const palettePanelRef = useRef<HTMLElement>(null);
+  const canvasPanelRef = useRef<HTMLElement>(null);
+  const inspectorPanelRef = useRef<HTMLElement>(null);
   const focusRestoreRef = useRef<HTMLElement | null>(null);
 
   const clipboardRef = useRef<ClipboardSnapshot | null>(null);
@@ -520,21 +418,6 @@ function useGraphEditorController({
     return { nodes: deepClone(nodes), edges: deepClone(edges) };
   }, [nodes, edges]);
 
-  const resetHistory = useCallback(() => {
-    undoStackRef.current = [];
-    redoStackRef.current = [];
-    setCanUndo(false);
-    setCanRedo(false);
-    editHistoryArmedRef.current = false;
-    if (editHistoryTimerRef.current) {
-      clearTimeout(editHistoryTimerRef.current);
-      editHistoryTimerRef.current = null;
-    }
-    clipboardRef.current = null;
-    pasteOffsetRef.current = 0;
-    dragHistoryPushedRef.current = false;
-  }, []);
-
   const pushHistory = useCallback(() => {
     undoStackRef.current.push(takeSnapshot());
     if (undoStackRef.current.length > 50) {
@@ -545,19 +428,28 @@ function useGraphEditorController({
     setCanRedo(false);
   }, [takeSnapshot]);
 
+  const clearEditHistoryTimer = useCallback(() => {
+    if (editHistoryTimerRef.current) {
+      clearTimeout(editHistoryTimerRef.current);
+      editHistoryTimerRef.current = null;
+    }
+  }, []);
+
   const pushHistoryForEdit = useCallback(() => {
     if (!editHistoryArmedRef.current) {
       pushHistory();
       editHistoryArmedRef.current = true;
     }
 
-    if (editHistoryTimerRef.current) {
-      clearTimeout(editHistoryTimerRef.current);
-    }
+    clearEditHistoryTimer();
     editHistoryTimerRef.current = setTimeout(() => {
       editHistoryArmedRef.current = false;
     }, 800);
-  }, [pushHistory]);
+  }, [clearEditHistoryTimer, pushHistory]);
+
+  useEffect(() => {
+    return clearEditHistoryTimer;
+  }, [clearEditHistoryTimer]);
 
   const handleUndo = useCallback(() => {
     const previous = undoStackRef.current.pop();
@@ -768,21 +660,6 @@ function useGraphEditorController({
     setSelectedEdgeId,
     setSelectedNodeId,
   ]);
-
-  // Sync editor state when the loaded version changes (save or version switch).
-  useEffect(() => {
-    resetHistory();
-
-    if (!initialGraphJson) {
-      dispatchUiState({ patch: { isDirty: false } });
-      return;
-    }
-
-    const next = graphJsonToReactFlow(initialGraphJson);
-    setNodes(next.nodes);
-    setEdges(next.edges);
-    dispatchUiState({ patch: { selectedNodeId: null, selectedEdgeId: null, isDirty: false } });
-  }, [initialGraphJson, resetHistory, setNodes, setEdges]);
 
   useEffect(() => {
     let active = true;
@@ -1648,14 +1525,6 @@ function useGraphEditorController({
     setIsDirty(true);
   }, [nodes, pushHistory, edges, setNodes, setEdges, setIsDirty]);
 
-  const handleSaveShortcut = useEffectEvent(handleSave);
-  const handleUndoShortcut = useEffectEvent(handleUndo);
-  const handleRedoShortcut = useEffectEvent(handleRedo);
-  const handleCopyShortcut = useEffectEvent(handleCopy);
-  const handlePasteShortcut = useEffectEvent(handlePaste);
-  const handleDuplicateShortcut = useEffectEvent(handleDuplicateSelection);
-  const handleDeleteShortcut = useEffectEvent(handleDeleteSelection);
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1674,7 +1543,7 @@ function useGraphEditorController({
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           if (!saving) {
-            void handleSaveShortcut();
+            void handleSave();
           }
         }
       }
@@ -1692,9 +1561,9 @@ function useGraphEditorController({
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
           if (e.shiftKey) {
-            handleRedoShortcut();
+            handleRedo();
           } else {
-            handleUndoShortcut();
+            handleUndo();
           }
         }
       }
@@ -1703,7 +1572,7 @@ function useGraphEditorController({
       if ((e.metaKey || e.ctrlKey) && key === "y") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
-          handleRedoShortcut();
+          handleRedo();
         }
       }
 
@@ -1721,7 +1590,7 @@ function useGraphEditorController({
       if ((e.metaKey || e.ctrlKey) && key === "c") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
-          handleCopyShortcut();
+          handleCopy();
         }
       }
 
@@ -1729,7 +1598,7 @@ function useGraphEditorController({
       if ((e.metaKey || e.ctrlKey) && key === "v") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
-          handlePasteShortcut();
+          handlePaste();
         }
       }
 
@@ -1737,7 +1606,7 @@ function useGraphEditorController({
       if ((e.metaKey || e.ctrlKey) && key === "d") {
         if (!isEditableTarget(e.target)) {
           e.preventDefault();
-          handleDuplicateShortcut();
+          handleDuplicateSelection();
         }
       }
 
@@ -1745,7 +1614,7 @@ function useGraphEditorController({
       if (e.key === "Delete" || e.key === "Backspace") {
         // Only delete if not focused on an input
         if (!isEditableTarget(e.target)) {
-          handleDeleteShortcut();
+          handleDeleteSelection();
         }
       }
     };
@@ -1753,13 +1622,13 @@ function useGraphEditorController({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    handleCopyShortcut,
-    handleDeleteShortcut,
-    handleDuplicateShortcut,
-    handlePasteShortcut,
-    handleRedoShortcut,
-    handleSaveShortcut,
-    handleUndoShortcut,
+    handleCopy,
+    handleDeleteSelection,
+    handleDuplicateSelection,
+    handlePaste,
+    handleRedo,
+    handleSave,
+    handleUndo,
     saving,
     setNodes,
   ]);
@@ -1981,9 +1850,22 @@ function useGraphEditorController({
   };
 }
 
-type GraphEditorController = ReturnType<typeof useGraphEditorController>;
+export type GraphEditorController = ReturnType<typeof useGraphEditorController>;
 
 export function GraphEditor(props: GraphEditorProps) {
+  return <GraphEditorControllerScope key={getGraphEditorResetKey(props)} {...props} />;
+}
+
+function getGraphEditorResetKey({ graphId, initialGraphJson, currentVersion, currentVersionId }: GraphEditorProps) {
+  return [
+    graphId,
+    initialGraphJson?.version_id ?? currentVersionId ?? "draft",
+    currentVersion ?? "new",
+    initialGraphJson ? "loaded" : "empty",
+  ].join(":");
+}
+
+function GraphEditorControllerScope(props: GraphEditorProps) {
   const controller = useGraphEditorController(props);
 
   return (
@@ -1992,432 +1874,5 @@ export function GraphEditor(props: GraphEditorProps) {
         <GraphEditorShell controller={controller} />
       </WizardProvider>
     </ValidationProvider>
-  );
-}
-
-function GraphEditorShell({ controller }: { controller: GraphEditorController }) {
-  return (
-    <>
-      <ValidationTrigger nodes={controller.nodes} edges={controller.edges} />
-      <div className="flex h-full flex-col">
-        <QuickToolBar
-          marketplaceNodes={controller.marketplaceNodes}
-          onSelectPackage={(pkg) => controller.handleAddMarketplaceNode(pkg, controller.canQuickAddConnect)}
-          hasSelectedNode={controller.canQuickAddConnect}
-        />
-        <div className="flex flex-1 overflow-hidden">
-          <GraphEditorDialogs controller={controller} />
-          <GraphEditorPalettePanel controller={controller} />
-          <GraphCanvasPanel controller={controller} />
-          <GraphInspectorPanel controller={controller} />
-        </div>
-        <ValidationStatusBar
-          onFocusNode={controller.handleFocusNode}
-          onFocusEdge={controller.handleFocusEdge}
-          onQuickFix={controller.handleQuickFix}
-        />
-      </div>
-    </>
-  );
-}
-
-function GraphEditorDialogs({ controller }: { controller: GraphEditorController }) {
-  return (
-    <>
-      <AgentWizard
-        onComplete={(payload) => {
-          void controller.handleWizardComplete(payload);
-          controller.restoreFocusableTarget();
-        }}
-        onExit={controller.restoreFocusableTarget}
-      />
-      <PromptNodeWizardDialog
-        open={controller.promptWizardOpen}
-        onOpenChange={(nextOpen) => {
-          controller.setPromptWizardOpen(nextOpen);
-          if (!nextOpen) {
-            controller.setPromptWizardSourceNodeId(null);
-            controller.restoreFocusableTarget();
-          }
-        }}
-        onComplete={(config) => {
-          controller.addExecutableNode(NODE_TYPES.PROMPT, {
-            sourceNodeId: controller.promptWizardSourceNodeId,
-            config,
-          });
-          controller.setPromptWizardSourceNodeId(null);
-        }}
-      />
-      <NodeConfigDialog
-        isOpen={controller.configDialogOpen}
-        onClose={() => {
-          controller.setConfigDialogOpen(false);
-          controller.setConfigDialogNodeType(null);
-          controller.setConfigDialogSourceNodeId(null);
-          controller.setConfigDialogInitialConfig({});
-          controller.setConfigDialogInitialLabel(null);
-          controller.restoreFocusableTarget();
-        }}
-        nodeType={controller.configDialogNodeType}
-        initialConfig={controller.configDialogInitialConfig}
-        initialLabel={controller.configDialogInitialLabel ?? undefined}
-        onSave={controller.handleConfigDialogComplete}
-        FormComponent={
-          controller.configDialogNodeType
-            ? (getNodeFormComponent(controller.configDialogNodeType) ?? undefined)
-            : undefined
-        }
-      />
-      <MemoryConfigDialog
-        graphId={controller.graphId ?? null}
-        open={controller.memoryConfigOpen}
-        onOpenChange={controller.handleMemoryConfigOpenChange}
-      />
-    </>
-  );
-}
-
-function GraphEditorPalettePanel({ controller }: { controller: GraphEditorController }) {
-  return (
-    <div
-      ref={controller.palettePanelRef}
-      role="complementary"
-      aria-label="Step palette panel"
-      tabIndex={-1}
-      className="w-64 border-r border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-    >
-      <NodePalette
-        onAddNode={controller.handleAddNode}
-        onAddNote={controller.handleAddNote}
-        onAddMarketplaceNode={controller.handleAddMarketplaceNode}
-        marketplaceNodes={controller.marketplaceNodes}
-        hasSelectedNode={controller.canQuickAddConnect}
-        searchInputRef={controller.paletteSearchRef}
-      />
-    </div>
-  );
-}
-
-function GraphCanvasPanel({ controller }: { controller: GraphEditorController }) {
-  return (
-    <div
-      ref={controller.canvasPanelRef}
-      role="region"
-      aria-label="Canvas panel"
-      data-testid="graph-canvas-panel"
-      tabIndex={-1}
-      className="flex-1 relative overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-    >
-      <ReactFlow
-        className="bg-background"
-        aria-label="Operating model canvas"
-        nodes={controller.nodes}
-        edges={controller.typedEdges}
-        onNodesChange={controller.onNodesChange}
-        onEdgesChange={controller.onEdgesChange}
-        onConnect={controller.onConnect}
-        connectOnClick
-        onNodeClick={controller.onNodeClick}
-        onEdgeClick={controller.onEdgeClick}
-        onNodeDragStart={controller.onNodeDragStart}
-        onNodeDragStop={controller.onNodeDragStop}
-        onPaneClick={controller.onPaneClick}
-        onMoveEnd={(_, viewport) => controller.setCurrentViewport(viewport)}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        defaultViewport={controller.currentViewport}
-        fitView={!controller.currentViewport}
-        onlyRenderVisibleElements
-        snapToGrid
-        snapGrid={GRAPH_EDITOR_SNAP_GRID}
-        selectionOnDrag
-        selectionMode={SelectionMode.Partial}
-        selectNodesOnDrag={false}
-        panOnDrag={[1, 2]}
-        defaultEdgeOptions={{
-          type: "typed",
-          style: { strokeWidth: 2 },
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 14,
-            height: 14,
-          },
-        }}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={0.8} color="rgba(255,255,255,0.06)" />
-        <Controls />
-        <MiniMap
-          nodeStrokeWidth={3}
-          zoomable
-          pannable
-          className="bg-background/60 backdrop-blur-sm border border-border rounded-lg"
-        />
-        <GraphCanvasToolbar controller={controller} />
-        <Panel position="bottom-center">
-          <button
-            type="button"
-            onClick={() => controller.paletteSearchRef.current?.focus()}
-            className="bg-primary/90 text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-lg hover:bg-primary transition-colors flex items-center gap-2 backdrop-blur-sm"
-          >
-            <Plus className="size-4" />
-            Add Step
-          </button>
-        </Panel>
-      </ReactFlow>
-      <ValidationOverlay
-        onAddStartNode={controller.handleAddStartNode}
-        onAddOutputNode={controller.handleAddOutputNode}
-      />
-    </div>
-  );
-}
-
-function GraphCanvasToolbar({ controller }: { controller: GraphEditorController }) {
-  return (
-    <Panel position="top-right" className="flex items-center gap-2">
-      <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-sm flex">
-        <button
-          type="button"
-          aria-label="Undo"
-          onClick={controller.handleUndo}
-          disabled={!controller.canUndo}
-          title="Undo (Ctrl+Z)"
-          className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <Undo2 aria-hidden="true" className="size-4" />
-        </button>
-        <div className="w-px bg-border" />
-        <button
-          type="button"
-          aria-label="Redo"
-          onClick={controller.handleRedo}
-          disabled={!controller.canRedo}
-          title="Redo (Ctrl+Y)"
-          className="px-2.5 py-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <Redo2 aria-hidden="true" className="size-4" />
-        </button>
-      </div>
-      <button
-        type="button"
-        aria-label="Auto-layout"
-        onClick={controller.handleAutoLayout}
-        disabled={controller.nodes.length === 0}
-        className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-1.5"
-        title="Tidy up layout"
-      >
-        <LayoutGrid aria-hidden="true" className="size-4" />
-        <span className="hidden sm:inline">Tidy</span>
-      </button>
-      <GraphVersionSelect controller={controller} />
-      {!controller.isEditingMetadata ? <GraphPrimaryActions controller={controller} /> : null}
-    </Panel>
-  );
-}
-
-function GraphVersionSelect({ controller }: { controller: GraphEditorController }) {
-  return (
-    <div className="bg-background/60 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 text-sm text-muted-foreground shadow-sm flex items-center gap-2">
-      <select
-        aria-label="Saved version"
-        value={controller.currentVersionId ?? ""}
-        disabled={controller.loadingVersion || controller.saving || controller.availableVersions.length === 0}
-        onChange={(event) => void controller.handleSelectVersion(event.target.value)}
-        className="bg-transparent text-sm text-muted-foreground outline-none"
-      >
-        {controller.availableVersions.length === 0 ? (
-          <option value="">No version</option>
-        ) : (
-          controller.availableVersions
-            .toSorted((left, right) => right.version - left.version)
-            .map((version) => (
-              <option key={version.id} value={version.id}>
-                v{version.version}
-              </option>
-            ))
-        )}
-      </select>
-      {controller.isDirty ? <span className="text-amber-500 ml-1">*</span> : null}
-    </div>
-  );
-}
-
-function GraphPrimaryActions({ controller }: { controller: GraphEditorController }) {
-  return (
-    <>
-      <WizardButton buttonRef={controller.wizardButtonRef} onBeforeStart={controller.captureFocusableTarget} />
-      <button
-        ref={controller.memoryButtonRef}
-        type="button"
-        aria-label="Memory settings"
-        onClick={controller.handleOpenMemoryConfig}
-        className="bg-background/60 backdrop-blur-sm border border-border text-muted-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent/50 hover:text-foreground transition-colors shadow-sm flex items-center gap-1.5"
-      >
-        <Brain aria-hidden="true" className="size-4" />
-        <span className="hidden sm:inline">Memory</span>
-      </button>
-      <button
-        type="button"
-        aria-label={controller.runDisabledReason ?? "Launch test operation"}
-        onClick={() => void controller.handleRunWorkflow()}
-        disabled={Boolean(controller.runDisabledReason)}
-        title={controller.runDisabledReason ?? "Launch test operation"}
-        className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-      >
-        {controller.startingRun ? "Starting" : <Play aria-hidden="true" className="size-4" />}
-      </button>
-      <button
-        type="button"
-        aria-label={controller.saving ? "Saving" : "Save"}
-        onClick={() => void controller.handleSave()}
-        disabled={controller.saving || !controller.isDirty}
-        className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-      >
-        {controller.saving ? "Saving" : <SaveIcon aria-hidden="true" className="size-4" />}
-      </button>
-    </>
-  );
-}
-
-function GraphInspectorPanel({ controller }: { controller: GraphEditorController }) {
-  return (
-    <div
-      ref={controller.inspectorPanelRef}
-      role="complementary"
-      aria-label="Inspector panel"
-      tabIndex={-1}
-      className="w-80 border-l border-border bg-card/50 backdrop-blur-sm overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-    >
-      {controller.overlayRunId ? <ExecutionOverlayPanel controller={controller} /> : null}
-      <NodeInspector
-        selectedNode={controller.selectedNode}
-        selectedEdge={controller.selectedEdge}
-        nodes={controller.nodes}
-        edges={controller.edges}
-        graphName={controller.graphName}
-        graphDescription={controller.graphDescription}
-        onUpdateNode={controller.handleUpdateNode}
-        onUpdateEdge={controller.handleUpdateEdge}
-        onDeleteNode={controller.handleDeleteNode}
-        onDeleteEdge={controller.handleDeleteEdge}
-        onDuplicateNode={controller.handleDuplicateNode}
-        onUpdateMetadata={controller.onUpdateMetadata}
-        onEditingMetadataChange={controller.setIsEditingMetadata}
-      />
-    </div>
-  );
-}
-
-function ExecutionOverlayPanel({ controller }: { controller: GraphEditorController }) {
-  return (
-    <div className="border-b border-border bg-muted/30 p-4 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-foreground">Operation</h3>
-        <button
-          type="button"
-          onClick={controller.handleExitExecutionView}
-          className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Exit
-        </button>
-      </div>
-      {controller.overlayRunLoading && !controller.overlayRun ? (
-        <p className="text-xs text-muted-foreground">Loading operation detail&hellip;</p>
-      ) : null}
-      {controller.overlayRunError ? (
-        <p className="text-xs text-destructive whitespace-pre-wrap">{controller.overlayRunError}</p>
-      ) : null}
-      {controller.overlayRun ? <ExecutionOverlayDetail controller={controller} /> : null}
-    </div>
-  );
-}
-
-function ExecutionOverlayDetail({ controller }: { controller: GraphEditorController }) {
-  const run = controller.overlayRun;
-  if (!run) {
-    return null;
-  }
-
-  return (
-    <>
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          Status: <span className="font-medium text-foreground">{String(run.status)}</span>
-        </span>
-        <Link href={`/runs/${run.id}`} className="text-primary hover:underline">
-          Open operation
-        </Link>
-      </div>
-      <div className="flex items-center gap-2">
-        {!isTerminalRunStatus(String(run.status)) ? (
-          <button
-            type="button"
-            onClick={() => void controller.handleCancelExecution()}
-            disabled={controller.overlayCanceling}
-            className="flex-1 bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {controller.overlayCanceling ? "Stopping" : "Stop"}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => void controller.fetchOverlayRun()}
-          disabled={controller.overlayRunLoading || controller.overlayRunRefreshing}
-          className="flex-1 bg-background/60 backdrop-blur-sm border border-border text-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {controller.overlayRunLoading || controller.overlayRunRefreshing ? "Refreshing" : "Refresh"}
-        </button>
-      </div>
-      <div className="pt-3 border-t border-border space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase">Department activity</p>
-        <NodeRunActivityList controller={controller} />
-      </div>
-    </>
-  );
-}
-
-function NodeRunActivityList({ controller }: { controller: GraphEditorController }) {
-  if (!controller.selectedNodeId) {
-    return <p className="text-xs text-muted-foreground">Select a step to inspect its activity.</p>;
-  }
-  if (controller.overlaySelectedNodeRuns.length === 0) {
-    return <p className="text-xs text-muted-foreground">No activity records for this step.</p>;
-  }
-
-  return (
-    <div className="space-y-2">
-      {controller.overlaySelectedNodeRuns.map((nodeRun) => (
-        <NodeRunActivityCard key={nodeRun.id} nodeRun={nodeRun} />
-      ))}
-    </div>
-  );
-}
-
-function NodeRunActivityCard({ nodeRun }: { nodeRun: NodeRunItem }) {
-  const agentTrace = getNodeRunAgentTrace(nodeRun);
-
-  return (
-    <div className="rounded-lg border border-border bg-background/40 p-2 space-y-2">
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="font-medium text-foreground">attempt {nodeRun.attempt}</span>
-        <span className="text-muted-foreground">{String(nodeRun.status)}</span>
-        <span className="text-muted-foreground">{formatDuration(nodeRun.duration_ms)}</span>
-      </div>
-      {agentTrace ? <AgentTracePanel trace={agentTrace} compact /> : null}
-      <NodeRunJsonBlock title="Deliverable / response" value={nodeRun.output_json} open />
-      <NodeRunJsonBlock title="Needs attention" value={nodeRun.error_json} open={String(nodeRun.status) === "failed"} />
-      <NodeRunJsonBlock title="Input" value={nodeRun.input_json} />
-    </div>
-  );
-}
-
-function NodeRunJsonBlock({ open, title, value }: { open?: boolean; title: string; value: unknown }) {
-  return (
-    <details open={open}>
-      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{title}</summary>
-      <pre className="mt-1 max-h-40 overflow-auto rounded border border-border/50 bg-muted p-2 text-[11px] text-foreground font-mono whitespace-pre-wrap">
-        {formatJsonForDisplay(value)}
-      </pre>
-    </details>
   );
 }

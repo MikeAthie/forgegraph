@@ -1,0 +1,77 @@
+{
+  "profile_id": "legacy.client_handoff",
+  "version": 1,
+  "display_name": "Legacy Client Handoff",
+  "business_domain": "client_handoff",
+  "formats": ["markdown_report", "pdf_report", "manifest", "zip_package"],
+  "voice": {
+    "audience": "client_executive",
+    "tone": "direct, polished, evidence-led",
+    "forbidden_phrases": ["as an AI", "I cannot", "placeholder"],
+    "naming": {
+      "client_display_name": "Legacy",
+      "provider_display_name": "Atlas"
+    }
+  },
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Executive Summary",
+      "required": true,
+      "source_roles": [
+        "summary",
+        "strategy",
+        "context",
+        "brand_context_pack",
+        "strategy_brief",
+        "codex_strategy_brief",
+        "codex_brand_content_pack"
+      ]
+    },
+    {
+      "id": "evidence",
+      "title": "Evidence",
+      "required": true,
+      "source_roles": [
+        "evidence",
+        "source",
+        "finding",
+        "facts",
+        "qa_report",
+        "manual_metrics_template",
+        "codex_qa_report",
+        "codex_measurement_plan"
+      ]
+    },
+    {
+      "id": "recommendations",
+      "title": "Recommendations",
+      "required": true,
+      "source_roles": [
+        "recommendation",
+        "next_step",
+        "approval_packet",
+        "campaign_launch_package",
+        "channel_copy_pack",
+        "content_calendar",
+        "creative_direction_brief",
+        "crm_dm_response_scripts",
+        "codex_client_approval_packet",
+        "codex_channel_execution_calendar",
+        "codex_crm_response_scripts"
+      ]
+    }
+  ],
+  "quality_gates": ["client_handoff@1"],
+  "connector_policy": {
+    "require_caveats_for_unverified_sources": true,
+    "require_approval_language": true,
+    "caveat_text": "Connector caveat: unverified connector outputs require receipt review.",
+    "approval_text": "Approval required before production execution."
+  },
+  "layout": {
+    "heading_style": "professional_report",
+    "include_manifest_link": true,
+    "require_evidence_recommendation_separation": true
+  }
+}

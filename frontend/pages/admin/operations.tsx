@@ -957,6 +957,7 @@ function RunInspectionPanel({ controller }: { controller: AdminOperationsControl
     <div className="rounded-xl border border-border/50 bg-background/70 p-4">
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
+          aria-label="Run ID"
           value={controller.runLookupId}
           onChange={(event) => controller.setRunLookupId(event.target.value)}
           placeholder="Run ID"
@@ -972,6 +973,7 @@ function RunInspectionPanel({ controller }: { controller: AdminOperationsControl
         </Button>
       </div>
       <textarea
+        aria-label="Operator reason"
         value={controller.operatorReason}
         onChange={(event) => controller.setOperatorReason(event.target.value)}
         placeholder="Operator reason required for replay, acknowledgement, force fail, force cancel, and rehydrate."

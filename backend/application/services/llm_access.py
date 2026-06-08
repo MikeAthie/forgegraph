@@ -22,9 +22,11 @@ LLM_ACCESS_ENGINE_INPUT_KEY = "_forgegraph_llm_access"
 
 LLM_MODE_MANAGED = "managed"
 LLM_MODE_BYOK = "byok"
+LLM_MODE_CODEX_SESSION = "codex_session"
 DEFAULT_LLM_PROVIDER = "openai"
+CODEX_SESSION_PROVIDER = "codex"
 
-_LLM_MODES = {LLM_MODE_MANAGED, LLM_MODE_BYOK}
+_LLM_MODES = {LLM_MODE_MANAGED, LLM_MODE_BYOK, LLM_MODE_CODEX_SESSION}
 
 
 class LLMAccessValidationError(ValueError):
@@ -48,7 +50,7 @@ class LLMAccessConfig:
 
 
 def allowed_llm_providers() -> set[str]:
-    providers = getattr(settings, "ALLOWED_LLM_PROVIDERS", [DEFAULT_LLM_PROVIDER, "anthropic"])
+    providers = getattr(settings, "ALLOWED_LLM_PROVIDERS", [DEFAULT_LLM_PROVIDER, "anthropic", CODEX_SESSION_PROVIDER])
     return {str(provider).strip().lower() for provider in providers if str(provider).strip()}
 
 
@@ -78,7 +80,7 @@ def llm_access_from_request(payload: dict[str, Any]) -> LLMAccessConfig:
     )
 
 
-def validate_llm_access_config(config: LLMAccessConfig) -> LLMAccessConfig:
+def validate_llm_access_config(config: LLMAccessConfig) -> LLMAccessConfig:  # noqa: C901
     errors: list[dict[str, str]] = []
 
     mode = str(config.llm_mode or LLM_MODE_MANAGED).strip().lower()
@@ -121,6 +123,23 @@ def validate_llm_access_config(config: LLMAccessConfig) -> LLMAccessConfig:
                     "message": "api_key is malformed.",
                 }
             )
+    elif mode == LLM_MODE_CODEX_SESSION:
+        if not getattr(settings, "ENABLE_CODEX_SESSION_RUNTIME", False):
+            errors.append(
+                {
+                    "field": "llm_mode",
+                    "message": "codex_session runtime is disabled. Set ENABLE_CODEX_SESSION_RUNTIME=true for local operator testing.",
+                }
+            )
+        if provider != CODEX_SESSION_PROVIDER:
+            errors.append(
+                {
+                    "field": "provider",
+                    "message": "codex_session requires provider 'codex'.",
+                }
+            )
+        credential_id = ""
+        api_key = ""
     else:
         credential_id = ""
         api_key = ""
@@ -243,6 +262,9 @@ def llm_access_storage_payload(config: LLMAccessConfig) -> dict[str, Any]:
     }
     if config.is_byok:
         payload["credential_id"] = config.credential_id
+    if config.llm_mode == LLM_MODE_CODEX_SESSION:
+        payload["local_session_required"] = True
+        payload["credential_id"] = None
     return payload
 
 
@@ -264,6 +286,7 @@ def public_llm_access_from_graph(graph_json: dict[str, Any] | None) -> dict[str,
         "credential_id": (
             str(access.get("credential_id") or "") if access.get("credential_id") else None
         ),
+        "local_session_required": bool(access.get("local_session_required")) if mode == LLM_MODE_CODEX_SESSION else False,
     }
 
 
@@ -292,6 +315,13 @@ def engine_llm_access_from_graph(
 
     mode = str(access.get("llm_mode") or LLM_MODE_MANAGED).strip().lower()
     provider = str(access.get("provider") or DEFAULT_LLM_PROVIDER).strip().lower()
+    if mode == LLM_MODE_CODEX_SESSION:
+        return validate_llm_access_config(
+            LLMAccessConfig(
+                llm_mode=LLM_MODE_CODEX_SESSION,
+                provider=provider or CODEX_SESSION_PROVIDER,
+            )
+        )
     if mode != LLM_MODE_BYOK:
         return managed_llm_access(provider=provider)
 

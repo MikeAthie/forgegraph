@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useReducer, type SetStateAction } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
@@ -27,11 +27,8 @@ import {
   Panel,
   SectionHeader,
   StatusBadge,
-  formatCurrency,
-  formatDateTime,
-  formatDuration,
-  statusTone,
 } from "./operations-ui";
+import { formatCurrency, formatDateTime, formatDuration, statusTone } from "./operations-format";
 import { showError, showSuccess } from "@/lib/toast";
 
 type OperationDetailViewProps = {
@@ -165,9 +162,12 @@ function useOperationDetailController({ routeParam }: OperationDetailViewProps) 
     },
     [operationId, setError, setLoading, setOperation, setSelectedTaskId],
   );
-  const refreshOperation = useEffectEvent((options?: { showSpinner?: boolean }) => {
+  const refreshOperation = useCallback((options?: { showSpinner?: boolean }) => {
     void loadOperation(options);
-  });
+  }, [loadOperation]);
+  const refreshOperationWithoutSpinner = useCallback(() => {
+    refreshOperation({ showSpinner: false });
+  }, [refreshOperation]);
 
   useEffect(() => {
     void loadOperation({ showSpinner: true });
@@ -180,7 +180,7 @@ function useOperationDetailController({ routeParam }: OperationDetailViewProps) 
 
     const refreshVisibleOperation = () => {
       if (document.visibilityState === "visible") {
-        refreshOperation({ showSpinner: false });
+        refreshOperationWithoutSpinner();
       }
     };
 
@@ -190,23 +190,21 @@ function useOperationDetailController({ routeParam }: OperationDetailViewProps) 
       window.removeEventListener("focus", refreshVisibleOperation);
       document.removeEventListener("visibilitychange", refreshVisibleOperation);
     };
-  }, [operationId, refreshOperation]);
+  }, [operationId, refreshOperationWithoutSpinner]);
 
   useEffect(() => {
     if (!operationId || !shouldPollCurrentOperation || typeof window === "undefined") {
       return;
     }
 
-    const poller = window.setInterval(() => {
-      refreshOperation({ showSpinner: false });
-    }, 2000);
+    const poller = window.setInterval(refreshOperationWithoutSpinner, 2000);
 
     return () => {
       window.clearInterval(poller);
     };
-  }, [operationId, refreshOperation, shouldPollCurrentOperation]);
+  }, [operationId, refreshOperationWithoutSpinner, shouldPollCurrentOperation]);
 
-  useRunLiveUpdates(operationId, () => refreshOperation({ showSpinner: false }));
+  useRunLiveUpdates(operationId, refreshOperationWithoutSpinner);
 
   const activityState = useMemo<OperationActivityState | null>(() => {
     if (!operation) {
@@ -863,10 +861,14 @@ function OperationLoadedContent({ controller }: { controller: OperationDetailCon
 
 export default function OperationDetailView({ routeParam }: OperationDetailViewProps) {
   const controller = useOperationDetailController({ routeParam });
+  const inspector = useMemo(
+    () => <OperationDetailInspector operation={controller.operation} />,
+    [controller.operation],
+  );
 
   return (
     <ProtectedRoute>
-      <DashboardLayout inspector={<OperationDetailInspector operation={controller.operation} />}>
+      <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <SectionHeader
             eyebrow="Operation Detail"

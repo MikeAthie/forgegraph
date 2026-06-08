@@ -1,22 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useState, type SetStateAction } from "react";
 import {
-  BookCheck,
-  ClipboardCheck,
-  FileStack,
-  GitBranch,
-  CalendarClock,
-  Play,
-  ListChecks,
-  PackagePlus,
-  RefreshCw,
-  RotateCcw,
-  ShieldCheck,
-  Wrench,
-} from "lucide-react";
+  BookCheck, ClipboardCheck, FileStack, GitBranch, CalendarClock, Play, ListChecks, PackagePlus, RefreshCw, RotateCcw, ShieldCheck, Wrench, } from "lucide-react";
 
 import { CommunicationPanel } from "@/components/company/CommunicationPanel";
 import { WhiteboardPanel } from "@/components/company/WhiteboardPanel";
-import { EmptyBlock, MicroExplanation, Panel, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { EmptyBlock, MicroExplanation, Panel, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import {
   Alert,
   AlertDescription,
@@ -1659,15 +1648,31 @@ function PackDashboardPanel({ controller }: { controller: OperatingModelControll
 function ConnectorAvailabilityPanel({ controller }: { controller: OperatingModelController }) {
   const candidates = useMemo(() => connectorCandidatesFromPack(controller.activePack), [controller.activePack]);
   const persistedAvailable = useMemo(() => availableConnectorsFromPack(controller.activePack), [controller.activePack]);
-  const [selected, setSelected] = useState<string[]>(persistedAvailable);
-
-  useEffect(() => {
-    setSelected(persistedAvailable);
-  }, [persistedAvailable]);
 
   if (!controller.activePack?.installationId || !candidates.length) {
     return null;
   }
+
+  return (
+    <ConnectorAvailabilityEditor
+      key={`${controller.activePack.installationId}:${persistedAvailable.join("|")}`}
+      controller={controller}
+      candidates={candidates}
+      persistedAvailable={persistedAvailable}
+    />
+  );
+}
+
+function ConnectorAvailabilityEditor({
+  controller,
+  candidates,
+  persistedAvailable,
+}: {
+  controller: OperatingModelController;
+  candidates: string[];
+  persistedAvailable: string[];
+}) {
+  const [selected, setSelected] = useState<string[]>(() => [...persistedAvailable]);
 
   const selectedSet = new Set(selected);
   const toggleConnector = (connectorId: string) => {

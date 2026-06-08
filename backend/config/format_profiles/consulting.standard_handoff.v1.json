@@ -1,0 +1,48 @@
+{
+  "profile_id": "consulting.standard_handoff",
+  "version": 1,
+  "display_name": "Consulting Standard Handoff",
+  "business_domain": "consulting",
+  "formats": ["markdown_report", "pdf_report", "manifest", "zip_package"],
+  "voice": {
+    "audience": "client_operator",
+    "tone": "practical, specific, evidence-led",
+    "forbidden_phrases": ["as an AI", "I cannot", "placeholder"],
+    "naming": {
+      "client_display_name": "Northstar Advisory",
+      "provider_display_name": "ForgeGraph Consulting"
+    }
+  },
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Executive Brief",
+      "required": true,
+      "source_roles": ["summary", "context", "assessment"]
+    },
+    {
+      "id": "evidence",
+      "title": "Operating Evidence",
+      "required": true,
+      "source_roles": ["evidence", "source", "finding", "facts"]
+    },
+    {
+      "id": "recommendations",
+      "title": "Recommendations",
+      "required": true,
+      "source_roles": ["recommendation", "next_step"]
+    }
+  ],
+  "quality_gates": ["client_handoff@1"],
+  "connector_policy": {
+    "require_caveats_for_unverified_sources": true,
+    "require_approval_language": true,
+    "caveat_text": "Connector caveat: source-system extracts require client verification.",
+    "approval_text": "Approval required before production execution."
+  },
+  "layout": {
+    "heading_style": "professional_report",
+    "include_manifest_link": true,
+    "require_evidence_recommendation_separation": true
+  }
+}

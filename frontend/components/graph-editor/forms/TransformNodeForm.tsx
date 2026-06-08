@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/form-field";
@@ -18,43 +18,48 @@ interface TransformConfig extends AgentConfig, AdvancedConfig {
   output_key?: string;
 }
 
+function validateTransformConfig(transformConfig: TransformConfig): Record<string, string> {
+  const nextErrors: Record<string, string> = {};
+
+  if (transformConfig.expression) {
+    const expressionError = validateExpression(transformConfig.expression, "Expression");
+    if (expressionError) {
+      nextErrors.expression = expressionError.message;
+    }
+  }
+
+  return nextErrors;
+}
+
 export function TransformNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const transformConfig = config as TransformConfig;
 
   const handleChange = useCallback(
     <K extends keyof TransformConfig>(field: K, value: TransformConfig[K]) => {
-      onChange({ ...config, [field]: value });
+      const nextConfig = { ...transformConfig, [field]: value };
+      onChange(nextConfig);
+      setErrors(validateTransformConfig(nextConfig));
     },
-    [config, onChange],
+    [onChange, setErrors, transformConfig],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
-      onChange({ ...config, ...agentConfig });
+      const nextConfig = { ...transformConfig, ...agentConfig };
+      onChange(nextConfig);
+      setErrors(validateTransformConfig(nextConfig));
     },
-    [config, onChange],
+    [onChange, setErrors, transformConfig],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
-      onChange({ ...config, ...advancedConfig });
+      const nextConfig = { ...transformConfig, ...advancedConfig };
+      onChange(nextConfig);
+      setErrors(validateTransformConfig(nextConfig));
     },
-    [config, onChange],
+    [onChange, setErrors, transformConfig],
   );
-
-  // Validate expression on change
-  useEffect(() => {
-    const newErrors: Record<string, string> = {};
-
-    if (transformConfig.expression) {
-      const expressionError = validateExpression(transformConfig.expression, "Expression");
-      if (expressionError) {
-        newErrors.expression = expressionError.message;
-      }
-    }
-
-    setErrors(newErrors);
-  }, [transformConfig.expression, setErrors]);
 
   return (
     <div className="space-y-6">

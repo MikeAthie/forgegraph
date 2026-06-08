@@ -56,7 +56,7 @@ class LLMAccessRequestMixin(serializers.Serializer[Any]):
     """Optional run-level LLM access fields."""
 
     llm_mode = serializers.ChoiceField(
-        choices=["managed", "byok"],
+        choices=["managed", "byok", "codex_session"],
         required=False,
         help_text="LLM access mode. Defaults to managed.",
     )

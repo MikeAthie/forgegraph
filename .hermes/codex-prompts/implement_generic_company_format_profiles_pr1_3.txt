@@ -1,0 +1,102 @@
+IMPLEMENTATION MODE. Make code changes. Follow strict TDD: write focused failing tests first, run them to see RED, then implement minimal code to pass, then run verification.
+
+Repository: C:/Users/mathi/projects/forgegraph
+Plan to follow: `.hermes/plans/2026-06-05_generic-company-format-profiles.md`
+
+Context:
+- ForgeGraph must remain business-agnostic.
+- Atlas/Legacy is only one product/user of ForgeGraph primitives.
+- UI rendering is not important right now. Prioritize production-level deliverable quality, provenance, handoff packaging, and non-fake delivery boundaries.
+- Existing working flow: CompanyProgram + ProgramStageState -> automatic TaskRoutingRecord cards -> Codex stage execution -> ServiceDeliverable + AssetVersion -> whiteboard snapshot -> handoff zip/email.
+- We now want the first implementation batch for generic formatting: PR 1–3 from the plan.
+
+Implementation scope for this run:
+1. Format profile schema + registry.
+2. Deterministic quality gates.
+3. Generic markdown report, manifest, and zip package renderers.
+4. Generic orchestration service that formats existing deliverables into derived artifacts/package outputs.
+5. Tests proving both a marketing/Legacy fixture and a non-marketing consulting fixture use the same renderer code.
+
+Do NOT implement yet:
+- PDF rendering.
+- Real email sending refactor.
+- UI changes.
+- New database models/migrations unless absolutely required.
+- Atlas/Legacy/marketing-specific renderer classes.
+- Arbitrary user-authored templates executed at runtime.
+
+Use the corrected repo paths from the plan:
+- New/modified service files should live under `backend/application/services/`.
+- Suggested files:
+  - `backend/application/services/deliverable_format_profiles.py`
+  - `backend/application/services/deliverable_format_quality.py`
+  - `backend/application/services/deliverable_format_renderers.py`
+  - `backend/application/services/deliverable_formatting.py`
+- Profile configs should live under `backend/config/format_profiles/` as JSON:
+  - `default.v1.json`
+  - `legacy.client_handoff.v1.json`
+  - `consulting.standard_handoff.v1.json`
+- Tests should live under `backend/tests/unit/services/`:
+  - `test_deliverable_format_profiles.py`
+  - `test_deliverable_format_quality.py`
+  - `test_deliverable_format_renderers.py`
+  - `test_deliverable_formatting.py`
+
+Existing primitives to reuse:
+- `ServiceDeliverable`
+- `Asset`
+- `AssetVersion`
+- `ServiceEngagement`
+- `CompanyProgram`
+- `ProgramStageState`
+- `TaskRoutingRecord`
+- Existing metadata/provenance JSON fields.
+
+Data/modeling requirements:
+- Keep canonical content in ServiceDeliverable + source AssetVersion.
+- Formatted outputs are derived artifacts, represented by in-memory render results and/or persisted AssetVersion metadata where practical.
+- Start with metadata/config-based profiles, not a FormatProfile DB model.
+- Format profiles should be versioned, validated, hashable, and referenced by `format_profile:<id>@<version>`.
+- Resolution order should support explicit request -> engagement metadata -> program metadata -> default.
+- Profile schema should support: profile_id, version, display_name, formats, voice, forbidden phrases, section definitions, quality gate sets, connector policy, layout.
+- Quality gate checks should include at minimum:
+  - no unresolved placeholders/template tokens
+  - no AI/meta language like “as an AI”
+  - required sections present
+  - client/provider naming consistency where configured
+  - evidence/facts and recommendations separation when required
+  - connector caveats / approval language when profile policy requires it
+- Renderer outputs should include:
+  - markdown report
+  - manifest JSON
+  - zip package
+  - render provenance with profile ref/hash, source ids/hashes, renderer name/version, output hash, quality result.
+
+Persistence guidance:
+- If existing Asset/AssetVersion APIs make full persistence straightforward, persist derived artifacts as AssetVersion records.
+- If persistence is too broad for this first slice, implement clean in-memory result objects plus deterministic package artifacts and metadata suitable for persistence, but do not fake persistence. Tests should state the boundary clearly.
+- Prefer small, testable pure functions first.
+
+Agnosticism requirements:
+- No renderer should branch on Atlas, Legacy, marketing, campaign, ads, optical noir, etc.
+- Business-specific behavior must come from profile config and source deliverable metadata only.
+- Include a consulting/non-marketing fixture/test to prove the same code path works.
+
+Verification commands to run from `backend/`:
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python -m pytest tests/unit/services/test_deliverable_format_profiles.py tests/unit/services/test_deliverable_format_quality.py tests/unit/services/test_deliverable_format_renderers.py tests/unit/services/test_deliverable_formatting.py -q
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run ruff check application/services/deliverable_format_profiles.py application/services/deliverable_format_quality.py application/services/deliverable_format_renderers.py application/services/deliverable_formatting.py tests/unit/services/test_deliverable_format_profiles.py tests/unit/services/test_deliverable_format_quality.py tests/unit/services/test_deliverable_format_renderers.py tests/unit/services/test_deliverable_formatting.py
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python manage.py check
+```
+
+Also run relevant existing regression tests if touched:
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python -m pytest tests/unit/services/test_company_run_task_routing.py tests/unit/services/test_department_pipeline.py tests/unit/services/test_legacy_weekend_pipeline.py -q
+```
+
+Before finishing, report:
+- files changed
+- exact tests run and results
+- any implementation tradeoffs
+- whether outputs are persisted or currently pure/rendered package artifacts
+- whether any production email/PDF behavior was intentionally deferred

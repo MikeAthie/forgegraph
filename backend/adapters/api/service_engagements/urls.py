@@ -9,6 +9,8 @@ from adapters.api.service_engagements.views import (
     ServiceCatalogListCreateView,
     ServiceDeliverableActionView,
     ServiceDeliverableListCreateView,
+    ServiceEngagementDepartmentPipelineStageActionView,
+    ServiceEngagementDepartmentPipelineView,
     ServiceEngagementDetailView,
     ServiceEngagementListCreateView,
 )
@@ -33,6 +35,16 @@ urlpatterns = [
         "service-engagements/<uuid:engagement_id>",
         ServiceEngagementDetailView.as_view(),
         name="service-engagement-detail",
+    ),
+    path(
+        "service-engagements/<uuid:engagement_id>/department-pipeline",
+        ServiceEngagementDepartmentPipelineView.as_view(),
+        name="service-engagement-department-pipeline",
+    ),
+    path(
+        "service-engagements/<uuid:engagement_id>/department-pipeline/stages/<str:stage_id>/<str:action>",
+        ServiceEngagementDepartmentPipelineStageActionView.as_view(),
+        name="service-engagement-department-pipeline-stage-action",
     ),
     path(
         "service-engagements/<uuid:engagement_id>/deliverables",

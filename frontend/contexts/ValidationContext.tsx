@@ -50,12 +50,17 @@ export function ValidationProvider({ children, debounceMs = 300 }: ValidationPro
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const clearDebounceTimer = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  }, []);
+
   const validate = useCallback(
     (nodes: Node[], edges: Edge[]) => {
       // Clear existing timer
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
+      clearDebounceTimer();
 
       // Debounce validation
       debounceTimerRef.current = setTimeout(() => {
@@ -63,25 +68,17 @@ export function ValidationProvider({ children, debounceMs = 300 }: ValidationPro
         setResult(validationResult);
       }, debounceMs);
     },
-    [debounceMs],
+    [clearDebounceTimer, debounceMs],
   );
 
   const clearValidation = useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
+    clearDebounceTimer();
     setResult(null);
     setFocusedErrorId(null);
-  }, []);
+  }, [clearDebounceTimer]);
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => clearDebounceTimer, [clearDebounceTimer]);
 
   const value = useMemo<ValidationContextValue>(() => {
     const currentResult = result ?? emptyResult;

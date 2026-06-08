@@ -3,13 +3,8 @@ import Link from "next/link";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  Panel,
-  SectionHeader,
-  StatusBadge,
-  formatDateTime,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { executionsApi, getApiErrorMessage, workflowsApi, type GraphListItem, type RunListItem } from "@/lib/api";
@@ -35,6 +30,24 @@ function workflowsReducer(state: WorkflowsState, action: WorkflowsAction): Workf
       return state;
   }
 }
+
+const WORKFLOWS_INSPECTOR = (
+  <InspectorPanel
+    title="Advanced editor"
+    subtitle="Operating-model authoring stays available here, but it is a secondary workspace under the company shell."
+    sections={[
+      {
+        title: "Mental model",
+        content:
+          "Saved operating models live here. Company operations happen from companies, command ops, activity, approvals, and usage.",
+      },
+      {
+        title: "Compatibility",
+        content: "Legacy routes remain available while the company-first navigation settles in.",
+      },
+    ]}
+  />
+);
 
 export default function WorkflowsPage() {
   const [{ workflows, executions, loading, error }, dispatch] = useReducer(workflowsReducer, {
@@ -69,25 +82,7 @@ export default function WorkflowsPage() {
 
   return (
     <ProtectedRoute>
-      <DashboardLayout
-        inspector={
-          <InspectorPanel
-            title="Advanced editor"
-            subtitle="Operating-model authoring stays available here, but it is a secondary workspace under the company shell."
-            sections={[
-              {
-                title: "Mental model",
-                content:
-                  "Saved operating models live here. Company operations happen from companies, command ops, activity, approvals, and usage.",
-              },
-              {
-                title: "Compatibility",
-                content: "Legacy routes remain available while the company-first navigation settles in.",
-              },
-            ]}
-          />
-        }
-      >
+      <DashboardLayout inspector={WORKFLOWS_INSPECTOR}>
         <div className="space-y-6">
           <SectionHeader
             eyebrow="Advanced"

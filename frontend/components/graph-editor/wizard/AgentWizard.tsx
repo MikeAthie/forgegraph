@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useState, type ComponentType } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type ComponentType,
+  type MouseEvent,
+  type SyntheticEvent,
+} from "react";
 import { useWizard } from "@/contexts/WizardContext";
 import { cn } from "@/lib/utils";
 import { WizardProgress } from "./WizardProgress";
@@ -56,6 +66,32 @@ type WizardCompletionState = {
   invalidApproval: string[];
   isValid: boolean;
 };
+
+const MEMORY_OPTIONS: Array<{
+  id: AgentMemoryMode;
+  label: string;
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+}> = [
+  {
+    id: "none",
+    label: "No Memory",
+    description: "Create a simple AI-worker-plus-deliverable flow.",
+    icon: FileOutput,
+  },
+  {
+    id: "session",
+    label: "Session Memory",
+    description: "Keep the operating model simple now. Add persistent storage later if you need it.",
+    icon: Brain,
+  },
+  {
+    id: "persistent",
+    label: "Persistent Memory",
+    description: "Add memory load/store steps around the AI worker.",
+    icon: Brain,
+  },
+];
 
 type RoleStepState = {
   agentLabel: string;
@@ -536,27 +572,6 @@ function MemoryStep() {
     setStepData("memory", { type: memoryMode } satisfies WizardMemoryData);
   };
 
-  const memoryOptions = [
-    {
-      id: "none" as const,
-      label: "No Memory",
-      description: "Create a simple AI-worker-plus-deliverable flow.",
-      icon: FileOutput,
-    },
-    {
-      id: "session" as const,
-      label: "Session Memory",
-      description: "Keep the operating model simple now. Add persistent storage later if you need it.",
-      icon: Brain,
-    },
-    {
-      id: "persistent" as const,
-      label: "Persistent Memory",
-      description: "Add memory load/store steps around the AI worker.",
-      icon: Brain,
-    },
-  ];
-
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground">
@@ -565,7 +580,7 @@ function MemoryStep() {
       </p>
 
       <div className="space-y-2">
-        {memoryOptions.map((option) => {
+        {MEMORY_OPTIONS.map((option) => {
           const Icon = option.icon;
           return (
             <button
@@ -726,6 +741,7 @@ export interface AgentWizardProps {
 
 export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps) {
   const { state, currentStepConfig, exitWizard } = useWizard();
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   const blueprint = useMemo(() => buildBlueprintFromState(state.stepData), [state.stepData]);
   const completionState = useMemo(() => getWizardCompletionState(state.stepData), [state.stepData]);
@@ -753,15 +769,30 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
   }, [onExit, exitWizard]);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        handleExit();
-      }
-    };
+    if (!state.isActive) {
+      return;
+    }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleExit]);
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) {
+      return;
+    }
+
+    if (typeof dialog.showModal === "function") {
+      dialog.showModal();
+      return;
+    }
+
+    dialog.setAttribute("open", "");
+  }, [state.isActive]);
+
+  const handleDialogCancel = useCallback(
+    (event: SyntheticEvent<HTMLDialogElement>) => {
+      event.preventDefault();
+      handleExit();
+    },
+    [handleExit],
+  );
 
   if (!state.isActive) {
     return null;
@@ -770,20 +801,23 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
   const StepComponent = currentStepConfig ? STEP_COMPONENTS[currentStepConfig.id] : null;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
+    <dialog
+      ref={dialogRef}
       aria-label="Operating Model Wizard"
-      className={cn("fixed inset-0 z-50 flex items-center justify-center", className)}
+      className={cn(
+        "fixed inset-0 z-50 m-0 h-screen max-h-none w-screen max-w-none bg-transparent p-4 text-foreground backdrop:bg-black/50 backdrop:backdrop-blur-sm",
+        className,
+      )}
+      onCancel={handleDialogCancel}
     >
       <button
         type="button"
-        aria-label="Close operating model wizard"
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        aria-label="Close wizard"
+        className="fixed inset-0 cursor-default bg-transparent"
+        tabIndex={-1}
         onClick={handleExit}
       />
-
-      <div className="relative z-10 w-full max-w-lg mx-4 bg-background border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <div className="fixed left-1/2 top-1/2 z-10 flex max-h-[85vh] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
         <WizardProgress />
 
         <div className="flex-1 overflow-y-auto">
@@ -796,6 +830,6 @@ export function AgentWizard({ onComplete, onExit, className }: AgentWizardProps)
 
         <WizardNavigation onComplete={handleComplete} canProceedOverride={canProceedOverride} />
       </div>
-    </div>
+    </dialog>
   );
 }

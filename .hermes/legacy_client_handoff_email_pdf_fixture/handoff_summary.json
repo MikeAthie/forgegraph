@@ -1,0 +1,24 @@
+{
+  "deferred_formats": [
+    "email_handoff"
+  ],
+  "manifest_asset_version_id": "567dbbf6-4cb7-400a-9a8c-b1c3d3f2e6f3",
+  "manifest_filename": "legacy-client-handoff.manifest.json",
+  "manifest_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_client_handoff_email_pdf_fixture\\legacy-client-handoff.manifest.json",
+  "markdown_asset_version_id": "cd883a0a-3d7e-4d4e-90b2-2fde25db6ef6",
+  "markdown_filename": "legacy-client-handoff.md",
+  "markdown_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_client_handoff_email_pdf_fixture\\legacy-client-handoff.md",
+  "package_asset_version_id": "607fba68-621b-43ab-ac9c-a387755363d3",
+  "package_dir": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_client_handoff_email_pdf_fixture",
+  "package_filename": "legacy-client-handoff.zip",
+  "package_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_client_handoff_email_pdf_fixture\\legacy-client-handoff.zip",
+  "pdf_asset_version_id": "2f996c54-f1d1-4d6b-bb1b-0dd633ad8294",
+  "pdf_filename": "legacy-client-handoff.pdf",
+  "pdf_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_client_handoff_email_pdf_fixture\\legacy-client-handoff.pdf",
+  "profile_ref": "format_profile:legacy.client_handoff@1",
+  "quality_status": "passed",
+  "recipient": "admin@intlabs.dev",
+  "source_deliverable_count": 3,
+  "subject": "Legacy Optical Noir - ForgeGraph/Codex company run deliverables ready",
+  "summary_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_client_handoff_email_pdf_fixture\\handoff_summary.json"
+}

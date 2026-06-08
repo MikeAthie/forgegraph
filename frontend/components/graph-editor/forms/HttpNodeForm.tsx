@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { useCallback, useMemo, useReducer } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -96,6 +96,40 @@ function httpFormReducer(state: HttpFormState, action: HttpFormAction): HttpForm
     default:
       return state;
   }
+}
+
+function getHttpContentTypeHeader(headers: HttpConfig["headers"]): string {
+  const contentTypeEntry = Object.entries(headers || {}).find(([key]) => key.trim().toLowerCase() === "content-type");
+  return (contentTypeEntry?.[1] || "").toString().toLowerCase();
+}
+
+function shouldValidateHttpJsonBody(httpConfig: HttpConfig): boolean {
+  const effectiveMethod = httpConfig.method ?? "GET";
+  const contentTypeHeader = getHttpContentTypeHeader(httpConfig.headers);
+  return effectiveMethod !== "GET" && (contentTypeHeader.includes("application/json") || contentTypeHeader.trim() === "");
+}
+
+function validateHttpConfig(httpConfig: HttpConfig): Record<string, string> {
+  const nextErrors: Record<string, string> = {};
+
+  const urlError = validateUrl(httpConfig.url || "", "URL");
+  if (urlError && httpConfig.url) {
+    nextErrors.url = urlError.message;
+  }
+
+  if (httpConfig.body && shouldValidateHttpJsonBody(httpConfig)) {
+    const bodyError = validateJson(httpConfig.body, "Body");
+    if (bodyError) {
+      nextErrors.body = bodyError.message;
+    }
+  }
+
+  return nextErrors;
+}
+
+function getTwilioAccountSidFromUrl(url?: string): string | null {
+  const match = (url || "").match(/Accounts\/([^/]+)/i);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
 function HttpTestPanel({
@@ -289,7 +323,6 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     httpFormReducer,
     initialHttpFormState,
   );
-  const reportErrors = useCallback((nextErrors: Record<string, string>) => setErrors(nextErrors), [setErrors]);
   const effectiveMethod = httpConfig.method ?? "GET";
   const configuredCredential = useMemo(
     () => credentials.find((item) => item.id === httpConfig.credential_id),
@@ -304,34 +337,39 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
     () => filteredCredentials.find((item) => item.id === httpConfig.credential_id),
     [filteredCredentials, httpConfig.credential_id],
   );
-  const contentTypeHeader = useMemo(() => {
-    const headers = httpConfig.headers || {};
-    const contentTypeEntry = Object.entries(headers).find(([key]) => key.trim().toLowerCase() === "content-type");
-    return (contentTypeEntry?.[1] || "").toString().toLowerCase();
-  }, [httpConfig.headers]);
-  const shouldValidateJsonBody =
-    effectiveMethod !== "GET" &&
-    (contentTypeHeader.includes("application/json") || contentTypeHeader.trim().length === 0);
+  const shouldValidateJsonBody = shouldValidateHttpJsonBody(httpConfig);
 
   const handleChange = useCallback(
     <K extends keyof HttpConfig>(field: K, value: HttpConfig[K]) => {
-      onChange({ ...config, [field]: value });
+      const nextConfig = { ...httpConfig, [field]: value };
+      onChange(nextConfig);
+      setErrors(validateHttpConfig(nextConfig));
+      if (field === "url" && provider === "twilio" && !twilioAccountSid.trim()) {
+        const accountSid = getTwilioAccountSidFromUrl(nextConfig.url);
+        if (accountSid) {
+          dispatchHttpForm({ type: "twilio-account-sid", value: accountSid });
+        }
+      }
     },
-    [config, onChange],
+    [httpConfig, onChange, provider, setErrors, twilioAccountSid],
   );
 
   const handleAgentChange = useCallback(
     (agentConfig: AgentConfig) => {
-      onChange({ ...config, ...agentConfig });
+      const nextConfig = { ...httpConfig, ...agentConfig };
+      onChange(nextConfig);
+      setErrors(validateHttpConfig(nextConfig));
     },
-    [config, onChange],
+    [httpConfig, onChange, setErrors],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
-      onChange({ ...config, ...advancedConfig });
+      const nextConfig = { ...httpConfig, ...advancedConfig };
+      onChange(nextConfig);
+      setErrors(validateHttpConfig(nextConfig));
     },
-    [config, onChange],
+    [httpConfig, onChange, setErrors],
   );
 
   const handleProviderChange = useCallback(
@@ -341,36 +379,16 @@ export function HttpNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
         delete nextConfig.credential_id;
       }
       onChange(nextConfig);
-    },
-    [httpConfig, onChange, provider],
-  );
-
-  useEffect(() => {
-    const newErrors: Record<string, string> = {};
-
-    const urlError = validateUrl(httpConfig.url || "", "URL");
-    if (urlError && httpConfig.url) {
-      newErrors.url = urlError.message;
-    }
-
-    if (httpConfig.body && shouldValidateJsonBody) {
-      const bodyError = validateJson(httpConfig.body, "Body");
-      if (bodyError) {
-        newErrors.body = bodyError.message;
+      setErrors(validateHttpConfig(nextConfig));
+      if (nextProvider === "twilio" && !twilioAccountSid.trim()) {
+        const accountSid = getTwilioAccountSidFromUrl(nextConfig.url);
+        if (accountSid) {
+          dispatchHttpForm({ type: "twilio-account-sid", value: accountSid });
+        }
       }
-    }
-
-    reportErrors(newErrors);
-  }, [httpConfig.url, httpConfig.body, shouldValidateJsonBody, reportErrors]);
-
-  useEffect(() => {
-    if (provider !== "twilio") return;
-    if (twilioAccountSid.trim()) return;
-    const match = (httpConfig.url || "").match(/Accounts\/([^/]+)/i);
-    if (match?.[1]) {
-      dispatchHttpForm({ type: "twilio-account-sid", value: decodeURIComponent(match[1]) });
-    }
-  }, [httpConfig.url, provider, twilioAccountSid]);
+    },
+    [httpConfig, onChange, provider, setErrors, twilioAccountSid],
+  );
 
   const providerDocsUrl = useMemo(() => {
     switch (provider) {
