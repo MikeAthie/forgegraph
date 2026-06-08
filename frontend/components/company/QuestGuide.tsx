@@ -31,7 +31,7 @@ type QuestGuideState = {
   targetRect: RectState | null;
 };
 
-type QuestGuideAction = { type: "reset" } | { type: "next" } | { type: "target"; rect: RectState | null };
+type QuestGuideAction = { type: "next" } | { type: "target"; rect: RectState | null };
 
 const initialQuestGuideState: QuestGuideState = {
   stepIndex: 0,
@@ -40,8 +40,6 @@ const initialQuestGuideState: QuestGuideState = {
 
 function questGuideReducer(state: QuestGuideState, action: QuestGuideAction): QuestGuideState {
   switch (action.type) {
-    case "reset":
-      return initialQuestGuideState;
     case "next":
       return { ...state, stepIndex: state.stepIndex + 1 };
     case "target":
@@ -85,17 +83,19 @@ function getBubblePosition(rect: RectState, placement: QuestGuideStep["placement
 }
 
 export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGuideProps) {
+  if (!active) {
+    return null;
+  }
+
+  return <ActiveQuestGuide title={title} steps={steps} onSkip={onSkip} onComplete={onComplete} />;
+}
+
+function ActiveQuestGuide({ title, steps, onSkip, onComplete }: Omit<QuestGuideProps, "active">) {
   const [{ stepIndex, targetRect }, dispatchGuide] = useReducer(questGuideReducer, initialQuestGuideState);
   const currentStep = steps[stepIndex];
 
   useEffect(() => {
-    if (!active) {
-      dispatchGuide({ type: "reset" });
-    }
-  }, [active]);
-
-  useEffect(() => {
-    if (!active || !currentStep) {
+    if (!currentStep) {
       dispatchGuide({ type: "target", rect: null });
       return;
     }
@@ -124,14 +124,14 @@ export function QuestGuide({ active, title, steps, onSkip, onComplete }: QuestGu
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
-  }, [active, currentStep]);
+  }, [currentStep]);
 
   const bubblePosition = useMemo(
     () => (targetRect && currentStep ? getBubblePosition(targetRect, currentStep.placement) : null),
     [currentStep, targetRect],
   );
 
-  if (!active || !currentStep || !targetRect || !bubblePosition) {
+  if (!currentStep || !targetRect || !bubblePosition) {
     return null;
   }
 

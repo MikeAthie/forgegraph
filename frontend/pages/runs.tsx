@@ -4,16 +4,8 @@ import { useRouter } from "next/router";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  KeyValueGrid,
-  Panel,
-  SectionHeader,
-  SelectionList,
-  StatusBadge,
-  formatDateTime,
-  formatDuration,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, KeyValueGrid, Panel, SectionHeader, SelectionList, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime, formatDuration } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { operationRepository } from "@/domain/repositories";
@@ -82,33 +74,43 @@ export default function RunsPage() {
     () => operations.find((operation) => operation.id === selectedOperationId) ?? operations[0] ?? null,
     [operations, selectedOperationId],
   );
+  const inspector = useMemo(
+    () =>
+      selectedOperation ? (
+        <InspectorPanel
+          title="Operation summary"
+          subtitle="Operations are surfaced here in company language first. Open the detail view for department activity, deliverables, and technical diagnostics."
+          sections={[
+            {
+              title: "Status",
+              content: <StatusBadge status={selectedOperation.status} />,
+            },
+            {
+              title: "Duration",
+              content: formatDuration(selectedOperation.durationMs),
+            },
+            {
+              title: "Started",
+              content: formatDateTime(selectedOperation.startedAt),
+            },
+          ]}
+        />
+      ) : null,
+    [selectedOperation],
+  );
+  const operationHistoryEmptyState = useMemo(
+    () => (
+      <EmptyBlock
+        title="No operation history"
+        description="Once companies start operating, their operations will appear here."
+      />
+    ),
+    [],
+  );
 
   return (
     <ProtectedRoute>
-      <DashboardLayout
-        inspector={
-          selectedOperation ? (
-            <InspectorPanel
-              title="Operation summary"
-              subtitle="Operations are surfaced here in company language first. Open the detail view for department activity, deliverables, and technical diagnostics."
-              sections={[
-                {
-                  title: "Status",
-                  content: <StatusBadge status={selectedOperation.status} />,
-                },
-                {
-                  title: "Duration",
-                  content: formatDuration(selectedOperation.durationMs),
-                },
-                {
-                  title: "Started",
-                  content: formatDateTime(selectedOperation.startedAt),
-                },
-              ]}
-            />
-          ) : null
-        }
-      >
+      <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <SectionHeader
             eyebrow="Operations"
@@ -142,12 +144,7 @@ export default function RunsPage() {
                       shallow: true,
                     });
                   }}
-                  empty={
-                    <EmptyBlock
-                      title="No operation history"
-                      description="Once companies start operating, their operations will appear here."
-                    />
-                  }
+                  empty={operationHistoryEmptyState}
                 >
                   {(operation, { selected }) => (
                     <div className="flex items-start justify-between gap-3">

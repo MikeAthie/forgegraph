@@ -2,33 +2,13 @@ import { useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowRight,
-  Activity,
-  BellRing,
-  BrainCircuit,
-  Database,
-  HandCoins,
-  Siren,
-  TimerReset,
-  Waypoints,
-} from "lucide-react";
+  ArrowRight, Activity, BellRing, BrainCircuit, Database, HandCoins, Siren, TimerReset, Waypoints, } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  KeyValueGrid,
-  MetricCard,
-  Panel,
-  StatusBadge,
-  TimelineList,
-  TrendBar,
-  formatCompactNumber,
-  formatCurrency,
-  formatDateTime,
-  formatDuration,
-  overviewIcons,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, KeyValueGrid, MetricCard, Panel, StatusBadge, TimelineList, TrendBar } from "@/components/os/operations-ui";
+import { formatCompactNumber, formatCurrency, formatDateTime, formatDuration } from "@/components/os/operations-format";
+import { overviewIcons } from "@/components/os/overview-icons";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
@@ -163,12 +143,16 @@ function useOverviewController() {
   const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const organizationId = user?.default_organization_id ?? null;
-  const overviewQuery = useQuery({
+  const {
+    data: overviewData,
+    isLoading: loading,
+    error: overviewError,
+  } = useQuery({
     queryKey: ["overview", organizationId ?? "current"],
     queryFn: overviewRepository.get,
     enabled: isAuthenticated,
   });
-  const overview = overviewQuery.data ?? null;
+  const overview = overviewData ?? null;
   const effectiveOrganizationId = overview?.organization.id ?? organizationId;
   const invalidateOverview = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["overview"] });
@@ -192,8 +176,7 @@ function useOverviewController() {
     onFullResync: invalidateOverview,
   });
 
-  const loading = overviewQuery.isLoading;
-  const error = overviewQuery.error ? translateProductError(overviewQuery.error, "operation") : null;
+  const error = overviewError ? translateProductError(overviewError, "operation") : null;
 
   const derived = useMemo<OverviewDerivedState | null>(() => {
     if (!overview) {
@@ -942,10 +925,14 @@ function CostMetricCard({ label, value, detail }: { label: string; value: string
 
 export default function OverviewPage() {
   const controller = useOverviewController();
+  const inspector = useMemo(
+    () => <OverviewInspector overview={controller.overview} derived={controller.derived} />,
+    [controller.derived, controller.overview],
+  );
 
   return (
     <ProtectedRoute>
-      <DashboardLayout inspector={<OverviewInspector overview={controller.overview} derived={controller.derived} />}>
+      <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <CommandOpsPanel controller={controller} />
           {controller.error ? (

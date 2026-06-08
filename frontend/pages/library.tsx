@@ -4,14 +4,8 @@ import { useRouter } from "next/router";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  Panel,
-  SectionHeader,
-  SelectionList,
-  StatusBadge,
-  formatDateTime,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, Panel, SectionHeader, SelectionList, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { getApiErrorMessage, promptsApi, type PromptDetail, type PromptListItem } from "@/lib/api";
@@ -247,35 +241,43 @@ export default function LibraryPage() {
     [prompts],
   );
 
-  const inspector = selectedPrompt ? (
-    <InspectorPanel
-      title="Visibility controls"
-      subtitle="Privacy should behave like a governed developer tool. Public and private are available now; organization scope is the next control to land."
-      sections={[
-        {
-          title: "Current visibility",
-          content: (
-            <StatusBadge
-              status={selectedPrompt.visibility === "public" ? "active" : "pending"}
-              label={selectedPrompt.visibility}
-            />
-          ),
-        },
-        {
-          title: "Owner",
-          content: selectedPrompt.owner_id ?? "ForgeGraph built-in",
-        },
-        {
-          title: "Version",
-          content: selectedPrompt.version,
-        },
-        {
-          title: "Organization scope",
-          content: "Planned next: internal repository visibility and team-level ownership.",
-        },
-      ]}
-    />
-  ) : null;
+  const inspector = useMemo(
+    () =>
+      selectedPrompt ? (
+        <InspectorPanel
+          title="Visibility controls"
+          subtitle="Privacy should behave like a governed developer tool. Public and private are available now; organization scope is the next control to land."
+          sections={[
+            {
+              title: "Current visibility",
+              content: (
+                <StatusBadge
+                  status={selectedPrompt.visibility === "public" ? "active" : "pending"}
+                  label={selectedPrompt.visibility}
+                />
+              ),
+            },
+            {
+              title: "Owner",
+              content: selectedPrompt.owner_id ?? "ForgeGraph built-in",
+            },
+            {
+              title: "Version",
+              content: selectedPrompt.version,
+            },
+            {
+              title: "Organization scope",
+              content: "Planned next: internal repository visibility and team-level ownership.",
+            },
+          ]}
+        />
+      ) : null,
+    [selectedPrompt],
+  );
+  const promptListEmptyState = useMemo(
+    () => <EmptyBlock title="Marketplace is empty" description="Create or import prompts to populate this workspace." />,
+    [],
+  );
 
   const handleDuplicate = async () => {
     if (!selectedPrompt) {
@@ -367,12 +369,7 @@ export default function LibraryPage() {
                       shallow: true,
                     });
                   }}
-                  empty={
-                    <EmptyBlock
-                      title="Marketplace is empty"
-                      description="Create or import prompts to populate this workspace."
-                    />
-                  }
+                  empty={promptListEmptyState}
                 >
                   {(prompt, { selected }) => (
                     <div className="flex items-start justify-between gap-3">

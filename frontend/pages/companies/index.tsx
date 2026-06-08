@@ -6,14 +6,8 @@ import { ArrowRight, Building2, Plus } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  Panel,
-  SectionHeader,
-  StatusBadge,
-  formatCompactNumber,
-  formatDateTime,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
+import { formatCompactNumber, formatDateTime } from "@/components/os/operations-format";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { companyRepository, portfolioRepository } from "@/domain/repositories";
 import type { PortfolioHomeVM } from "@/domain/repositories/portfolioRepository";
@@ -22,6 +16,27 @@ import { translateProductError } from "@/domain/errors";
 import { cn } from "@/lib/utils";
 
 type CompanyFilter = "all" | "operating" | "attention";
+
+const PORTFOLIO_QUEUE_ORDER = ["reviews", "approvals", "metric_gaps", "credentials", "tasks"] as const;
+
+const COMPANY_PORTFOLIO_INSPECTOR = (
+  <InspectorPanel
+    title="Company Portfolio"
+    subtitle="Use this view to decide where attention should go next across the companies in this organization."
+    sections={[
+      {
+        title: "Read the posture",
+        content:
+          "The three summary cards filter the list. Start with companies that need attention, then check work currently operating.",
+      },
+      {
+        title: "Pick the next move",
+        content:
+          "Open a company when you need the operation history, latest deliverable, departments, or controls to launch another operation.",
+      },
+    ]}
+  />
+);
 
 const isCompanyFilter = (value: unknown): value is CompanyFilter =>
   value === "all" || value === "operating" || value === "attention";
@@ -222,9 +237,8 @@ function CompanyWorkspacePanel({
 }
 
 function PortfolioQueuesPanel({ portfolioHome }: { portfolioHome: PortfolioHomeVM | null }) {
-  const queueOrder = ["reviews", "approvals", "metric_gaps", "credentials", "tasks"];
   const counts = portfolioHome?.queues.counts ?? {};
-  const attentionRows = queueOrder
+  const attentionRows = PORTFOLIO_QUEUE_ORDER
     .flatMap((queueName) => portfolioHome?.queues.queues[queueName]?.slice(0, 3) ?? [])
     .slice(0, 8);
 
@@ -235,7 +249,7 @@ function PortfolioQueuesPanel({ portfolioHome }: { portfolioHome: PortfolioHomeV
   return (
     <Panel title="Cross-company queues" description="Company-filtered work that needs operator attention.">
       <div className="grid gap-3 md:grid-cols-5">
-        {queueOrder.map((queueName) => (
+        {PORTFOLIO_QUEUE_ORDER.map((queueName) => (
           <div
             key={queueName}
             className="rounded-[1.1rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
@@ -412,26 +426,7 @@ export default function CompaniesIndexPage() {
 
   return (
     <ProtectedRoute>
-      <DashboardLayout
-        inspector={
-          <InspectorPanel
-            title="Company Portfolio"
-            subtitle="Use this view to decide where attention should go next across the companies in this organization."
-            sections={[
-              {
-                title: "Read the posture",
-                content:
-                  "The three summary cards filter the list. Start with companies that need attention, then check work currently operating.",
-              },
-              {
-                title: "Pick the next move",
-                content:
-                  "Open a company when you need the operation history, latest deliverable, departments, or controls to launch another operation.",
-              },
-            ]}
-          />
-        }
-      >
+      <DashboardLayout inspector={COMPANY_PORTFOLIO_INSPECTOR}>
         <div className="space-y-6">
           <SectionHeader
             eyebrow="Companies"

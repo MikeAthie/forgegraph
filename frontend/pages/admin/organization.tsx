@@ -221,6 +221,205 @@ function OrganizationPageHeader() {
   );
 }
 
+function OrganizationPageContent({
+  canManageMembers,
+  error,
+  formState,
+  governance,
+  isSubmitting,
+  loading,
+  memberError,
+  members,
+  membersLoading,
+  organization,
+  role,
+  updatingMemberId,
+  userRole,
+  onAddMember,
+  onFormStateChange,
+  onRefreshMembers,
+  onRemoveMember,
+  onRoleChange,
+}: {
+  canManageMembers: boolean;
+  error: string | null;
+  formState: OrganizationFormState;
+  governance: OrganizationGovernanceState | null;
+  isSubmitting: boolean;
+  loading: boolean;
+  memberError: string | null;
+  members: OrganizationMember[];
+  membersLoading: boolean;
+  organization: Organization | null;
+  role: OrganizationMember["role"] | null;
+  updatingMemberId: string | null;
+  userRole: OrganizationMember["role"] | null | undefined;
+  onAddMember: (event: FormEvent<HTMLFormElement>) => void;
+  onFormStateChange: (value: SetStateAction<OrganizationFormState>) => void;
+  onRefreshMembers: () => void;
+  onRemoveMember: (member: OrganizationMember) => void;
+  onRoleChange: (member: OrganizationMember, newRole: OrganizationMember["role"]) => void;
+}) {
+  return (
+    <ProtectedRoute>
+      <DashboardLayout>
+        <div className="flex flex-col gap-6">
+          <OrganizationPageHeader />
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {loading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Spinner className="size-5" />
+              Loading workspace access…
+            </div>
+          ) : organization ? (
+            <OrganizationOverviewGrid
+              organization={organization}
+              role={role}
+              userRole={userRole}
+              governance={governance}
+            />
+          ) : null}
+
+          {governance ? <MemoryGovernanceAlert /> : null}
+
+          <Card className="border-border/60 bg-card/60 backdrop-blur-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Members</CardTitle>
+              <Button variant="outline" size="sm" onClick={onRefreshMembers} disabled={!canManageMembers}>
+                Refresh
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {!canManageMembers && (
+                <Alert>
+                  <AlertDescription>You have read-only access. Ask an admin to manage members.</AlertDescription>
+                </Alert>
+              )}
+
+              {canManageMembers && (
+                <form onSubmit={onAddMember} className="grid gap-4 md:grid-cols-[1.4fr_1fr_auto]">
+                  <FormField label="Member email" htmlFor="member-email">
+                    <Input
+                      id="member-email"
+                      type="email"
+                      value={formState.email}
+                      onChange={(event) => onFormStateChange((prev) => ({ ...prev, email: event.target.value }))}
+                      placeholder="teammate@company.com"
+                      required
+                    />
+                  </FormField>
+                  <FormField label="Role" htmlFor="member-role">
+                    <Select
+                      value={formState.role}
+                      onValueChange={(value) =>
+                        onFormStateChange((prev) => ({
+                          ...prev,
+                          role: value as OrganizationMember["role"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="member-role">
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROLE_OPTIONS.map((roleOption) => (
+                          <SelectItem key={roleOption.value} value={roleOption.value}>
+                            {roleOption.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <div className="flex items-end">
+                    <Button type="submit" disabled={isSubmitting || !formState.email.trim()}>
+                      {isSubmitting ? (
+                        <>
+                          <Spinner size="xs" className="mr-2" />
+                          Adding…
+                        </>
+                      ) : (
+                        "Add member"
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {memberError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{memberError}</AlertDescription>
+                </Alert>
+              )}
+
+              {canManageMembers ? (
+                membersLoading ? (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Spinner className="size-5" />
+                    Loading members…
+                  </div>
+                ) : members.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No members found.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {members.map((member) => (
+                      <div
+                        key={member.user_id}
+                        className="flex flex-col gap-3 rounded-lg border border-border/60 bg-background/60 p-4 md:flex-row md:items-center md:justify-between"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium">{member.email}</p>
+                            {member.is_default && <Badge variant="outline">Default</Badge>}
+                          </div>
+                          <p className="text-xs text-muted-foreground">Joined {formatDateTime(member.joined_at)}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Select
+                            value={member.role}
+                            onValueChange={(value) => onRoleChange(member, value as OrganizationMember["role"])}
+                            disabled={updatingMemberId === member.user_id}
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue placeholder="Role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ROLE_OPTIONS.map((roleOption) => (
+                                <SelectItem key={roleOption.value} value={roleOption.value}>
+                                  {roleOption.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <ConfirmButton
+                            variant="destructive"
+                            size="sm"
+                            title={`Remove ${member.email}?`}
+                            description="This member will lose access to the workspace."
+                            onConfirm={() => onRemoveMember(member)}
+                            disabled={updatingMemberId === member.user_id}
+                          >
+                            Remove
+                          </ConfirmButton>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+}
+
 export default function OrganizationPage() {
   const { user } = useAuth();
   const [pageState, dispatchPageState] = useReducer(organizationPageReducer, initialOrganizationPageState);
@@ -388,161 +587,25 @@ export default function OrganizationPage() {
   };
 
   return (
-    <ProtectedRoute>
-      <DashboardLayout>
-        <div className="flex flex-col gap-6">
-          <OrganizationPageHeader />
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {loading ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Spinner className="size-5" />
-              Loading workspace access…
-            </div>
-          ) : organization ? (
-            <OrganizationOverviewGrid
-              organization={organization}
-              role={role}
-              userRole={user?.organization_role}
-              governance={governance}
-            />
-          ) : null}
-
-          {governance ? <MemoryGovernanceAlert /> : null}
-
-          <Card className="border-border/60 bg-card/60 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Members</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => void loadMembers()} disabled={!canManageMembers}>
-                Refresh
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {!canManageMembers && (
-                <Alert>
-                  <AlertDescription>You have read-only access. Ask an admin to manage members.</AlertDescription>
-                </Alert>
-              )}
-
-              {canManageMembers && (
-                <form onSubmit={handleAddMember} className="grid gap-4 md:grid-cols-[1.4fr_1fr_auto]">
-                  <FormField label="Member email" htmlFor="member-email">
-                    <Input
-                      id="member-email"
-                      type="email"
-                      value={formState.email}
-                      onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
-                      placeholder="teammate@company.com"
-                      required
-                    />
-                  </FormField>
-                  <FormField label="Role" htmlFor="member-role">
-                    <Select
-                      value={formState.role}
-                      onValueChange={(value) =>
-                        setFormState((prev) => ({
-                          ...prev,
-                          role: value as OrganizationMember["role"],
-                        }))
-                      }
-                    >
-                      <SelectTrigger id="member-role">
-                        <SelectValue placeholder="Select role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ROLE_OPTIONS.map((roleOption) => (
-                          <SelectItem key={roleOption.value} value={roleOption.value}>
-                            {roleOption.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormField>
-                  <div className="flex items-end">
-                    <Button type="submit" disabled={isSubmitting || !formState.email.trim()}>
-                      {isSubmitting ? (
-                        <>
-                          <Spinner size="xs" className="mr-2" />
-                          Adding…
-                        </>
-                      ) : (
-                        "Add member"
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {memberError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{memberError}</AlertDescription>
-                </Alert>
-              )}
-
-              {canManageMembers ? (
-                membersLoading ? (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Spinner className="size-5" />
-                    Loading members…
-                  </div>
-                ) : members.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No members found.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {members.map((member) => (
-                      <div
-                        key={member.user_id}
-                        className="flex flex-col gap-3 rounded-lg border border-border/60 bg-background/60 p-4 md:flex-row md:items-center md:justify-between"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium">{member.email}</p>
-                            {member.is_default && <Badge variant="outline">Default</Badge>}
-                          </div>
-                          <p className="text-xs text-muted-foreground">Joined {formatDateTime(member.joined_at)}</p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Select
-                            value={member.role}
-                            onValueChange={(value) => handleRoleChange(member, value as OrganizationMember["role"])}
-                            disabled={updatingMemberId === member.user_id}
-                          >
-                            <SelectTrigger className="w-[140px]">
-                              <SelectValue placeholder="Role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ROLE_OPTIONS.map((roleOption) => (
-                                <SelectItem key={roleOption.value} value={roleOption.value}>
-                                  {roleOption.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <ConfirmButton
-                            variant="destructive"
-                            size="sm"
-                            title={`Remove ${member.email}?`}
-                            description="This member will lose access to the workspace."
-                            onConfirm={() => handleRemove(member)}
-                            disabled={updatingMemberId === member.user_id}
-                          >
-                            Remove
-                          </ConfirmButton>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              ) : null}
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    </ProtectedRoute>
+    <OrganizationPageContent
+      canManageMembers={canManageMembers}
+      error={error}
+      formState={formState}
+      governance={governance}
+      isSubmitting={isSubmitting}
+      loading={loading}
+      memberError={memberError}
+      members={members}
+      membersLoading={membersLoading}
+      organization={organization}
+      role={role}
+      updatingMemberId={updatingMemberId}
+      userRole={user?.organization_role}
+      onAddMember={handleAddMember}
+      onFormStateChange={setFormState}
+      onRefreshMembers={() => void loadMembers()}
+      onRemoveMember={handleRemove}
+      onRoleChange={handleRoleChange}
+    />
   );
 }

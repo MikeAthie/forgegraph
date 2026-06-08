@@ -1,19 +1,18 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  selectObservationSourceMode,
+  updateObservationSourceMode,
+  updateObservationSourceValue,
+  type ObservationScope,
+  type ObservationSourceKeys,
+  type ObservationSourceMode,
+} from "./observation-form-helpers";
 
-export type ObservationScope = "graph" | "run" | "session";
-export type ObservationSourceMode = "value" | "path" | "template";
-
-export interface ObservationSourceKeys {
-  value: string;
-  path?: string;
-  template?: string;
-}
+export type { ObservationScope, ObservationSourceKeys, ObservationSourceMode } from "./observation-form-helpers";
 
 export interface ObservationSourceFieldProps {
   label: string;
@@ -61,140 +60,6 @@ const OBSERVATION_SCOPE_OPTIONS: Array<{
     description: "Reuse within the active session only.",
   },
 ];
-
-function hasValue(value: unknown): boolean {
-  if (value == null) {
-    return false;
-  }
-  if (typeof value === "string") {
-    return value.trim().length > 0;
-  }
-  return true;
-}
-
-function selectObservationSourceMode(
-  config: Record<string, unknown>,
-  keys: ObservationSourceKeys,
-): ObservationSourceMode {
-  if (keys.path && Object.prototype.hasOwnProperty.call(config, keys.path)) {
-    return "path";
-  }
-  if (keys.template && Object.prototype.hasOwnProperty.call(config, keys.template)) {
-    return "template";
-  }
-  if (Object.prototype.hasOwnProperty.call(config, keys.value)) {
-    return "value";
-  }
-  return "value";
-}
-
-function updateObservationSourceMode(
-  config: Record<string, unknown>,
-  keys: ObservationSourceKeys,
-  mode: ObservationSourceMode,
-): Record<string, unknown> {
-  const next = { ...config };
-  const activeKey = mode === "path" ? keys.path : mode === "template" ? keys.template : keys.value;
-
-  for (const key of [keys.value, keys.path, keys.template]) {
-    if (!key || key === activeKey) {
-      continue;
-    }
-    delete next[key];
-  }
-
-  if (activeKey && !Object.prototype.hasOwnProperty.call(next, activeKey)) {
-    next[activeKey] = "";
-  }
-
-  return next;
-}
-
-function updateObservationSourceValue(
-  config: Record<string, unknown>,
-  keys: ObservationSourceKeys,
-  mode: ObservationSourceMode,
-  rawValue: string,
-): Record<string, unknown> {
-  const next = updateObservationSourceMode(config, keys, mode);
-  const targetKey = mode === "path" ? keys.path : mode === "template" ? keys.template : keys.value;
-
-  if (!targetKey) {
-    return next;
-  }
-
-  if (rawValue.trim().length === 0) {
-    if (mode === "value") {
-      delete next[targetKey];
-    } else {
-      next[targetKey] = "";
-    }
-    return next;
-  }
-
-  next[targetKey] = rawValue;
-  return next;
-}
-
-export function updateObservationNumberField(
-  config: Record<string, unknown>,
-  field: string,
-  rawValue: string,
-): Record<string, unknown> {
-  const next = { ...config };
-  if (!rawValue.trim()) {
-    delete next[field];
-    return next;
-  }
-
-  const parsed = Number.parseInt(rawValue, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return next;
-  }
-
-  next[field] = parsed;
-  return next;
-}
-
-export function validateObservationSource(
-  config: Record<string, unknown>,
-  field: string,
-  keys: ObservationSourceKeys,
-  options: {
-    required: boolean;
-  },
-): string | undefined {
-  const populatedFields = [keys.value, keys.path, keys.template].filter((key): key is string =>
-    Boolean(key && hasValue(config[key])),
-  );
-
-  if (populatedFields.length > 1) {
-    return `Choose a single source for ${field}.`;
-  }
-  if (options.required && populatedFields.length === 0) {
-    return `${field} requires one configured source.`;
-  }
-  return undefined;
-}
-
-export function useObservationErrors(
-  errors: Record<string, string>,
-  setErrors: (errors: Record<string, string>) => void,
-  computedErrors: Record<string, string | undefined>,
-): void {
-  const serializedErrors = useMemo(
-    () => JSON.stringify(Object.fromEntries(Object.entries(computedErrors).filter(([, value]) => Boolean(value)))),
-    [computedErrors],
-  );
-
-  useEffect(() => {
-    const nextErrors = JSON.parse(serializedErrors) as Record<string, string>;
-    if (JSON.stringify(errors) === serializedErrors) {
-      return;
-    }
-    setErrors(nextErrors);
-  }, [errors, serializedErrors, setErrors]);
-}
 
 export function ObservationScopeField({
   value,

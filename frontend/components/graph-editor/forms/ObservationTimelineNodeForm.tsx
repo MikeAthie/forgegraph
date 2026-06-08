@@ -1,33 +1,39 @@
 "use client";
 
+import { useCallback } from "react";
+
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import type { NodeFormProps } from "../NodeConfigDialog";
-import {
-  ObservationScopeField,
-  ObservationSourceField,
-  updateObservationNumberField,
-  useObservationErrors,
-  validateObservationSource,
-} from "./observation-form-utils";
+import { compactObservationErrors, updateObservationNumberField, validateObservationSource } from "./observation-form-helpers";
+import { ObservationScopeField, ObservationSourceField } from "./observation-form-utils";
 
 export function ObservationTimelineNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const timelineConfig = config as Record<string, unknown>;
 
-  const computedErrors = {
-    scope:
-      typeof timelineConfig.scope === "string" && timelineConfig.scope.trim().length > 0
-        ? undefined
-        : "Scope is required.",
-    agent_id: validateObservationSource(
-      timelineConfig,
-      "agent filter",
-      { value: "agent_id", path: "agent_id_path" },
-      { required: false },
-    ),
-  };
-
-  useObservationErrors(errors, setErrors, computedErrors);
+  const validateConfig = useCallback(
+    (nextConfig: Record<string, unknown>) =>
+      compactObservationErrors({
+        scope:
+          typeof nextConfig.scope === "string" && nextConfig.scope.trim().length > 0
+            ? undefined
+            : "Scope is required.",
+        agent_id: validateObservationSource(
+          nextConfig,
+          "agent filter",
+          { value: "agent_id", path: "agent_id_path" },
+          { required: false },
+        ),
+      }),
+    [],
+  );
+  const updateConfig = useCallback(
+    (nextConfig: Record<string, unknown>) => {
+      onChange(nextConfig);
+      setErrors(validateConfig(nextConfig));
+    },
+    [onChange, setErrors, validateConfig],
+  );
 
   return (
     <div className="space-y-6">
@@ -40,7 +46,7 @@ export function ObservationTimelineNodeForm({ config, onChange, errors, setError
 
       <ObservationScopeField
         value={typeof timelineConfig.scope === "string" ? timelineConfig.scope : undefined}
-        onChange={(scope) => onChange({ ...timelineConfig, scope })}
+        onChange={(scope) => updateConfig({ ...timelineConfig, scope })}
       />
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -52,7 +58,7 @@ export function ObservationTimelineNodeForm({ config, onChange, errors, setError
           config={timelineConfig}
           keys={{ value: "agent_id", path: "agent_id_path" }}
           errors={errors}
-          onChange={onChange}
+          onChange={updateConfig}
         />
 
         <FormField
@@ -65,7 +71,9 @@ export function ObservationTimelineNodeForm({ config, onChange, errors, setError
             type="number"
             min={1}
             value={String(timelineConfig.limit ?? "")}
-            onChange={(event) => onChange(updateObservationNumberField(timelineConfig, "limit", event.target.value))}
+            onChange={(event) =>
+              updateConfig(updateObservationNumberField(timelineConfig, "limit", event.target.value))
+            }
             placeholder="10"
             className="text-sm"
           />
@@ -82,7 +90,7 @@ export function ObservationTimelineNodeForm({ config, onChange, errors, setError
           type="checkbox"
           checked={Boolean(timelineConfig.include_deleted)}
           onChange={(event) =>
-            onChange({
+            updateConfig({
               ...timelineConfig,
               include_deleted: event.target.checked,
             })

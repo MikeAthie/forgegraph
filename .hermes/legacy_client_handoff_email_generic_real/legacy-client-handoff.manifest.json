@@ -1,0 +1,372 @@
+{
+  "deferred_formats": [
+    "pdf_report",
+    "email_handoff"
+  ],
+  "outputs": [
+    {
+      "asset_id": "7cd3b9d2-d671-4b92-a779-32dadbfa783d",
+      "asset_version_id": "aa1d2d85-980e-4d5b-b333-24e71df226ff",
+      "bytes_sha256": "0e12044469675b27ca3b39e5ab201be3badd133f6da863a8653c4e8775b806a5",
+      "filename": "legacy-client-handoff.md",
+      "format": "markdown_report",
+      "mime_type": "text/markdown",
+      "renderer": {
+        "name": "markdown_report",
+        "version": "1"
+      }
+    }
+  ],
+  "profile": {
+    "profile_ref": "format_profile:legacy.client_handoff@1",
+    "profile_sha256": "014cb93b707ca9f2054cf4dca6cb7f13e1f8463d5344def76c0494505c4fb789"
+  },
+  "quality": {
+    "blocked_reasons": [],
+    "checks": [
+      {
+        "evidence": [],
+        "id": "no_placeholders",
+        "message": "No unresolved placeholder or template tokens detected.",
+        "severity": "none",
+        "status": "passed"
+      },
+      {
+        "evidence": [],
+        "id": "no_ai_meta_language",
+        "message": "No AI/meta or forbidden language detected.",
+        "severity": "none",
+        "status": "passed"
+      },
+      {
+        "evidence": [],
+        "id": "required_sections",
+        "message": "All required sections are present.",
+        "severity": "none",
+        "status": "passed"
+      },
+      {
+        "evidence": [],
+        "id": "naming_consistency",
+        "message": "Configured client/provider naming is consistent.",
+        "severity": "none",
+        "status": "passed"
+      },
+      {
+        "evidence": [
+          "evidence",
+          "recommendations"
+        ],
+        "id": "evidence_recommendation_separation",
+        "message": "Evidence/facts and recommendations are separated.",
+        "severity": "none",
+        "status": "passed"
+      },
+      {
+        "evidence": [],
+        "id": "connector_caveats",
+        "message": "No unverified connector source requires a caveat.",
+        "severity": "none",
+        "status": "passed"
+      },
+      {
+        "evidence": [],
+        "id": "approval_language",
+        "message": "Approval language is present.",
+        "severity": "none",
+        "status": "passed"
+      }
+    ],
+    "gate_result_id": "qgr_112d05cede4962279db42665",
+    "gate_set": "client_handoff@1",
+    "status": "passed",
+    "warnings": []
+  },
+  "request": {
+    "idempotency_key": "legacy-client-handoff:d3dc8dbd-9eb4-4361-a24d-7d1006e57cf9:v1",
+    "request_id": "legacy-client-handoff:d3dc8dbd-9eb4-4361-a24d-7d1006e57cf9"
+  },
+  "schema_version": "deliverable_format_manifest.v1",
+  "sources": [
+    {
+      "asset_version_id": "4ad18486-de50-4b65-a33a-e7cfaa8138b9",
+      "content_hash": "6866b4d8cb65b283ba19b8d109881fa0e086bc9ad0bd3676834472c7f30d07f7",
+      "metadata": {
+        "asset_version_id": "4ad18486-de50-4b65-a33a-e7cfaa8138b9",
+        "codex_session": {
+          "command_summary": "codex exec <prompt>",
+          "duration_ms": 135062,
+          "exit_code": 0,
+          "local_operator_runtime": true,
+          "status": "succeeded"
+        },
+        "department_pipeline": {
+          "created_via_department_pipeline": true,
+          "department_id": "243fc93c-57a9-4e0e-88dd-f133e571d885",
+          "department_slug": "strategy_research",
+          "output_kind": "codex_strategy_brief",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "stage_id": "strategy_research",
+          "stage_state_id": "b0ccc8be-f919-4c24-b6b0-560bb2a61ea0"
+        },
+        "source": "codex_session_runtime",
+        "task_routing": {
+          "created_via": "company_run_task_routing",
+          "department_id": "243fc93c-57a9-4e0e-88dd-f133e571d885",
+          "department_slug": "strategy_research",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "routing_idempotency_key": "company-program:6f0c1926-c222-40d2-8b54-3c797c16668e:stage:strategy_research:task-routing",
+          "routing_record_id": "8693e404-f195-4fc1-bc99-5298b42431ea",
+          "runtime_provider": "codex_session_runtime",
+          "stage_id": "strategy_research",
+          "stage_label": "Strategy & Research",
+          "stage_state_id": "b0ccc8be-f919-4c24-b6b0-560bb2a61ea0",
+          "task_status": "completed"
+        }
+      },
+      "service_deliverable_id": "61b22b98-5e25-4c4f-95a2-40ed632c5bc9",
+      "source_role": "codex_strategy_brief",
+      "title": "Legacy Codex Strategy Brief"
+    },
+    {
+      "asset_version_id": "d99f02b2-f9f5-4aff-84a0-f8c97dfe3a63",
+      "content_hash": "21f1907a8886cac61aea10232852a08ab3674dbd432f76299560b324b0607a02",
+      "metadata": {
+        "asset_version_id": "d99f02b2-f9f5-4aff-84a0-f8c97dfe3a63",
+        "codex_session": {
+          "command_summary": "codex exec <prompt>",
+          "duration_ms": 55500,
+          "exit_code": 0,
+          "local_operator_runtime": true,
+          "status": "succeeded"
+        },
+        "department_pipeline": {
+          "created_via_department_pipeline": true,
+          "department_id": "c68e9bf0-0090-4970-b623-a932ea53d268",
+          "department_slug": "brand_content",
+          "output_kind": "codex_brand_content_pack",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "stage_id": "brand_content",
+          "stage_state_id": "26b86d38-9697-4f02-9011-84738f414219"
+        },
+        "source": "codex_session_runtime",
+        "task_routing": {
+          "created_via": "company_run_task_routing",
+          "department_id": "c68e9bf0-0090-4970-b623-a932ea53d268",
+          "department_slug": "brand_content",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "routing_idempotency_key": "company-program:6f0c1926-c222-40d2-8b54-3c797c16668e:stage:brand_content:task-routing",
+          "routing_record_id": "6fa2696b-a258-4e58-ac34-5c8d89046cdf",
+          "runtime_provider": "codex_session_runtime",
+          "stage_id": "brand_content",
+          "stage_label": "Brand & Content",
+          "stage_state_id": "26b86d38-9697-4f02-9011-84738f414219",
+          "task_status": "completed"
+        }
+      },
+      "service_deliverable_id": "33661306-d4ce-4457-a97a-b6a5a121d8c9",
+      "source_role": "codex_brand_content_pack",
+      "title": "Legacy Codex Brand Content Pack"
+    },
+    {
+      "asset_version_id": "1c41bc11-cafd-4e4f-9c3a-e63ff52ce0ea",
+      "content_hash": "454ec5fa22b44398eacf116a5778ec49744a0e79e9d7ce9cec7914973a25448a",
+      "metadata": {
+        "asset_version_id": "1c41bc11-cafd-4e4f-9c3a-e63ff52ce0ea",
+        "codex_session": {
+          "command_summary": "codex exec <prompt>",
+          "duration_ms": 62157,
+          "exit_code": 0,
+          "local_operator_runtime": true,
+          "status": "succeeded"
+        },
+        "department_pipeline": {
+          "created_via_department_pipeline": true,
+          "department_id": "90627a3c-b0d7-45d8-ba99-bfad66bda4bc",
+          "department_slug": "crm_lifecycle",
+          "output_kind": "codex_crm_response_scripts",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "stage_id": "crm_lifecycle",
+          "stage_state_id": "2d72c65d-e08b-466c-9d18-4370bb400dda"
+        },
+        "source": "codex_session_runtime",
+        "task_routing": {
+          "created_via": "company_run_task_routing",
+          "department_id": "90627a3c-b0d7-45d8-ba99-bfad66bda4bc",
+          "department_slug": "crm_lifecycle",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "routing_idempotency_key": "company-program:6f0c1926-c222-40d2-8b54-3c797c16668e:stage:crm_lifecycle:task-routing",
+          "routing_record_id": "a5d355fb-3ce1-4e7d-ad13-2c92f4dc8e7b",
+          "runtime_provider": "codex_session_runtime",
+          "stage_id": "crm_lifecycle",
+          "stage_label": "CRM & Lifecycle",
+          "stage_state_id": "2d72c65d-e08b-466c-9d18-4370bb400dda",
+          "task_status": "completed"
+        }
+      },
+      "service_deliverable_id": "fd0a2640-2ce3-4e13-b75f-61d9d727ac9e",
+      "source_role": "codex_crm_response_scripts",
+      "title": "Legacy Codex CRM / WhatsApp Scripts"
+    },
+    {
+      "asset_version_id": "323b21b1-d1a9-425d-8ee8-f4e52206b373",
+      "content_hash": "c8a7f921fda722c807714c8b3df1b108be0f7b5568748836a3ffc2a3a1889586",
+      "metadata": {
+        "asset_version_id": "323b21b1-d1a9-425d-8ee8-f4e52206b373",
+        "codex_session": {
+          "command_summary": "codex exec <prompt>",
+          "duration_ms": 59047,
+          "exit_code": 0,
+          "local_operator_runtime": true,
+          "status": "succeeded"
+        },
+        "department_pipeline": {
+          "created_via_department_pipeline": true,
+          "department_id": "6c4cc0e2-b064-4b1a-a143-97fa9c1735be",
+          "department_slug": "analytics_performance",
+          "output_kind": "codex_measurement_plan",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "stage_id": "analytics_performance",
+          "stage_state_id": "0167d58c-0dba-4718-ab8b-ffb42b20fc79"
+        },
+        "source": "codex_session_runtime",
+        "task_routing": {
+          "created_via": "company_run_task_routing",
+          "department_id": "6c4cc0e2-b064-4b1a-a143-97fa9c1735be",
+          "department_slug": "analytics_performance",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "routing_idempotency_key": "company-program:6f0c1926-c222-40d2-8b54-3c797c16668e:stage:analytics_performance:task-routing",
+          "routing_record_id": "74916c79-48e2-4589-908f-d52ec0c59173",
+          "runtime_provider": "codex_session_runtime",
+          "stage_id": "analytics_performance",
+          "stage_label": "Analytics & Performance",
+          "stage_state_id": "0167d58c-0dba-4718-ab8b-ffb42b20fc79",
+          "task_status": "completed"
+        }
+      },
+      "service_deliverable_id": "ebf9f9f6-2cc2-4447-b3fc-e7f1cc2e72e7",
+      "source_role": "codex_measurement_plan",
+      "title": "Legacy Codex Measurement Plan"
+    },
+    {
+      "asset_version_id": "ff99d22b-5952-4adb-ab6f-3cf24cea6b17",
+      "content_hash": "cece08057e38f2f6b12a00ccf95bfadb74fa2adefec05871ae0e31e9b0d15b8b",
+      "metadata": {
+        "asset_version_id": "ff99d22b-5952-4adb-ab6f-3cf24cea6b17",
+        "codex_session": {
+          "command_summary": "codex exec <prompt>",
+          "duration_ms": 61436,
+          "exit_code": 0,
+          "local_operator_runtime": true,
+          "status": "succeeded"
+        },
+        "department_pipeline": {
+          "created_via_department_pipeline": true,
+          "department_id": "5a62c514-2bed-4306-a7b6-6f0287841fbb",
+          "department_slug": "channel_execution",
+          "output_kind": "codex_channel_execution_calendar",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "stage_id": "channel_execution",
+          "stage_state_id": "1c2a5e55-4fb6-428e-8f83-5d7be7885e3b"
+        },
+        "source": "codex_session_runtime",
+        "task_routing": {
+          "created_via": "company_run_task_routing",
+          "department_id": "5a62c514-2bed-4306-a7b6-6f0287841fbb",
+          "department_slug": "channel_execution",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "routing_idempotency_key": "company-program:6f0c1926-c222-40d2-8b54-3c797c16668e:stage:channel_execution:task-routing",
+          "routing_record_id": "b5224f8c-5097-4ea5-8fa6-75646b31fa33",
+          "runtime_provider": "codex_session_runtime",
+          "stage_id": "channel_execution",
+          "stage_label": "Channel Execution",
+          "stage_state_id": "1c2a5e55-4fb6-428e-8f83-5d7be7885e3b",
+          "task_status": "completed"
+        }
+      },
+      "service_deliverable_id": "dbaf22ba-2daf-4de5-805e-246797382bd5",
+      "source_role": "codex_channel_execution_calendar",
+      "title": "Legacy Codex Channel Execution Calendar"
+    },
+    {
+      "asset_version_id": "13d0a545-7356-42a3-be52-be39e431ca73",
+      "content_hash": "588fb696b79939f22d8edc48d69668b366ec2616eaf56066df856fb355be553b",
+      "metadata": {
+        "asset_version_id": "13d0a545-7356-42a3-be52-be39e431ca73",
+        "codex_session": {
+          "command_summary": "codex exec <prompt>",
+          "duration_ms": 49109,
+          "exit_code": 0,
+          "local_operator_runtime": true,
+          "status": "succeeded"
+        },
+        "department_pipeline": {
+          "created_via_department_pipeline": true,
+          "department_id": "4fe64cd0-5d82-4ec7-b87a-dfc4e729d10e",
+          "department_slug": "qa_compliance",
+          "output_kind": "codex_qa_report",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "stage_id": "qa_compliance",
+          "stage_state_id": "c96ce019-f486-4200-8ff7-c083ca6d6fe3"
+        },
+        "source": "codex_session_runtime",
+        "task_routing": {
+          "created_via": "company_run_task_routing",
+          "department_id": "4fe64cd0-5d82-4ec7-b87a-dfc4e729d10e",
+          "department_slug": "qa_compliance",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "routing_idempotency_key": "company-program:6f0c1926-c222-40d2-8b54-3c797c16668e:stage:qa_compliance:task-routing",
+          "routing_record_id": "1625376f-774f-4cb3-b902-d0a186962c81",
+          "runtime_provider": "codex_session_runtime",
+          "stage_id": "qa_compliance",
+          "stage_label": "QA & Compliance",
+          "stage_state_id": "c96ce019-f486-4200-8ff7-c083ca6d6fe3",
+          "task_status": "completed"
+        }
+      },
+      "service_deliverable_id": "07b9e2a9-ee2c-4240-9362-4e315d12896e",
+      "source_role": "codex_qa_report",
+      "title": "Legacy Codex Launch QA Report"
+    },
+    {
+      "asset_version_id": "2ec2d977-e2e0-4871-8629-75e49c57fca0",
+      "content_hash": "c2a0573cdaf695f511b6af367948cdbfcb632387ed0d2471fa7e0a4318cda2e1",
+      "metadata": {
+        "asset_version_id": "2ec2d977-e2e0-4871-8629-75e49c57fca0",
+        "codex_session": {
+          "command_summary": "codex exec <prompt>",
+          "duration_ms": 63266,
+          "exit_code": 0,
+          "local_operator_runtime": true,
+          "status": "succeeded"
+        },
+        "department_pipeline": {
+          "created_via_department_pipeline": true,
+          "department_id": "8b1e023a-6735-4982-8521-9bd806794395",
+          "department_slug": "client_approval_ops",
+          "output_kind": "codex_client_approval_packet",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "stage_id": "client_approval_ops",
+          "stage_state_id": "25ecd8b2-893d-4e4d-ac9d-78f1af10ef77"
+        },
+        "source": "codex_session_runtime",
+        "task_routing": {
+          "created_via": "company_run_task_routing",
+          "department_id": "8b1e023a-6735-4982-8521-9bd806794395",
+          "department_slug": "client_approval_ops",
+          "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+          "routing_idempotency_key": "company-program:6f0c1926-c222-40d2-8b54-3c797c16668e:stage:client_approval_ops:task-routing",
+          "routing_record_id": "d632efad-a6ea-434b-84d7-4c4caa8118d6",
+          "runtime_provider": "codex_session_runtime",
+          "stage_id": "client_approval_ops",
+          "stage_label": "Client / Approval Ops",
+          "stage_state_id": "25ecd8b2-893d-4e4d-ac9d-78f1af10ef77",
+          "task_status": "completed"
+        }
+      },
+      "service_deliverable_id": "795365f8-f031-4091-bb03-ddeebafc0614",
+      "source_role": "codex_client_approval_packet",
+      "title": "Legacy Codex Client Approval Packet"
+    }
+  ]
+}

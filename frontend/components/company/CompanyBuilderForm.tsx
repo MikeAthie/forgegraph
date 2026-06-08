@@ -34,6 +34,29 @@ import {
 } from "@/lib/company-workspace";
 import { showError, showSuccess } from "@/lib/toast";
 
+const OPERATE_NEXT_ITEMS = [
+  {
+    title: "Operations",
+    icon: Layers3,
+    body: "See departments working and handing the task forward.",
+  },
+  {
+    title: "Approvals",
+    icon: ShieldCheck,
+    body: "Step in only when the company needs a real decision.",
+  },
+  {
+    title: "Deliverable",
+    icon: CheckCircle2,
+    body: "Review one concrete output you can act on or share.",
+  },
+  {
+    title: "Next move",
+    icon: Sparkles,
+    body: "Launch again, refine the objective, retry, or change AI mode.",
+  },
+] as const;
+
 const autonomyOptions: Array<{
   id: CompanyAutonomyMode;
   label: string;
@@ -1362,10 +1385,11 @@ type CompanyBuilderController = ReturnType<typeof useCompanyBuilderFormControlle
 
 export function CompanyBuilderForm() {
   const controller = useCompanyBuilderFormController();
+  const inspector = useMemo(() => <CompanyBuilderInspector controller={controller} />, [controller]);
 
   return (
     <ProtectedRoute>
-      <DashboardLayout inspector={<CompanyBuilderInspector controller={controller} />}>
+      <DashboardLayout inspector={inspector}>
         <CompanyBuilderContent controller={controller} />
       </DashboardLayout>
     </ProtectedRoute>
@@ -1695,44 +1719,24 @@ function LaunchSummaryItem({
 }
 
 function OperateNextPanel() {
-  const items = [
-    {
-      title: "Operations",
-      icon: <Layers3 className="size-4" />,
-      body: "See departments working and handing the task forward.",
-    },
-    {
-      title: "Approvals",
-      icon: <ShieldCheck className="size-4" />,
-      body: "Step in only when the company needs a real decision.",
-    },
-    {
-      title: "Deliverable",
-      icon: <CheckCircle2 className="size-4" />,
-      body: "Review one concrete output you can act on or share.",
-    },
-    {
-      title: "Next move",
-      icon: <Sparkles className="size-4" />,
-      body: "Launch again, refine the objective, retry, or change AI mode.",
-    },
-  ];
-
   return (
     <Panel title="What you will operate next" description="The workspace opens around work, results, and decisions.">
       <div className="grid gap-3">
-        {items.map((item) => (
-          <div
-            key={item.title}
-            className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
-          >
-            <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
-              {item.icon}
-              <p className="text-sm font-semibold">{item.title}</p>
+        {OPERATE_NEXT_ITEMS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.title}
+              className="rounded-[1.2rem] border border-zinc-900/8 bg-[var(--panel-muted)] p-4 dark:border-white/8"
+            >
+              <div className="flex items-center gap-2 text-zinc-950 dark:text-zinc-50">
+                <Icon className="size-4" />
+                <p className="text-sm font-semibold">{item.title}</p>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.body}</p>
             </div>
-            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.body}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Panel>
   );

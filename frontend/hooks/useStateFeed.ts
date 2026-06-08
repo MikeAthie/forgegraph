@@ -136,86 +136,89 @@ export function useStateFeed(options: StateFeedOptions) {
     const connect = async () => {
       dispatchStatus("connecting");
       try {
-        const ticket = await authApi.issueWsTicket();
         if (closed) {
           return;
         }
 
-        const params = new URLSearchParams({
-          ticket: ticket.ticket,
-        });
-        if (scope === "run") {
-          params.set("event_level", eventLevel ?? "default");
-        }
-        if (eventTypes.length > 0) {
-          params.set("event_types", eventTypes.join(","));
-        }
-        if (lastEventIdRef.current) {
-          params.set("last_event_id", lastEventIdRef.current);
-        }
-        if (lastStateVersionRef.current > 0) {
-          params.set("last_seen_state_version", String(lastStateVersionRef.current));
-        }
+        const ticket = await authApi.issueWsTicket();
+        if (!closed) {
 
-        socket = new WebSocket(`${websocketBaseUrl()}${path}?${params.toString()}`);
-        socket.onopen = () => {
-          dispatchStatus("connected");
-          if (lastStateVersionRef.current > 0) {
-            socket?.send(
-              JSON.stringify({
-                type: "resume",
-                event_id: lastEventIdRef.current,
-                last_seen_state_version: lastStateVersionRef.current,
-              }),
-            );
+          const params = new URLSearchParams({
+            ticket: ticket.ticket,
+          });
+          if (scope === "run") {
+            params.set("event_level", eventLevel ?? "default");
           }
-        };
-        socket.onmessage = (event) => {
-          try {
-            const parsed = JSON.parse(String(event.data ?? "{}")) as StateFeedMessage;
-            const parsedType = messageType(parsed);
-            if (parsed.event_id) {
-              lastEventIdRef.current = parsed.event_id;
-            }
-            const messageStateVersion =
-              numericStateVersion(parsed.state_version) ?? numericStateVersion(parsed.payload?.latest_state_version);
-            if (messageStateVersion !== null) {
-              lastStateVersionRef.current = Math.max(lastStateVersionRef.current, messageStateVersion);
-            }
-            if (parsedType === "heartbeat") {
+          if (eventTypes.length > 0) {
+            params.set("event_types", eventTypes.join(","));
+          }
+          if (lastEventIdRef.current) {
+            params.set("last_event_id", lastEventIdRef.current);
+          }
+          if (lastStateVersionRef.current > 0) {
+            params.set("last_seen_state_version", String(lastStateVersionRef.current));
+          }
+
+          socket = new WebSocket(`${websocketBaseUrl()}${path}?${params.toString()}`);
+          socket.onopen = () => {
+            dispatchStatus("connected");
+            if (lastStateVersionRef.current > 0) {
               socket?.send(
                 JSON.stringify({
-                  type: "pong",
+                  type: "resume",
                   event_id: lastEventIdRef.current,
                   last_seen_state_version: lastStateVersionRef.current,
                 }),
               );
-              return;
             }
-            if (parsedType === "connection_established") {
-              if (parsed.payload?.resync_required || parsed.payload?.full_resync_required) {
-                void onFullResyncRef.current?.(parsed);
+          };
+          socket.onmessage = (event) => {
+            try {
+              const parsed = JSON.parse(String(event.data ?? "{}")) as StateFeedMessage;
+              const parsedType = messageType(parsed);
+              if (parsed.event_id) {
+                lastEventIdRef.current = parsed.event_id;
               }
-              return;
+              const messageStateVersion =
+                numericStateVersion(parsed.state_version) ?? numericStateVersion(parsed.payload?.latest_state_version);
+              if (messageStateVersion !== null) {
+                lastStateVersionRef.current = Math.max(lastStateVersionRef.current, messageStateVersion);
+              }
+              if (parsedType === "heartbeat") {
+                socket?.send(
+                  JSON.stringify({
+                    type: "pong",
+                    event_id: lastEventIdRef.current,
+                    last_seen_state_version: lastStateVersionRef.current,
+                  }),
+                );
+                return;
+              }
+              if (parsedType === "connection_established") {
+                if (parsed.payload?.resync_required || parsed.payload?.full_resync_required) {
+                  void onFullResyncRef.current?.(parsed);
+                }
+                return;
+              }
+              if (parsedType === "replay_complete") {
+                return;
+              }
+              if (parsedType === "full_resync_required") {
+                void onFullResyncRef.current?.(parsed);
+                return;
+              }
+              void onEventRef.current(parsed);
+            } catch {
+              // Malformed transport messages are ignored; backend API refetch remains the source of truth.
             }
-            if (parsedType === "replay_complete") {
-              return;
+          };
+          socket.onclose = () => {
+            if (!closed) {
+              dispatchStatus("unavailable");
+              reconnectTimer = window.setTimeout(() => void connect(), 2000);
             }
-            if (parsedType === "full_resync_required") {
-              void onFullResyncRef.current?.(parsed);
-              return;
-            }
-            void onEventRef.current(parsed);
-          } catch {
-            // Malformed transport messages are ignored; backend API refetch remains the source of truth.
-          }
-        };
-        socket.onclose = () => {
-          if (!closed) {
-            dispatchStatus("unavailable");
-            reconnectTimer = window.setTimeout(() => void connect(), 2000);
-          }
-        };
+          };
+        }
       } catch {
         if (!closed) {
           dispatchStatus("unavailable");

@@ -6,45 +6,51 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import type { NodeFormProps } from "../NodeConfigDialog";
-import {
-  ObservationScopeField,
-  ObservationSourceField,
-  updateObservationNumberField,
-  useObservationErrors,
-  validateObservationSource,
-} from "./observation-form-utils";
+import { compactObservationErrors, updateObservationNumberField, validateObservationSource } from "./observation-form-helpers";
+import { ObservationScopeField, ObservationSourceField } from "./observation-form-utils";
 
 export function ObservationSearchNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const searchConfig = config as Record<string, unknown>;
 
-  const computedErrors = {
-    scope:
-      typeof searchConfig.scope === "string" && searchConfig.scope.trim().length > 0 ? undefined : "Scope is required.",
-    query: validateObservationSource(
-      searchConfig,
-      "query",
-      {
-        value: "query",
-        path: "query_path",
-        template: "query_template",
-      },
-      { required: true },
-    ),
-    topic_key: validateObservationSource(
-      searchConfig,
-      "topic key",
-      { value: "topic_key", path: "topic_key_path" },
-      { required: false },
-    ),
-    agent_id: validateObservationSource(
-      searchConfig,
-      "agent filter",
-      { value: "agent_id", path: "agent_id_path" },
-      { required: false },
-    ),
-  };
-
-  useObservationErrors(errors, setErrors, computedErrors);
+  const validateConfig = useCallback(
+    (nextConfig: Record<string, unknown>) =>
+      compactObservationErrors({
+        scope:
+          typeof nextConfig.scope === "string" && nextConfig.scope.trim().length > 0
+            ? undefined
+            : "Scope is required.",
+        query: validateObservationSource(
+          nextConfig,
+          "query",
+          {
+            value: "query",
+            path: "query_path",
+            template: "query_template",
+          },
+          { required: true },
+        ),
+        topic_key: validateObservationSource(
+          nextConfig,
+          "topic key",
+          { value: "topic_key", path: "topic_key_path" },
+          { required: false },
+        ),
+        agent_id: validateObservationSource(
+          nextConfig,
+          "agent filter",
+          { value: "agent_id", path: "agent_id_path" },
+          { required: false },
+        ),
+      }),
+    [],
+  );
+  const updateConfig = useCallback(
+    (nextConfig: Record<string, unknown>) => {
+      onChange(nextConfig);
+      setErrors(validateConfig(nextConfig));
+    },
+    [onChange, setErrors, validateConfig],
+  );
 
   const handleFieldChange = useCallback(
     (field: string, value: unknown) => {
@@ -56,9 +62,9 @@ export function ObservationSearchNodeForm({ config, onChange, errors, setErrors 
       } else {
         next[field] = value;
       }
-      onChange(next);
+      updateConfig(next);
     },
-    [onChange, searchConfig],
+    [searchConfig, updateConfig],
   );
 
   return (
@@ -89,7 +95,7 @@ export function ObservationSearchNodeForm({ config, onChange, errors, setErrors 
           template: "query_template",
         }}
         errors={errors}
-        onChange={onChange}
+        onChange={updateConfig}
       />
 
       <Separator />
@@ -119,7 +125,7 @@ export function ObservationSearchNodeForm({ config, onChange, errors, setErrors 
             type="number"
             min={1}
             value={String(searchConfig.limit ?? "")}
-            onChange={(event) => onChange(updateObservationNumberField(searchConfig, "limit", event.target.value))}
+            onChange={(event) => updateConfig(updateObservationNumberField(searchConfig, "limit", event.target.value))}
             placeholder="5"
             className="text-sm"
           />
@@ -135,7 +141,7 @@ export function ObservationSearchNodeForm({ config, onChange, errors, setErrors 
           config={searchConfig}
           keys={{ value: "topic_key", path: "topic_key_path" }}
           errors={errors}
-          onChange={onChange}
+          onChange={updateConfig}
         />
 
         <ObservationSourceField
@@ -146,7 +152,7 @@ export function ObservationSearchNodeForm({ config, onChange, errors, setErrors 
           config={searchConfig}
           keys={{ value: "agent_id", path: "agent_id_path" }}
           errors={errors}
-          onChange={onChange}
+          onChange={updateConfig}
         />
       </div>
 

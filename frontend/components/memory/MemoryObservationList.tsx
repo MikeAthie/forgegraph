@@ -1,5 +1,6 @@
 import type { MemoryObservationVM } from "@/domain/repositories/memoryRepository";
-import { EmptyBlock, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { EmptyBlock, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import { Button, SearchInput, Spinner } from "@/components/ui";
 import { cn } from "@/lib/utils";
 

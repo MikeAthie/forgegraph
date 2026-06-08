@@ -1,0 +1,72 @@
+IMPLEMENTATION MODE. Make code changes. Follow TDD: add/update focused failing tests first, run them enough to confirm the current renderer does not produce PDF, then implement the minimal generic PDF renderer slice and verify.
+
+Repository: C:/Users/mathi/projects/forgegraph
+
+Context:
+- ForgeGraph now has a generic formatting layer:
+  - backend/application/services/deliverable_format_profiles.py
+  - backend/application/services/deliverable_format_quality.py
+  - backend/application/services/deliverable_format_renderers.py
+  - backend/application/services/deliverable_formatting.py
+- Legacy handoff now uses the generic formatter via backend/scripts/prepare_legacy_handoff_email.py.
+- Current renderers: markdown_report, manifest, zip_package.
+- Current manifest deferred_formats includes pdf_report and email_handoff.
+- No PDF libraries are currently present in backend/pyproject.toml. Do not add heavy dependencies unless absolutely unavoidable.
+
+Goal:
+Add the next renderer slice: generic `pdf_report` generation.
+
+Architecture requirements:
+1. Keep ForgeGraph agnostic. No Legacy/Atlas/marketing-specific renderer code.
+2. PDF must be a derived output artifact, not source of truth.
+3. The first PDF renderer may be simple but must produce a real valid PDF byte stream (`%PDF-` header, `%%EOF` trailer) with the report content embedded as readable text.
+4. Prefer a no-new-dependency deterministic renderer using standard library only. If you decide a dependency is necessary, explain why and keep scope small; but the preferred path is stdlib.
+5. PDF filename should be profile-derived like markdown/zip, e.g. `<profile-slug>.pdf`.
+6. PDF artifact mime type: `application/pdf`.
+7. PDF renderer provenance must follow the same shape as other artifacts:
+   - renderer name/version
+   - profile ref/hash
+   - source deliverable ids/version ids/hashes
+   - request/idempotency
+   - quality result
+   - output bytes hash
+8. `format_service_deliverables` must support requested_formats containing `pdf_report`.
+9. If `pdf_report` is requested, it should be rendered after markdown and quality gates so it can be based on the markdown report and include quality result provenance.
+10. Manifest `outputs` must include `pdf_report` when requested.
+11. Zip package must include the PDF when both `pdf_report` and `zip_package` are requested.
+12. Manifest `deferred_formats` should no longer list `pdf_report` when PDF is produced/supported; it may still list `email_handoff`.
+13. Keep default existing behavior compatible: if callers request only markdown/manifest/zip, do not produce PDF.
+14. Update `prepare_legacy_handoff_email.py` so the real Legacy handoff requests/includes `pdf_report` in the package.
+15. Do not implement email sending/refactor in this run.
+16. Do not add DB models or migrations.
+
+Implementation hints:
+- Add a `render_pdf_report(...)` function in deliverable_format_renderers.py.
+- It can use the markdown report artifact text as input and write a deterministic simple PDF with built-in Helvetica, wrapped text, and multiple pages if needed.
+- Escape PDF text correctly for parentheses/backslashes and normalize unsupported characters safely.
+- Keep implementation deterministic: no current timestamps, no random IDs, stable object ordering.
+- Consider adding helper functions for building PDF pages/content streams.
+- Update manifest deferred format logic to be based on supported/requested outputs rather than a hardcoded list.
+
+Tests to add/update:
+- Unit renderer test: `render_pdf_report` returns bytes beginning `%PDF-`, ending `%%EOF`, mime type application/pdf, filename .pdf, format pdf_report, renderer_name pdf_report, and includes escaped/readable source text in the content stream enough to prove real content was rendered.
+- Formatting service test: requesting `(markdown_report, pdf_report, manifest, zip_package)` persists PDF AssetVersion with mime type `application/pdf`, source `deliverable_formatting`, and manifest outputs include pdf_report.
+- Zip test: package includes `.pdf`, `.md`, and `.manifest.json` when pdf_report requested.
+- Legacy handoff test: `prepare_legacy_handoff` result includes `pdf_asset_version_id`/`pdf_filename`/`pdf_path` and exported package contains the PDF.
+- Regression: existing non-PDF formatter tests still pass.
+
+Verification commands from `backend/`:
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python -m pytest tests/unit/services/test_deliverable_format_profiles.py tests/unit/services/test_deliverable_format_quality.py tests/unit/services/test_deliverable_format_renderers.py tests/unit/services/test_deliverable_formatting.py tests/unit/services/test_legacy_weekend_pipeline.py -q
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run ruff check application/services/deliverable_format_profiles.py application/services/deliverable_format_quality.py application/services/deliverable_format_renderers.py application/services/deliverable_formatting.py scripts/prepare_legacy_handoff_email.py tests/unit/services/test_deliverable_format_profiles.py tests/unit/services/test_deliverable_format_quality.py tests/unit/services/test_deliverable_format_renderers.py tests/unit/services/test_deliverable_formatting.py tests/unit/services/test_legacy_weekend_pipeline.py
+UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python manage.py check
+USE_IN_MEMORY_CACHE=true UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python scripts/prepare_legacy_handoff_email.py --deterministic-fixture --output-dir ../.hermes/legacy_client_handoff_email_pdf_fixture
+USE_IN_MEMORY_CACHE=true UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline uv run python scripts/prepare_legacy_handoff_email.py --output-dir ../.hermes/legacy_client_handoff_email_pdf_real
+```
+
+Report:
+- files changed
+- test/lint/check output
+- package paths
+- PDF asset/version IDs
+- zip contents and PDF byte verification

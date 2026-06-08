@@ -187,6 +187,27 @@ class ServiceDeliverableActionSerializer(serializers.Serializer[Any]):
     )
 
 
+class DepartmentPipelineCreateSerializer(serializers.Serializer[Any]):
+    template_id = serializers.CharField(
+        max_length=160,
+        required=False,
+        allow_blank=True,
+        default="digital_marketing_pro.weekend_social_launch.v1",
+    )
+
+
+class DepartmentPipelineCompleteStageSerializer(serializers.Serializer[Any]):
+    outputs = serializers.ListField(
+        child=serializers.JSONField(),
+        required=False,
+        default=list,
+    )
+
+
+class DepartmentPipelineReasonSerializer(serializers.Serializer[Any]):
+    reason = serializers.CharField(allow_blank=False, trim_whitespace=True)
+
+
 class AtlasDeliverableAssembleSerializer(serializers.Serializer[Any]):
     deliverable_type = serializers.CharField(max_length=80, required=False)
 

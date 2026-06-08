@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
@@ -29,25 +29,25 @@ export function SearchInput({
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchValue = controlledValue ?? internalValue;
 
-  useEffect(() => {
-    return () => {
-      if (searchTimerRef.current) {
-        clearTimeout(searchTimerRef.current);
-      }
-    };
+  const clearSearchTimer = useCallback(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
+    }
   }, []);
+
+  useEffect(() => clearSearchTimer, [clearSearchTimer]);
 
   const scheduleSearch = (nextValue: string) => {
     if (!onSearch) {
       return;
     }
 
-    if (searchTimerRef.current) {
-      clearTimeout(searchTimerRef.current);
-    }
+    clearSearchTimer();
 
     searchTimerRef.current = setTimeout(() => {
       onSearch(nextValue);
+      searchTimerRef.current = null;
     }, debounceMs);
   };
 

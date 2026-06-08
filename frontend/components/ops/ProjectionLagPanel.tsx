@@ -1,6 +1,7 @@
 import { Activity } from "lucide-react";
 
-import { KeyValueGrid, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { KeyValueGrid, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import type { OpsProjectionLag } from "@/lib/api";
 
 type ProjectionLagPanelProps = {

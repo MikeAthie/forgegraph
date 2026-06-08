@@ -3,16 +3,8 @@ import { Building2, CircleDollarSign, CircleOff, ReceiptText, Wallet } from "luc
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  MetricCard,
-  Panel,
-  SectionHeader,
-  StatusBadge,
-  TrendBar,
-  formatCurrency,
-  formatDateTime,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, MetricCard, Panel, SectionHeader, StatusBadge, TrendBar } from "@/components/os/operations-ui";
+import { formatCurrency, formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Spinner } from "@/components/ui";
 import { translateProductError } from "@/domain/errors";
@@ -108,52 +100,55 @@ export default function AccountingPage() {
     };
   }, [overview]);
 
-  const inspector =
-    overview && accountingState ? (
-      <InspectorPanel
-        title="Accounting posture"
-        subtitle="Costs stay append-only and canonical. Revenue and profit remain unavailable until backend accounting instruments them."
-        sections={[
-          {
-            title: "Backend metrics",
-            content: (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span>Spend</span>
-                  <span>{financialMetricLabel(overview.metricProvenance.totalCostUsd)}</span>
+  const inspector = useMemo(
+    () =>
+      overview && accountingState ? (
+        <InspectorPanel
+          title="Accounting posture"
+          subtitle="Costs stay append-only and canonical. Revenue and profit remain unavailable until backend accounting instruments them."
+          sections={[
+            {
+              title: "Backend metrics",
+              content: (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span>Spend</span>
+                    <span>{financialMetricLabel(overview.metricProvenance.totalCostUsd)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Revenue</span>
+                    <span>{notInstrumentedLabel}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Profit</span>
+                    <span>{notInstrumentedLabel}</span>
+                  </div>
+                  <p className="pt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                    {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
+                  </p>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span>Revenue</span>
-                  <span>{notInstrumentedLabel}</span>
+              ),
+            },
+            {
+              title: "Instrumentation",
+              content: (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span>Revenue source</span>
+                    <span>{overview.metricProvenance.revenue.source}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Revenue status</span>
+                    <StatusBadge status="pending" label={notInstrumentedLabel} />
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span>Profit</span>
-                  <span>{notInstrumentedLabel}</span>
-                </div>
-                <p className="pt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                  {metricProvenanceLine(overview.metricProvenance.totalCostUsd)}
-                </p>
-              </div>
-            ),
-          },
-          {
-            title: "Instrumentation",
-            content: (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span>Revenue source</span>
-                  <span>{overview.metricProvenance.revenue.source}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Revenue status</span>
-                  <StatusBadge status="pending" label={notInstrumentedLabel} />
-                </div>
-              </div>
-            ),
-          },
-        ]}
-      />
-    ) : null;
+              ),
+            },
+          ]}
+        />
+      ) : null,
+    [accountingState, overview],
+  );
 
   return (
     <ProtectedRoute>

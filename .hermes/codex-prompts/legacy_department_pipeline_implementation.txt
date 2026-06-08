@@ -1,0 +1,91 @@
+Implement the corrected Legacy/Atlas department pipeline backend slice in ForgeGraph.
+
+User/product objective:
+- Atlas should behave like a fast marketing agency that produces real client deliverables through departments.
+- The recent Legacy social-media batch proved output quality, but it was generated directly by Hermes then labeled afterward. We need ForgeGraph-native department-stage production.
+- Do NOT build a separate Legacy API namespace. Legacy is a client fixture/data input, not product architecture.
+
+Critical corrections to the previous plan:
+1. Reuse existing ForgeGraph primitives. Do NOT create a new Department model.
+   - Use DepartmentRegistry for departments.
+   - Use CompanyProgram as the department pipeline / campaign run container.
+   - Use ProgramStageState as durable department stage state.
+   - Use ServiceEngagement as the service delivery container.
+   - Use ServiceDeliverable, Asset, AssetVersion for outputs.
+   - Use TaskRoutingRecord for handoff/task records, not as stage source of truth.
+2. Backend remains the only durable source of truth. Read docs/architecture/runtime-invariants.md first.
+3. Do NOT add generic /projects/:id APIs. Scope API under existing service engagements.
+4. For this implementation slice, prefer no new DB models. Store lineage in existing JSON fields:
+   - ProgramStageState.state_json
+   - ServiceDeliverable.metadata_json["department_pipeline"]
+   - Asset.metadata_json["department_pipeline"]
+   - AssetVersion.provenance_json["department_pipeline"]
+5. If you believe a small migration is absolutely required, explain why in code comments/tests, but first try without migrations.
+6. Do not hardcode local paths like C:/Users/mathi/projects/legacy/front in product code.
+7. Avoid modifying or depending on untracked .hermes evidence/media files.
+
+Implement the backend-first MVP:
+A. Add backend/application/services/department_pipeline.py with service functions:
+   - create_pipeline_for_engagement(engagement, template_id="digital_marketing_pro.weekend_social_launch.v1", created_by=None)
+   - get_pipeline_snapshot(engagement)
+   - start_stage(stage_state, actor=None)
+   - complete_stage(stage_state, outputs=None, actor=None)
+   - block_stage(stage_state, reason, actor=None)
+   - skip_stage(stage_state, reason, actor=None)
+   - attach_deliverable_to_stage(deliverable, stage_state, output_kind="deliverable")
+   - attach_asset_to_stage(asset, stage_state, output_kind="asset")
+
+B. The default stage dependency graph should be:
+   - strategy_research: no dependencies
+   - brand_content: depends on strategy_research
+   - crm_lifecycle: depends on strategy_research
+   - analytics_performance: depends on strategy_research
+   - channel_execution: depends on brand_content
+   - qa_compliance: depends on channel_execution, crm_lifecycle, analytics_performance
+   - client_approval_ops: depends on qa_compliance
+
+C. create_pipeline_for_engagement should:
+   - create/reuse a CompanyProgram for the engagement using external_key/source based on engagement id + template_id.
+   - create/reuse seven ProgramStageState rows.
+   - ensure state_json includes department_slug, required, dependencies, inputs, outputs, blockers, skipped_reason, completed_by/started_by where relevant.
+   - validate that required DepartmentRegistry rows exist for the engagement organization. If missing, raise a clear service error.
+   - idempotently return the existing pipeline if already created.
+
+D. Stage transitions:
+   - start_stage: not_started/blocked/rerun_required -> in_progress if dependencies are completed or skipped with waiver only where allowed.
+   - complete_stage: in_progress/awaiting_validation -> completed, record outputs and completed_at.
+   - block_stage: any unfinished stage -> blocked with blocker reason.
+   - skip_stage: only crm_lifecycle may be skipped for MVP, and reason is required. Other required stages cannot be skipped unless explicit waiver flag is added in payload/service call. Keep this simple.
+   - client_approval_ops cannot complete unless qa_compliance is completed or has an explicit qa waiver in state_json.
+
+E. API surface under existing service_engagements API:
+   Add routes in backend/adapters/api/service_engagements/urls.py, with views/serializers as needed:
+   - GET  /api/service-engagements/<uuid:engagement_id>/department-pipeline
+   - POST /api/service-engagements/<uuid:engagement_id>/department-pipeline
+   - POST /api/service-engagements/<uuid:engagement_id>/department-pipeline/stages/<str:stage_id>/start
+   - POST /api/service-engagements/<uuid:engagement_id>/department-pipeline/stages/<str:stage_id>/complete
+   - POST /api/service-engagements/<uuid:engagement_id>/department-pipeline/stages/<str:stage_id>/block
+   - POST /api/service-engagements/<uuid:engagement_id>/department-pipeline/stages/<str:stage_id>/skip
+
+F. Tests:
+   Add focused backend tests, likely:
+   - backend/tests/unit/services/test_department_pipeline.py
+   - backend/tests/unit/api/test_service_engagement_department_pipeline_api.py
+   Cover:
+   - creates exactly seven stages using existing DepartmentRegistry slugs.
+   - idempotent create.
+   - dependency enforcement: brand cannot start before strategy completes.
+   - parallel stages after strategy can start.
+   - channel depends on brand.
+   - qa depends on channel/crm/analytics.
+   - approval depends on qa.
+   - CRM skip requires reason and is recorded.
+   - attach_deliverable_to_stage adds department_pipeline metadata and stage output.
+   - API create/get/start/complete basic flow.
+
+G. Keep scope tight. Do not build frontend in this pass. Do not implement real media generation. Do not add /legacy endpoints.
+
+Before finishing:
+- Run targeted tests you added/changed.
+- If tests cannot run due environment, report exact blocker.
+- Leave a concise implementation summary in your final response.

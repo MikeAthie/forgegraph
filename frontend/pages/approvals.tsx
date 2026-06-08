@@ -5,16 +5,8 @@ import { AlertTriangle, ArrowRight, HandCoins, ShieldCheck } from "lucide-react"
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  MetricCard,
-  Panel,
-  SectionHeader,
-  SelectionList,
-  StatusBadge,
-  formatCurrency,
-  formatDateTime,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, MetricCard, Panel, SectionHeader, SelectionList, StatusBadge } from "@/components/os/operations-ui";
+import { formatCurrency, formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner, Textarea } from "@/components/ui";
 import { approvalRepository, operationRepository } from "@/domain/repositories";
@@ -268,18 +260,18 @@ function ApprovalQueuePanel({
   selectedApproval: ApprovalVM;
   onSelectApproval: (approval: ApprovalVM) => void;
 }) {
+  const emptyState = useMemo(
+    () => <EmptyBlock title="No items in this filter" description="Try another approval state to review earlier approvals." />,
+    [],
+  );
+
   return (
     <Panel title="Review queue" description="Every row should be understandable before it is opened.">
       <SelectionList
         items={approvals}
         selectedId={selectedApproval.id}
         onSelect={onSelectApproval}
-        empty={
-          <EmptyBlock
-            title="No items in this filter"
-            description="Try another approval state to review earlier approvals."
-          />
-        }
+        empty={emptyState}
       >
         {(approval, { selected }) => {
           const approvalImpact = estimateImpact(approval);
@@ -402,10 +394,14 @@ export default function ApprovalsPage() {
       dispatchApprovals({ type: "decision-error", error: translateProductError(err, "approval") });
     }
   };
+  const inspector = useMemo(
+    () => <ApprovalInspector approval={selectedApproval} impact={impact} />,
+    [impact, selectedApproval],
+  );
 
   return (
     <ProtectedRoute>
-      <DashboardLayout inspector={<ApprovalInspector approval={selectedApproval} impact={impact} />}>
+      <DashboardLayout inspector={inspector}>
         <div className="space-y-6">
           <ApprovalsHeader
             statusFilter={statusFilter}

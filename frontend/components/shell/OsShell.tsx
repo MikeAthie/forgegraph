@@ -375,13 +375,13 @@ function useOsShellController() {
     return () => window.cancelAnimationFrame(frame);
   }, [createOrganizationOpen]);
 
-  const pendingDecisionQuery = useQuery({
+  const { data: pendingDecisionData } = useQuery({
     queryKey: ["decisions", "count", organizationId ?? "current"],
     queryFn: decisionsApi.count,
     enabled: isAuthenticated && Boolean(organizationId) && process.env.NODE_ENV !== "test",
     refetchInterval: decisionBadgeFeed.status === "unavailable" ? 30_000 : false,
   });
-  const pendingDecisionCount = pendingDecisionQuery.data?.count ?? null;
+  const pendingDecisionCount = pendingDecisionData?.count ?? null;
   const canOperate = user?.organization_role === "owner" || user?.organization_role === "admin";
 
   useEffect(() => {

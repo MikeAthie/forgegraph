@@ -1,5 +1,6 @@
 import type { MemoryObservationVM } from "@/domain/repositories/memoryRepository";
-import { EmptyBlock, KeyValueGrid, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { EmptyBlock, KeyValueGrid, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import { Spinner } from "@/components/ui";
 
 const toLabelCase = (value: string) => {

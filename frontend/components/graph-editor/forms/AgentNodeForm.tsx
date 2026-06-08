@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/form-field";
@@ -53,6 +53,49 @@ function parseToolList(value: string): string[] {
 
 function serializeToolList(value?: string[]): string {
   return Array.isArray(value) ? value.join("\n") : "";
+}
+
+function withAgentDefaults(agentConfig: AgentFormConfig): AgentFormConfig {
+  return {
+    ...agentConfig,
+    provider: agentConfig.provider ?? "openai",
+    model: agentConfig.model ?? "gpt-4.1-mini",
+    temperature: agentConfig.temperature ?? 0.2,
+    max_steps: agentConfig.max_steps ?? 6,
+    max_tool_calls: agentConfig.max_tool_calls ?? 4,
+  };
+}
+
+function validateAgentConfig(agentConfig: AgentFormConfig): Record<string, string> {
+  const nextErrors: Record<string, string> = {};
+  const tools = agentConfig.tools ?? [];
+  const approvalTools = agentConfig.approval_required_tools ?? [];
+
+  if (!String(agentConfig.model || "").trim()) {
+    nextErrors.model = "Model is required.";
+  }
+
+  if (!String(agentConfig.instructions || "").trim()) {
+    nextErrors.instructions = "Task instructions are required.";
+  }
+
+  if (tools.length === 0) {
+    nextErrors.tools = "At least one allowed tool is required.";
+  }
+
+  if (
+    typeof agentConfig.max_steps === "number" &&
+    typeof agentConfig.max_tool_calls === "number" &&
+    agentConfig.max_tool_calls > agentConfig.max_steps
+  ) {
+    nextErrors.max_tool_calls = "Max tool calls cannot exceed max steps.";
+  }
+
+  if (approvalTools.some((tool) => !tools.includes(tool))) {
+    nextErrors.approval_required_tools = "Approval-required tools must also appear in the allowed tools list.";
+  }
+
+  return nextErrors;
 }
 
 function AgentToolPolicySection({
@@ -174,110 +217,43 @@ function AgentRuntimeSection({
 }
 
 export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
-  const agentConfig = config as AgentFormConfig;
+  const agentConfig = withAgentDefaults(config as AgentFormConfig);
   const { credentials, loading: credentialsLoading, error: credentialsError } = useCredentialOptions();
   const toolsText = serializeToolList(agentConfig.tools);
   const approvalToolsText = serializeToolList(agentConfig.approval_required_tools);
   const observationContextText = serializeToolList(agentConfig.observation_context_paths);
-  const reportErrors = useCallback((nextErrors: Record<string, string>) => setErrors(nextErrors), [setErrors]);
 
   const updateAgentConfig = useCallback(
     <K extends keyof AgentFormConfig>(field: K, value: AgentFormConfig[K]) => {
-      onChange({ ...config, [field]: value });
+      const nextConfig = { ...agentConfig, [field]: value };
+      onChange(nextConfig);
+      setErrors(validateAgentConfig(nextConfig));
     },
-    [config, onChange],
+    [agentConfig, onChange, setErrors],
   );
 
   const handleAgentFieldsChange = useCallback(
     (agentFields: { role?: string; jobDescription?: string; notes?: string }) => {
-      onChange({
-        ...config,
+      const nextConfig = {
+        ...agentConfig,
         role: agentFields.role,
         job_description: agentFields.jobDescription,
         notes: agentFields.notes,
-      });
+      };
+      onChange(nextConfig);
+      setErrors(validateAgentConfig(nextConfig));
     },
-    [config, onChange],
+    [agentConfig, onChange, setErrors],
   );
 
   const handleAdvancedChange = useCallback(
     (advancedConfig: AdvancedConfig) => {
-      onChange({ ...config, ...advancedConfig });
+      const nextConfig = { ...agentConfig, ...advancedConfig };
+      onChange(nextConfig);
+      setErrors(validateAgentConfig(nextConfig));
     },
-    [config, onChange],
+    [agentConfig, onChange, setErrors],
   );
-
-  useEffect(() => {
-    const nextDefaults: Partial<AgentFormConfig> = {};
-
-    if (!agentConfig.provider) {
-      nextDefaults.provider = "openai";
-    }
-    if (!agentConfig.model) {
-      nextDefaults.model = "gpt-4.1-mini";
-    }
-    if (agentConfig.temperature === undefined) {
-      nextDefaults.temperature = 0.2;
-    }
-    if (agentConfig.max_steps === undefined) {
-      nextDefaults.max_steps = 6;
-    }
-    if (agentConfig.max_tool_calls === undefined) {
-      nextDefaults.max_tool_calls = 4;
-    }
-
-    if (Object.keys(nextDefaults).length > 0) {
-      onChange({ ...config, ...nextDefaults });
-    }
-  }, [
-    agentConfig.max_steps,
-    agentConfig.max_tool_calls,
-    agentConfig.model,
-    agentConfig.provider,
-    agentConfig.temperature,
-    config,
-    onChange,
-  ]);
-
-  useEffect(() => {
-    const nextErrors: Record<string, string> = {};
-    const tools = agentConfig.tools ?? [];
-    const approvalTools = agentConfig.approval_required_tools ?? [];
-
-    if (!String(agentConfig.model || "").trim()) {
-      nextErrors.model = "Model is required.";
-    }
-
-    if (!String(agentConfig.instructions || "").trim()) {
-      nextErrors.instructions = "Task instructions are required.";
-    }
-
-    if (tools.length === 0) {
-      nextErrors.tools = "At least one allowed tool is required.";
-    }
-
-    if (
-      typeof agentConfig.max_steps === "number" &&
-      typeof agentConfig.max_tool_calls === "number" &&
-      agentConfig.max_tool_calls > agentConfig.max_steps
-    ) {
-      nextErrors.max_tool_calls = "Max tool calls cannot exceed max steps.";
-    }
-
-    if (approvalTools.some((tool) => !tools.includes(tool))) {
-      nextErrors.approval_required_tools = "Approval-required tools must also appear in the allowed tools list.";
-    }
-
-    reportErrors(nextErrors);
-  }, [
-    agentConfig.approval_required_tools,
-    agentConfig.instructions,
-    agentConfig.max_steps,
-    agentConfig.max_tool_calls,
-    agentConfig.model,
-    agentConfig.tools,
-    reportErrors,
-  ]);
 
   const provider = agentConfig.provider || "openai";
   const filteredCredentials = useMemo(
@@ -374,6 +350,7 @@ export function AgentNodeForm({ config, onChange, errors, setErrors }: NodeFormP
             <div className="flex items-center gap-2">
               <input
                 id="agent-temperature"
+                aria-label="Temperature"
                 type="range"
                 min={0}
                 max={2}

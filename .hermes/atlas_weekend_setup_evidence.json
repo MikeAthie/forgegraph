@@ -1,0 +1,189 @@
+{
+  "company": {
+    "external_ref": "atlas-mkt",
+    "external_source": "atlas",
+    "id": "af960b82-1144-4e4f-9533-4fc2ec2c10f4",
+    "name": "Atlas Mkt"
+  },
+  "deliverable_count": 10,
+  "deliverables": [
+    {
+      "artifact_id": "f6197d5e-da74-41cc-8920-b85664ef4c91",
+      "asset_version_count": 1,
+      "department": "strategy_research",
+      "id": "bfe70212-0b10-4015-9c7b-7283d823bd04",
+      "status": "ready",
+      "title": "Weekend Client Brief",
+      "type": "client_brief",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "411a0ba1-c82d-47d8-bdd0-bddc493670dd",
+      "asset_version_count": 1,
+      "department": "client_approval_ops",
+      "id": "c0952682-9e85-4a8e-aa78-e22c53b63d95",
+      "status": "ready",
+      "title": "Atlas Weekend Sprint Scope of Work",
+      "type": "scope_of_work",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "a04b2d7e-3143-418a-9c73-1fcd735c073f",
+      "asset_version_count": 1,
+      "department": "strategy_research",
+      "id": "443ed3b0-c385-475d-8093-7f869ca6dc94",
+      "status": "ready",
+      "title": "Weekend Strategy Brief",
+      "type": "strategy_brief",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "e5820eb8-d0ea-43ab-9d8e-b481c94fb7a2",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "id": "fcb3029b-fc2b-4ff9-82b8-a85f2ea64da1",
+      "status": "ready",
+      "title": "Atlas Message House",
+      "type": "message_house",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "8d6d7a72-53a5-46c4-905a-5a28467ad8e5",
+      "asset_version_count": 1,
+      "department": "brand_content",
+      "id": "e3ede143-acdb-4484-8ec1-c9ad7f0da496",
+      "status": "ready",
+      "title": "Weekend Channel Copy Pack",
+      "type": "channel_copy_pack",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "4dee5a49-8f86-484a-b72f-d53e38d4f4f7",
+      "asset_version_count": 1,
+      "department": "channel_execution",
+      "id": "2900bf45-e1e9-4008-83a2-ca3bee52c8fd",
+      "status": "ready",
+      "title": "Weekend Launch Readiness Checklist",
+      "type": "launch_readiness_checklist",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "b27268d7-eafb-4399-9a55-12c176292971",
+      "asset_version_count": 1,
+      "department": "client_approval_ops",
+      "id": "a69002a4-1084-4fcc-b75f-f57aaa39c6c5",
+      "status": "ready",
+      "title": "Connector Gap Report",
+      "type": "connector_gap_report",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "a9dabfd2-c1d4-4217-98fa-8bd887d4a5a4",
+      "asset_version_count": 1,
+      "department": "analytics_performance",
+      "id": "44a869ef-d0c3-4e30-8491-7307f50aa9a9",
+      "status": "ready",
+      "title": "Weekend Measurement Plan",
+      "type": "measurement_plan",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "c0bff7b9-99c6-4769-879e-79bdc7438ca7",
+      "asset_version_count": 1,
+      "department": "client_approval_ops",
+      "id": "0c4ec9df-ae8f-4b2e-97a2-fd12db5bb212",
+      "status": "ready",
+      "title": "Client Approval Packet",
+      "type": "approval_packet",
+      "visibility": "customer"
+    },
+    {
+      "artifact_id": "5eff9acc-a412-4c08-a202-db15921a0c5a",
+      "asset_version_count": 1,
+      "department": "channel_execution",
+      "id": "4aff50f4-2024-4adf-a07b-69560831a6d1",
+      "status": "ready",
+      "title": "Weekend Campaign Launch Package",
+      "type": "campaign_launch_package",
+      "visibility": "customer"
+    }
+  ],
+  "department_count": 7,
+  "departments": [
+    {
+      "active": true,
+      "id": "ecac495b-a095-4a72-85e1-bd3d3fb6a6c4",
+      "name": "Analytics & Performance",
+      "slug": "analytics_performance"
+    },
+    {
+      "active": true,
+      "id": "023ee362-f6c4-42da-8532-1467b918715c",
+      "name": "Brand & Content",
+      "slug": "brand_content"
+    },
+    {
+      "active": true,
+      "id": "98b00466-0ae4-4d6f-9fa0-9a15d2ef4ed9",
+      "name": "Channel Execution",
+      "slug": "channel_execution"
+    },
+    {
+      "active": true,
+      "id": "5431099e-ab98-4be2-b3cb-bcd2f202d656",
+      "name": "Client/Approval Ops",
+      "slug": "client_approval_ops"
+    },
+    {
+      "active": true,
+      "id": "b5320a8c-6e53-4508-b0ec-96bc7d0a6896",
+      "name": "CRM & Lifecycle",
+      "slug": "crm_lifecycle"
+    },
+    {
+      "active": true,
+      "id": "80f819c7-f65a-407e-ad1a-7f95a1034149",
+      "name": "QA & Compliance",
+      "slug": "qa_compliance"
+    },
+    {
+      "active": true,
+      "id": "4071c751-f1c6-4ef3-8800-2a574d2635d6",
+      "name": "Strategy & Research",
+      "slug": "strategy_research"
+    }
+  ],
+  "operating_model_version": {
+    "id": "b0052d8c-2f69-4082-a560-f2482e045272",
+    "node_count": 9,
+    "version": 8
+  },
+  "organization": {
+    "id": "3cd7cc65-9bdf-4bc5-b014-d7157c3947db",
+    "name": "Intuition Labs"
+  },
+  "pack": {
+    "installation_id": "8e154a7b-2d12-4ea7-84f6-4cf8ad1a81b7",
+    "installed": true,
+    "pack_id": "digital_marketing_pro.v1"
+  },
+  "ready_customer_deliverable_count": 10,
+  "service_engagement": {
+    "customer_status": "review_ready",
+    "id": "79f731f0-f04f-45ad-ab3f-134696a3c147",
+    "source_key": "atlas-weekend-launch-readiness-sprint:v1",
+    "status": "in_progress"
+  },
+  "user": {
+    "email": "hermes.operator+atlas@forgegraph.local",
+    "id": "23d51205-1b9d-43bc-a7c1-b1698da34b54",
+    "password": "***"
+  },
+  "verified_at": "2026-06-05T16:38:27Z_or_later",
+  "whiteboard": {
+    "id": "4ee5f96f-1824-48df-8dd7-ed56cc5c7e09",
+    "project_name": "Atlas Weekend Launch Readiness Sprint",
+    "status": "in_approval",
+    "work_status": "review"
+  }
+}

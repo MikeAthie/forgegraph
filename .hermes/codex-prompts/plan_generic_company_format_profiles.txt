@@ -1,0 +1,44 @@
+PLAN MODE ONLY. Do not implement code. Do not modify source files. Your only allowed repository write is a markdown plan under `.hermes/plans/`.
+
+Repository: C:/Users/mathi/projects/forgegraph
+
+Context:
+- ForgeGraph must remain business-agnostic.
+- Atlas is one product/user of ForgeGraph primitives, currently using company-run outputs for high-quality client-ready deliverables.
+- UI is not the priority right now. The priority is production-level output quality, provenance, handoff packaging, and policy-gated delivery.
+- Recent working flow: CompanyProgram + ProgramStageState -> automatic TaskRoutingRecord cards -> Codex stage execution -> ServiceDeliverable + AssetVersion -> whiteboard snapshot -> handoff zip/email.
+- We now want a generic formatting system: generic output formats as tools (PDF, report, approval packet, email handoff, etc.) plus company-specific format profiles that customize layout/voice/sections without making ForgeGraph Atlas/marketing-specific.
+
+Product goal:
+Plan a ForgeGraph-generic feature that transforms existing ServiceDeliverables into high-quality formatted artifacts and client handoff packages, with company-specific profiles. It should work for Atlas marketing clients like Legacy, but also for non-marketing businesses such as consulting firms.
+
+Architecture idea to evaluate/correct:
+1. Keep canonical deliverable content in ServiceDeliverable + Asset/AssetVersion, not in PDF.
+2. Add generic format renderers/tools: markdown_report, pdf_report, executive_memo, approval_packet, email_handoff, zip_package, manifest.
+3. Add company/engagement format profiles via metadata/config first, not new DB models unless strongly justified.
+4. Add quality gates before packaging: no placeholders, no AI/meta language, required sections present, client/company naming consistent, evidence vs recommendation separation, connector caveats/approval language if required.
+5. Persist render provenance on AssetVersion and/or ServiceDeliverable metadata.
+6. The first implementation slice should improve the Legacy handoff package while proving agnosticism with a consulting/non-marketing test fixture.
+
+Please produce a plan file at:
+`.hermes/plans/2026-06-05_generic-company-format-profiles.md`
+
+The plan must include:
+- Your verdict on whether this is the easiest/safest architecture path.
+- PR/slice roadmap, with explicit boundaries.
+- Exact likely files to create/modify.
+- How to model format profiles in existing metadata/config for slice 1.
+- Minimal data shapes for format profile, format request, render result, quality gate result, and provenance.
+- How to avoid Atlas/marketing hardcoding.
+- How email sending and PDF rendering should be handled without faking production sends.
+- Test plan, including marketing and non-marketing fixtures.
+- Verification commands for Mike's Windows/Git Bash setup, using `UV_PROJECT_ENVIRONMENT=.venv-test-department-pipeline`.
+- Acceptance criteria for production-level output quality.
+- Risks/tradeoffs and what not to build yet.
+
+Important constraints:
+- Plan only; do not implement.
+- Prefer existing ForgeGraph primitives (`ServiceDeliverable`, `Asset`, `AssetVersion`, `CompanyProgram`, `ProgramStageState`, `TaskRoutingRecord`, `ServiceEngagement`, company/pack metadata) before inventing models.
+- Do not make UI rendering acceptance-critical.
+- Do not claim email delivery unless a real provider accepts it.
+- Do not store or print secrets.

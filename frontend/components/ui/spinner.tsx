@@ -15,7 +15,7 @@ interface SpinnerProps {
 
 export function Spinner({ size = "md", className, label }: SpinnerProps) {
   return (
-    <div className={cn("flex items-center gap-2", className)} role="status" aria-label={label || "Loading"}>
+    <output className={cn("flex items-center gap-2", className)} aria-label={label || "Loading"}>
       <svg
         className={cn("animate-spin text-current", sizeClasses[size])}
         xmlns="http://www.w3.org/2000/svg"
@@ -31,6 +31,6 @@ export function Spinner({ size = "md", className, label }: SpinnerProps) {
         />
       </svg>
       {label && <span className="text-sm text-muted-foreground">{label}</span>}
-    </div>
+    </output>
   );
 }

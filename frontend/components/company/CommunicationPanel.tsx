@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { GitBranch, LockKeyhole, MessageSquare, Paperclip, Send } from "lucide-react";
 
-import { StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import {
   Button,
   Select,

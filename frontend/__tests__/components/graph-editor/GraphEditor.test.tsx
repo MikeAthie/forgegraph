@@ -21,17 +21,9 @@ jest.mock("@xyflow/react", () => {
     ReactFlow: ({ nodes = [], edges = [], onConnect, onNodeClick, onEdgeClick, onPaneClick, children }: any) => (
       <div
         data-testid="reactflow"
-        role="button"
-        tabIndex={0}
         onClick={() => {
           lastOnConnect = onConnect;
           onPaneClick?.();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            lastOnConnect = onConnect;
-            onPaneClick?.();
-          }
         }}
       >
         <div data-testid="reactflow-nodes">
@@ -101,7 +93,7 @@ jest.mock("@/lib/toast", () => ({
 jest.mock("@/components/graph-editor/PromptNodeWizardDialog", () => ({
   PromptNodeWizardDialog: ({ open, onOpenChange, onComplete }: any) =>
     open ? (
-      <div role="dialog">
+      <dialog open>
         <button
           type="button"
           onClick={() => {
@@ -111,7 +103,7 @@ jest.mock("@/components/graph-editor/PromptNodeWizardDialog", () => ({
         >
           Finish
         </button>
-      </div>
+      </dialog>
     ) : null,
 }));
 
@@ -490,9 +482,10 @@ describe("GraphEditor", () => {
     renderGraphEditor();
 
     fireEvent.keyDown(window, { key: "w", ctrlKey: true });
-    expect(await screen.findByRole("dialog", { name: /operating model wizard/i })).toBeInTheDocument();
+    const wizardDialog = await screen.findByRole("dialog", { name: /operating model wizard/i });
+    expect(wizardDialog).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent(wizardDialog, new Event("cancel", { cancelable: true }));
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /operating model wizard/i })).not.toBeInTheDocument();
     });

@@ -1,25 +1,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, type ReactNode, type SetStateAction } from "react";
 import NextImage from "next/image";
 import {
-  AlertTriangle,
-  Brain,
-  Clock3,
-  CreditCard,
-  ExternalLink,
-  FileCheck2,
-  Image as ImageIcon,
-  Megaphone,
-  PackageCheck,
-  PackageOpen,
-  PlayCircle,
-  ReceiptText,
-  RotateCcw,
-  ShoppingBag,
-  Truck,
-  Video,
-} from "lucide-react";
+  AlertTriangle, Brain, Clock3, CreditCard, ExternalLink, FileCheck2, Image as ImageIcon, Megaphone, PackageCheck, PackageOpen, PlayCircle, ReceiptText, RotateCcw, ShoppingBag, Truck, Video, } from "lucide-react";
 
-import { Panel, SectionHeader, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import {
   Alert,
   AlertDescription,
@@ -332,7 +317,7 @@ function useCommerceInventoryController({ companyId }: CommerceInventoryPanelPro
     }
   }, [companyId, replaceMediaPreviewUrls, setCredentials, setMediaAssets, setMediaError, setMediaLoading]);
 
-  const loadInventory = async () => {
+  const loadInventory = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -346,21 +331,27 @@ function useCommerceInventoryController({ companyId }: CommerceInventoryPanelPro
       setCommerceOverview(nextCommerceOverview);
       setOrders(nextOrders.orders);
       setCompanyOpsOverview(nextCompanyOpsOverview);
-      if (!selectedProductId && nextOverview.products[0]) {
-        setSelectedProductId(nextOverview.products[0].id);
-      }
+      setSelectedProductId((current) => current || nextOverview.products[0]?.id || current);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Inventory could not be loaded.";
       setError(message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    companyId,
+    setCommerceOverview,
+    setCompanyOpsOverview,
+    setError,
+    setLoading,
+    setOrders,
+    setOverview,
+    setSelectedProductId,
+  ]);
 
   useEffect(() => {
     void loadInventory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId]);
+  }, [loadInventory]);
 
   useEffect(() => {
     void loadMediaDrafts();

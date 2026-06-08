@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -223,10 +223,10 @@ function parseJsonObjectInput(value: string, label: string): Record<string, unkn
 }
 
 function parseAssumptionsInput(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return value.split(/\r?\n/).flatMap((item) => {
+    const trimmed = item.trim();
+    return trimmed ? [trimmed] : [];
+  });
 }
 
 function defaultWorkstreamDraft(workstream: WorkWhiteboardPhaseWorkstreamDTO): WorkstreamDraft {
@@ -267,19 +267,31 @@ function defaultPhaseScorecard(phase: WorkWhiteboardPhaseContractDTO): Record<st
 }
 
 export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
+  const controller = useWhiteboardPanelController(companyId);
+  return renderWhiteboardPanel(controller);
+}
+
+function useWhiteboardPanelController(companyId: WhiteboardPanelProps["companyId"]) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { whiteboards, board, boardLoading, loading, refreshing, error } = state;
   const activeWhiteboard = useMemo(() => whiteboards[0] ?? null, [whiteboards]);
   const activePhase = useMemo(() => activeWhiteboard?.phase_contracts?.[0] ?? null, [activeWhiteboard]);
   const activeDeployment = useMemo(() => activeWhiteboard?.deployment_contract ?? null, [activeWhiteboard]);
   const activePerformance = useMemo(() => activeWhiteboard?.performance_contract ?? null, [activeWhiteboard]);
+  const activeWhiteboardDraftKey = activeWhiteboard ? `${activeWhiteboard.id}:${activeWhiteboard.updated_at}` : null;
   const [contextExpanded, setContextExpanded] = useState(false);
-  const [contextDraft, setContextDraft] = useState<WhiteboardContextDraft>(() => contextDraftFromWhiteboard(null));
+  const [contextDraftState, setContextDraftState] = useState<{
+    whiteboardKey: string | null;
+    draft: WhiteboardContextDraft;
+  }>(() => ({
+    whiteboardKey: null,
+    draft: contextDraftFromWhiteboard(null),
+  }));
   const [workstreamDrafts, setWorkstreamDrafts] = useState<Record<string, WorkstreamDraft>>({});
-
-  useEffect(() => {
-    setContextDraft(contextDraftFromWhiteboard(activeWhiteboard));
-  }, [activeWhiteboard?.id, activeWhiteboard?.updated_at]);
+  const contextDraft =
+    contextDraftState.whiteboardKey === activeWhiteboardDraftKey
+      ? contextDraftState.draft
+      : contextDraftFromWhiteboard(activeWhiteboard);
 
   const loadWhiteboards = useCallback(async () => {
     dispatch({ type: "load-start" });
@@ -294,6 +306,10 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
   useEffect(() => {
     void loadWhiteboards();
   }, [loadWhiteboards]);
+
+  const loadWhiteboardsForChangeEvent = useEffectEvent(() => {
+    void loadWhiteboards();
+  });
 
   const loadBoard = useCallback(async () => {
     if (!activeWhiteboard) {
@@ -317,12 +333,12 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
     const handleWhiteboardsChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ companyId?: string }>).detail;
       if (!detail?.companyId || detail.companyId === companyId) {
-        void loadWhiteboards();
+        loadWhiteboardsForChangeEvent();
       }
     };
     window.addEventListener("forgegraph:whiteboards:changed", handleWhiteboardsChanged);
     return () => window.removeEventListener("forgegraph:whiteboards:changed", handleWhiteboardsChanged);
-  }, [companyId, loadWhiteboards]);
+  }, [companyId]);
 
   const markReady = async () => {
     if (!activeWhiteboard || refreshing) {
@@ -371,7 +387,16 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
   };
 
   const updateContextDraft = (patch: Partial<WhiteboardContextDraft>) => {
-    setContextDraft((current) => ({ ...current, ...patch }));
+    setContextDraftState((current) => {
+      const base =
+        current.whiteboardKey === activeWhiteboardDraftKey
+          ? current.draft
+          : contextDraftFromWhiteboard(activeWhiteboard);
+      return {
+        whiteboardKey: activeWhiteboardDraftKey,
+        draft: { ...base, ...patch },
+      };
+    });
   };
 
   const saveContext = async () => {
@@ -393,6 +418,10 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
       dispatch({
         type: "load-success",
         whiteboards: [updated, ...whiteboards.filter((whiteboard) => whiteboard.id !== updated.id)],
+      });
+      setContextDraftState({
+        whiteboardKey: `${updated.id}:${updated.updated_at}`,
+        draft: contextDraftFromWhiteboard(updated),
       });
       setContextExpanded(false);
       showSuccess("Whiteboard context saved", "The planning context was persisted in the backend.");
@@ -735,6 +764,78 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
     await patchBoardCard(card, { priority: order[(index + 1) % order.length] ?? "normal" });
   };
 
+  return {
+    activeDeployment,
+    activePerformance,
+    activePhase,
+    activeWhiteboard,
+    attachEvidence,
+    board,
+    boardLoading,
+    completeWorkstream,
+    contextDraft,
+    contextExpanded,
+    createBoardCard,
+    cyclePriority,
+    error,
+    evaluatePerformance,
+    evaluatePhase,
+    loading,
+    markReady,
+    patchBoardCard,
+    prepareDeployment,
+    reassignCard,
+    refreshBoard,
+    refreshing,
+    reportPerformance,
+    saveContext,
+    setContextExpanded,
+    startPerformance,
+    startPhase,
+    synthesizePhase,
+    updateContextDraft,
+    updateWorkstreamDraft,
+    workstreamDrafts,
+  };
+}
+
+type WhiteboardPanelController = ReturnType<typeof useWhiteboardPanelController>;
+
+function renderWhiteboardPanel(controller: WhiteboardPanelController) {
+  const {
+    activeDeployment,
+    activePerformance,
+    activePhase,
+    activeWhiteboard,
+    attachEvidence,
+    board,
+    boardLoading,
+    completeWorkstream,
+    contextDraft,
+    contextExpanded,
+    createBoardCard,
+    cyclePriority,
+    error,
+    evaluatePerformance,
+    evaluatePhase,
+    loading,
+    markReady,
+    patchBoardCard,
+    prepareDeployment,
+    reassignCard,
+    refreshBoard,
+    refreshing,
+    reportPerformance,
+    saveContext,
+    setContextExpanded,
+    startPerformance,
+    startPhase,
+    synthesizePhase,
+    updateContextDraft,
+    updateWorkstreamDraft,
+    workstreamDrafts,
+  } = controller;
+
   return (
     <div
       data-testid="whiteboard-panel"
@@ -813,27 +914,39 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                   className="mt-3 space-y-3 rounded-[0.75rem] border border-zinc-900/8 bg-white/70 p-3 dark:border-white/8 dark:bg-white/5"
                 >
                   <div className="grid gap-2 md:grid-cols-3">
-                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <label
+                      htmlFor="whiteboard-context-objective"
+                      className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                    >
                       Objective
                       <Input
+                        id="whiteboard-context-objective"
                         data-testid="whiteboard-context-objective"
                         value={contextDraft.objective}
                         onChange={(event) => updateContextDraft({ objective: event.target.value })}
                         disabled={refreshing}
                       />
                     </label>
-                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <label
+                      htmlFor="whiteboard-context-budget"
+                      className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                    >
                       Budget
                       <Input
+                        id="whiteboard-context-budget"
                         data-testid="whiteboard-context-budget"
                         value={contextDraft.budgetLimit}
                         onChange={(event) => updateContextDraft({ budgetLimit: event.target.value })}
                         disabled={refreshing}
                       />
                     </label>
-                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <label
+                      htmlFor="whiteboard-context-timeline"
+                      className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                    >
                       Timeline
                       <Input
+                        id="whiteboard-context-timeline"
                         data-testid="whiteboard-context-timeline"
                         value={contextDraft.timeline}
                         onChange={(event) => updateContextDraft({ timeline: event.target.value })}
@@ -842,9 +955,13 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                     </label>
                   </div>
                   <div className="grid gap-2 md:grid-cols-2">
-                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <label
+                      htmlFor="whiteboard-context-constraints"
+                      className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                    >
                       Constraints JSON
                       <Textarea
+                        id="whiteboard-context-constraints"
                         data-testid="whiteboard-context-constraints"
                         rows={5}
                         value={contextDraft.constraintsJson}
@@ -852,9 +969,13 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                         disabled={refreshing}
                       />
                     </label>
-                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <label
+                      htmlFor="whiteboard-context-stakeholders"
+                      className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                    >
                       Stakeholders JSON
                       <Textarea
+                        id="whiteboard-context-stakeholders"
                         data-testid="whiteboard-context-stakeholders"
                         rows={5}
                         value={contextDraft.stakeholderContextJson}
@@ -862,9 +983,13 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                         disabled={refreshing}
                       />
                     </label>
-                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <label
+                      htmlFor="whiteboard-context-resources"
+                      className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                    >
                       Resources JSON
                       <Textarea
+                        id="whiteboard-context-resources"
                         data-testid="whiteboard-context-resources"
                         rows={5}
                         value={contextDraft.resourceContextJson}
@@ -872,9 +997,13 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                         disabled={refreshing}
                       />
                     </label>
-                    <label className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    <label
+                      htmlFor="whiteboard-context-delivery"
+                      className="space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                    >
                       Delivery JSON
                       <Textarea
+                        id="whiteboard-context-delivery"
                         data-testid="whiteboard-context-delivery"
                         rows={5}
                         value={contextDraft.deliveryContextJson}
@@ -883,9 +1012,13 @@ export function WhiteboardPanel({ companyId }: WhiteboardPanelProps) {
                       />
                     </label>
                   </div>
-                  <label className="block space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                  <label
+                    htmlFor="whiteboard-context-assumptions"
+                    className="block space-y-1 text-xs font-medium text-zinc-600 dark:text-zinc-300"
+                  >
                     Assumptions
                     <Textarea
+                      id="whiteboard-context-assumptions"
                       data-testid="whiteboard-context-assumptions"
                       rows={4}
                       value={contextDraft.assumptionsText}

@@ -1,0 +1,9 @@
+file 'C:/Users/mathi/projects/forgegraph/.hermes/legacy_deliverables/media/frame_legacy-post-01.png'
+duration 1.5
+file 'C:/Users/mathi/projects/forgegraph/.hermes/legacy_deliverables/media/frame_legacy-post-02.png'
+duration 1.5
+file 'C:/Users/mathi/projects/forgegraph/.hermes/legacy_deliverables/media/frame_legacy-post-03.png'
+duration 1.5
+file 'C:/Users/mathi/projects/forgegraph/.hermes/legacy_deliverables/media/frame_legacy-post-04.png'
+duration 1.5
+file 'C:/Users/mathi/projects/forgegraph/.hermes/legacy_deliverables/media/frame_legacy-post-04.png'

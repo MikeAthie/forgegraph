@@ -1,0 +1,129 @@
+{
+  "run_completed_at": "2026-06-05T19:50:05.482267+00:00",
+  "organization": {
+    "id": "796ec2f0-07a2-4aa3-b437-fd8e76b73043",
+    "name": "admin Org"
+  },
+  "company": {
+    "id": "175ebb8e-d99e-486e-90b5-4a1a116dd03f",
+    "name": "Legacy"
+  },
+  "pack": {
+    "pack_id": "digital_marketing_pro.v1",
+    "status": "installed",
+    "installation_id": "350f1ecf-461a-45f1-8eb0-4115b2b34075"
+  },
+  "engagement": {
+    "id": "d3dc8dbd-9eb4-4361-a24d-7d1006e57cf9",
+    "status": "in_progress",
+    "customer_status": "review_ready"
+  },
+  "whiteboard": {
+    "id": "f4f52d28-502b-449f-b133-f6caba760113",
+    "status": "in_approval",
+    "work_status": "review"
+  },
+  "program": {
+    "id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+    "status": "active",
+    "current_stage_id": "strategy_research"
+  },
+  "stage_statuses": [
+    {
+      "stage_id": "strategy_research",
+      "status": "completed",
+      "completed_at": "2026-06-05 19:48:54.563849+00:00"
+    },
+    {
+      "stage_id": "brand_content",
+      "status": "completed",
+      "completed_at": "2026-06-05 19:49:06.490226+00:00"
+    },
+    {
+      "stage_id": "crm_lifecycle",
+      "status": "completed",
+      "completed_at": "2026-06-05 19:49:19.627569+00:00"
+    },
+    {
+      "stage_id": "analytics_performance",
+      "status": "completed",
+      "completed_at": "2026-06-05 19:49:30.376294+00:00"
+    },
+    {
+      "stage_id": "channel_execution",
+      "status": "completed",
+      "completed_at": "2026-06-05 19:49:41.095970+00:00"
+    },
+    {
+      "stage_id": "qa_compliance",
+      "status": "completed",
+      "completed_at": "2026-06-05 19:49:53.146297+00:00"
+    },
+    {
+      "stage_id": "client_approval_ops",
+      "status": "completed",
+      "completed_at": "2026-06-05 19:50:05.474590+00:00"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "61b22b98-5e25-4c4f-95a2-40ed632c5bc9",
+      "type": "codex_strategy_brief",
+      "title": "Legacy Codex Strategy Brief",
+      "department": "strategy_research",
+      "artifact_id": "779efda7-60db-4436-a372-8ea39af115f3",
+      "summary": "Understood. I\u2019ll treat `docs/architecture/runtime-invariants.md` as the controlling source for runtime changes: backend-owned durable state, engine/client ephemeral only, events non-authoritative, and backend-owned snapshots/liveness/recovery/resume."
+    },
+    {
+      "id": "33661306-d4ce-4457-a97a-b6a5a121d8c9",
+      "type": "codex_brand_content_pack",
+      "title": "Legacy Codex Brand Content Pack",
+      "department": "brand_content",
+      "artifact_id": "dfbfcec7-38ca-4b7c-aaf9-dc7334368de6",
+      "summary": "Ready. I\u2019ll treat `docs/architecture/runtime-invariants.md` as the controlling source for any runtime, docs, or test changes in this repo."
+    },
+    {
+      "id": "fd0a2640-2ce3-4e13-b75f-61d9d727ac9e",
+      "type": "codex_crm_response_scripts",
+      "title": "Legacy Codex CRM / WhatsApp Scripts",
+      "department": "crm_lifecycle",
+      "artifact_id": "32354321-96f9-4e08-ad15-0524aa3efb13",
+      "summary": "Understood. I\u2019ll treat `docs/architecture/runtime-invariants.md` as authoritative and preserve backend-owned durable state semantics for any runtime, docs, or test changes."
+    },
+    {
+      "id": "ebf9f9f6-2cc2-4447-b3fc-e7f1cc2e72e7",
+      "type": "codex_measurement_plan",
+      "title": "Legacy Codex Measurement Plan",
+      "department": "analytics_performance",
+      "artifact_id": "747f81f1-a482-426e-9c25-b931735d97a4",
+      "summary": "Understood. I\u2019ll treat `docs/architecture/runtime-invariants.md` as the controlling source before any runtime, docs, or test changes, and I\u2019ll keep backend ownership of durable state as the boundary."
+    },
+    {
+      "id": "dbaf22ba-2daf-4de5-805e-246797382bd5",
+      "type": "codex_channel_execution_calendar",
+      "title": "Legacy Codex Channel Execution Calendar",
+      "department": "channel_execution",
+      "artifact_id": "06f97a26-3b79-4d1e-82c8-dcbbb7b4e8e1",
+      "summary": "Understood. I\u2019ll treat `docs/architecture/runtime-invariants.md` as the controlling authority for runtime work and keep backend ownership of durable state as the hard constraint."
+    },
+    {
+      "id": "07b9e2a9-ee2c-4240-9362-4e315d12896e",
+      "type": "codex_qa_report",
+      "title": "Legacy Codex Launch QA Report",
+      "department": "qa_compliance",
+      "artifact_id": "2282da61-b213-4f08-ae29-b0a4ea6fb1d6",
+      "summary": "Understood. I\u2019ll treat `docs/architecture/runtime-invariants.md` as authoritative and keep durable runtime state backend-owned in any code, docs, or test changes."
+    },
+    {
+      "id": "795365f8-f031-4091-bb03-ddeebafc0614",
+      "type": "codex_client_approval_packet",
+      "title": "Legacy Codex Client Approval Packet",
+      "department": "client_approval_ops",
+      "artifact_id": "25e07cc9-cfe1-466c-9525-289faa58716c",
+      "summary": "Understood. I\u2019ll follow `docs/architecture/runtime-invariants.md` as the highest-priority repo rule and keep backend-owned durable state as the invariant before touching runtime code, docs, or tests."
+    }
+  ],
+  "deliverable_count": 7,
+  "asset_version_count": 7,
+  "routing_task_count": 0
+}

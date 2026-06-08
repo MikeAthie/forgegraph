@@ -1,0 +1,19 @@
+# Legacy Client Handoff
+
+Prepared for: Legacy
+Prepared by: Atlas
+
+## Executive Summary
+- **Legacy Codex Strategy Brief**: Atlas prepared this handoff for Legacy. Executive summary: the Optical Noir launch package is ready for review.
+
+## Evidence
+- **Legacy Codex Launch QA Report**: Facts: source receipts, routing evidence, and QA findings are attached.
+
+## Recommendations
+- **Legacy Codex Client Approval Packet**: Recommendation: approve the next production step after receipt review.
+
+## Connector Caveats
+Connector caveat: unverified connector outputs require receipt review.
+
+## Approval
+Approval required before production execution.

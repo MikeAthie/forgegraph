@@ -2,16 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, type SetStateAction } from
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
-  AlertTriangle,
-  ArrowRight,
-  Bot,
-  FileText,
-  PauseCircle,
-  PlayCircle,
-  RotateCcw,
-  Send,
-  Settings2,
-} from "lucide-react";
+  AlertTriangle, ArrowRight, Bot, FileText, PauseCircle, PlayCircle, RotateCcw, Send, Settings2, } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { CommerceInventoryPanel } from "@/components/company/CommerceInventoryPanel";
@@ -19,16 +10,8 @@ import { OperatingModelWorkspace } from "@/components/company/OperatingModelWork
 import { QuestGuide } from "@/components/company/QuestGuide";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import {
-  EmptyBlock,
-  InspectorPanel,
-  MicroExplanation,
-  Panel,
-  SectionHeader,
-  StatusBadge,
-  WhyBlock,
-  formatCompactNumber,
-  formatDateTime,
-} from "@/components/os/operations-ui";
+  EmptyBlock, InspectorPanel, MicroExplanation, Panel, SectionHeader, StatusBadge, WhyBlock } from "@/components/os/operations-ui";
+import { formatCompactNumber, formatDateTime } from "@/components/os/operations-format";
 import { Alert, AlertDescription, Button, Input, Spinner, Textarea } from "@/components/ui";
 import type { InteractionEventResponse, OperatingBrief, OperatingBriefClarification } from "@/lib/api";
 import { onboardingApi } from "@/lib/api";
@@ -1839,10 +1822,11 @@ function LatestOutputsPanel({ controller }: { controller: CompanyWorkspaceContro
 
 export function CompanyWorkspaceShell(props: CompanyWorkspaceShellProps) {
   const controller = useCompanyWorkspaceShellController(props);
+  const inspector = useMemo(() => <CompanyWorkspaceInspector controller={controller} />, [controller]);
 
   return (
     <ProtectedRoute>
-      <DashboardLayout inspector={<CompanyWorkspaceInspector controller={controller} />}>
+      <DashboardLayout inspector={inspector}>
         <CompanyWorkspaceContent controller={controller} />
       </DashboardLayout>
     </ProtectedRoute>

@@ -15,6 +15,9 @@ from rest_framework.views import APIView
 from adapters.api.responses import error_response, success_response
 from adapters.api.service_engagements.serializers import (
     AtlasDeliverableAssembleSerializer,
+    DepartmentPipelineCompleteStageSerializer,
+    DepartmentPipelineCreateSerializer,
+    DepartmentPipelineReasonSerializer,
     ServiceCatalogCreateSerializer,
     ServiceCatalogPatchSerializer,
     ServiceCatalogQuerySerializer,
@@ -30,6 +33,16 @@ from application.services.agency_deliverables import (
 )
 from application.services.audit_log import record_audit_log
 from application.services.company_access import accessible_company_queryset, has_company_access
+from application.services.department_pipeline import (
+    DepartmentPipelineError,
+    block_stage,
+    complete_stage,
+    create_pipeline_for_engagement,
+    get_pipeline_snapshot,
+    skip_stage,
+    stage_state_for_engagement,
+    start_stage,
+)
 from application.services.departments import can_mutate_department_work
 from application.services.rbac import has_min_role
 from application.services.service_engagements import (
@@ -310,6 +323,95 @@ class ServiceEngagementDetailView(APIView):
         return success_response(
             {"engagement": service_engagement_payload(engagement, include_internal=True)}
         )
+
+
+class ServiceEngagementDepartmentPipelineView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, engagement_id: UUID) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="viewer")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        return success_response({"department_pipeline": get_pipeline_snapshot(engagement)})
+
+    def post(self, request: Request, engagement_id: UUID) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="member")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        serializer = DepartmentPipelineCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_error(serializer.errors)
+        try:
+            create_pipeline_for_engagement(
+                engagement,
+                template_id=serializer.validated_data.get(
+                    "template_id", "digital_marketing_pro.weekend_social_launch.v1"
+                )
+                or "digital_marketing_pro.weekend_social_launch.v1",
+                created_by=user,
+            )
+        except DepartmentPipelineError as exc:
+            return _department_pipeline_error(exc)
+        record_audit_log(
+            actor=user,
+            tenant_id=str(engagement.organization_id),
+            action="service_engagement.department_pipeline.created",
+            resource_type="service_engagement",
+            resource_id=str(engagement.id),
+            metadata={"company_id": str(engagement.company_id)},
+        )
+        return success_response(
+            {"department_pipeline": get_pipeline_snapshot(engagement)},
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+class ServiceEngagementDepartmentPipelineStageActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, engagement_id: UUID, stage_id: str, action: str) -> Response:
+        user = cast(User, request.user)
+        engagement = _engagement_for_user(user, engagement_id, minimum_role="member")
+        if engagement is None:
+            return _not_found("Service engagement was not found.")
+        try:
+            stage = stage_state_for_engagement(engagement, stage_id)
+            if action == "start":
+                start_stage(stage, actor=user)
+            elif action == "complete":
+                serializer = DepartmentPipelineCompleteStageSerializer(data=request.data)
+                if not serializer.is_valid():
+                    return _validation_error(serializer.errors)
+                complete_stage(
+                    stage,
+                    outputs=serializer.validated_data.get("outputs") or [],
+                    actor=user,
+                )
+            elif action == "block":
+                serializer = DepartmentPipelineReasonSerializer(data=request.data)
+                if not serializer.is_valid():
+                    return _validation_error(serializer.errors)
+                block_stage(stage, reason=serializer.validated_data["reason"], actor=user)
+            elif action == "skip":
+                serializer = DepartmentPipelineReasonSerializer(data=request.data)
+                if not serializer.is_valid():
+                    return _validation_error(serializer.errors)
+                skip_stage(stage, reason=serializer.validated_data["reason"], actor=user)
+            else:
+                return _not_found("Department pipeline stage action was not found.")
+        except DepartmentPipelineError as exc:
+            return _department_pipeline_error(exc)
+        record_audit_log(
+            actor=user,
+            tenant_id=str(engagement.organization_id),
+            action=f"service_engagement.department_pipeline.stage.{action}",
+            resource_type="service_engagement",
+            resource_id=str(engagement.id),
+            metadata={"stage_id": stage_id, "company_id": str(engagement.company_id)},
+        )
+        return success_response({"department_pipeline": get_pipeline_snapshot(engagement)})
 
 
 class ServiceDeliverableListCreateView(APIView):
@@ -593,6 +695,15 @@ def _department_for_company_user(
 
 
 def _service_error(exc: ServiceEngagementError) -> Response:
+    return error_response(
+        exc.code.upper(),
+        exc.message,
+        status=http_status.HTTP_400_BAD_REQUEST,
+        details=exc.details,
+    )
+
+
+def _department_pipeline_error(exc: DepartmentPipelineError) -> Response:
     return error_response(
         exc.code.upper(),
         exc.message,

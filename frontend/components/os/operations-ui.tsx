@@ -1,100 +1,8 @@
 import type { HTMLAttributes, ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock3, Dot, PauseCircle, Wallet } from "lucide-react";
 
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import { statusTone } from "@/components/os/operations-format";
 import { cn } from "@/lib/utils";
-
-const USD_FORMATTER = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-const USD_INTEGER_FORMATTER = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-export const formatCurrency = (value: number) => (value >= 100 ? USD_INTEGER_FORMATTER : USD_FORMATTER).format(value);
-
-export const formatCompactNumber = (value: number) => COMPACT_NUMBER_FORMATTER.format(value);
-
-export const formatDateTime = (value: string | null | undefined) => {
-  if (!value) {
-    return "Not available";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString();
-};
-
-export const formatDuration = (value: number | null | undefined) => {
-  if (value === null || value === undefined) {
-    return "Pending";
-  }
-  if (value < 1_000) {
-    return `${value}ms`;
-  }
-
-  const seconds = Math.floor(value / 1_000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  if (minutes < 60) {
-    return `${minutes}m ${remainingSeconds}s`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return `${hours}h ${remainingMinutes}m`;
-};
-
-export const statusTone = (status: string) => {
-  switch (status.toLowerCase()) {
-    case "running":
-    case "active":
-    case "approved":
-    case "succeeded":
-    case "success":
-    case "resolved":
-    case "fresh":
-      return "emerald";
-    case "idle":
-    case "created":
-    case "claimed":
-    case "queued":
-    case "pending":
-    case "waiting":
-      return "slate";
-    case "paused":
-    case "waiting_for_decision":
-    case "retry_scheduled":
-    case "stale":
-    case "rebuilding":
-      return "amber";
-    case "error":
-    case "failed":
-    case "dead_lettered":
-    case "cancelled":
-    case "rejected":
-    case "attention":
-    case "degraded":
-      return "rose";
-    default:
-      return "slate";
-  }
-};
 
 const toneClasses: Record<string, string> = {
   emerald:
@@ -446,16 +354,6 @@ export function TrendBar({
     </div>
   );
 }
-
-export const overviewIcons = {
-  stable: <CheckCircle2 className="size-4" />,
-  attention: <AlertTriangle className="size-4" />,
-  paused: <PauseCircle className="size-4" />,
-  timing: <Clock3 className="size-4" />,
-  financial: <Wallet className="size-4" />,
-  external: <ArrowUpRight className="size-4" />,
-  separator: <Dot className="size-4" />,
-};
 
 function SecondaryActionLink({ children, href }: { children: ReactNode; href: string }) {
   return (

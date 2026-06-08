@@ -31,6 +31,14 @@ function formatUtcDate(value: string): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
 }
 
+const formatEntitlementLabel = (key: string) =>
+  key
+    .replace(/^max_/, "")
+    .replace(/_/g, " ")
+    .replace(/\busd\b/i, "USD")
+    .replace(/\bllm\b/i, "LLM")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+
 type BillingPageState = {
   plans: BillingPlan[];
   subscription: BillingSubscription | null;
@@ -124,14 +132,6 @@ export default function AdminBillingPage() {
   }, [canManage]);
 
   const activeEntitlements = useMemo(() => Object.entries(subscription?.plan?.entitlements ?? {}), [subscription]);
-
-  const formatEntitlementLabel = (key: string) =>
-    key
-      .replace(/^max_/, "")
-      .replace(/_/g, " ")
-      .replace(/\busd\b/i, "USD")
-      .replace(/\bllm\b/i, "LLM")
-      .replace(/\b\w/g, (match) => match.toUpperCase());
 
   const handleCheckout = async (planId: string) => {
     dispatchPage({ type: "action-start", action: planId });

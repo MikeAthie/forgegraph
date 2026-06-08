@@ -231,6 +231,7 @@ Please {{task}}"
             <div className="flex items-center gap-2">
               <input
                 id="temperature"
+                aria-label="Temperature"
                 type="range"
                 min={0}
                 max={2}

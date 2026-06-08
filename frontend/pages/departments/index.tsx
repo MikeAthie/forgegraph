@@ -4,7 +4,8 @@ import { useRouter } from "next/router";
 import { Blocks, BrainCircuit, Lightbulb, MessageSquareWarning, Waypoints } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
-import { EmptyBlock, Panel, SectionHeader, StatusBadge, formatDateTime } from "@/components/os/operations-ui";
+import { EmptyBlock, Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
+import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { translateProductError } from "@/domain/errors";

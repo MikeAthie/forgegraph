@@ -6,68 +6,73 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import type { NodeFormProps } from "../NodeConfigDialog";
-import {
-  ObservationScopeField,
-  ObservationSourceField,
-  useObservationErrors,
-  validateObservationSource,
-} from "./observation-form-utils";
+import { compactObservationErrors, validateObservationSource } from "./observation-form-helpers";
+import { ObservationScopeField, ObservationSourceField } from "./observation-form-utils";
 
 export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const saveConfig = config as Record<string, unknown>;
 
-  const computedErrors = {
-    type:
-      typeof saveConfig.type === "string" && saveConfig.type.trim().length > 0
-        ? undefined
-        : "Observation type is required.",
-    scope:
-      typeof saveConfig.scope === "string" && saveConfig.scope.trim().length > 0 ? undefined : "Scope is required.",
-    content: validateObservationSource(
-      saveConfig,
-      "content",
-      {
-        value: "content",
-        path: "content_path",
-        template: "content_template",
-      },
-      { required: true },
-    ),
-    title: validateObservationSource(
-      saveConfig,
-      "title",
-      {
-        value: "title",
-        path: "title_path",
-        template: "title_template",
-      },
-      { required: false },
-    ),
-    topic_key: validateObservationSource(
-      saveConfig,
-      "topic key",
-      { value: "topic_key", path: "topic_key_path" },
-      { required: false },
-    ),
-    tool_name: validateObservationSource(
-      saveConfig,
-      "tool name",
-      { value: "tool_name", path: "tool_name_path" },
-      { required: false },
-    ),
-    agent_id: validateObservationSource(
-      saveConfig,
-      "agent filter",
-      { value: "agent_id", path: "agent_id_path" },
-      { required: false },
-    ),
-    update_topic:
-      saveConfig.update_topic && !saveConfig.topic_key && !saveConfig.topic_key_path
-        ? "Update topic requires a topic key source."
-        : undefined,
-  };
-
-  useObservationErrors(errors, setErrors, computedErrors);
+  const validateConfig = useCallback(
+    (nextConfig: Record<string, unknown>) =>
+      compactObservationErrors({
+        type:
+          typeof nextConfig.type === "string" && nextConfig.type.trim().length > 0
+            ? undefined
+            : "Observation type is required.",
+        scope:
+          typeof nextConfig.scope === "string" && nextConfig.scope.trim().length > 0 ? undefined : "Scope is required.",
+        content: validateObservationSource(
+          nextConfig,
+          "content",
+          {
+            value: "content",
+            path: "content_path",
+            template: "content_template",
+          },
+          { required: true },
+        ),
+        title: validateObservationSource(
+          nextConfig,
+          "title",
+          {
+            value: "title",
+            path: "title_path",
+            template: "title_template",
+          },
+          { required: false },
+        ),
+        topic_key: validateObservationSource(
+          nextConfig,
+          "topic key",
+          { value: "topic_key", path: "topic_key_path" },
+          { required: false },
+        ),
+        tool_name: validateObservationSource(
+          nextConfig,
+          "tool name",
+          { value: "tool_name", path: "tool_name_path" },
+          { required: false },
+        ),
+        agent_id: validateObservationSource(
+          nextConfig,
+          "agent filter",
+          { value: "agent_id", path: "agent_id_path" },
+          { required: false },
+        ),
+        update_topic:
+          nextConfig.update_topic && !nextConfig.topic_key && !nextConfig.topic_key_path
+            ? "Update topic requires a topic key source."
+            : undefined,
+      }),
+    [],
+  );
+  const updateConfig = useCallback(
+    (nextConfig: Record<string, unknown>) => {
+      onChange(nextConfig);
+      setErrors(validateConfig(nextConfig));
+    },
+    [onChange, setErrors, validateConfig],
+  );
 
   const handleFieldChange = useCallback(
     (field: string, value: unknown) => {
@@ -79,9 +84,9 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
       } else {
         next[field] = value;
       }
-      onChange(next);
+      updateConfig(next);
     },
-    [onChange, saveConfig],
+    [saveConfig, updateConfig],
   );
 
   return (
@@ -147,7 +152,7 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
           template: "content_template",
         }}
         errors={errors}
-        onChange={onChange}
+        onChange={updateConfig}
       />
 
       <ObservationSourceField
@@ -163,7 +168,7 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
           template: "title_template",
         }}
         errors={errors}
-        onChange={onChange}
+        onChange={updateConfig}
       />
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -175,7 +180,7 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
           config={saveConfig}
           keys={{ value: "topic_key", path: "topic_key_path" }}
           errors={errors}
-          onChange={onChange}
+          onChange={updateConfig}
         />
 
         <ObservationSourceField
@@ -186,7 +191,7 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
           config={saveConfig}
           keys={{ value: "agent_id", path: "agent_id_path" }}
           errors={errors}
-          onChange={onChange}
+          onChange={updateConfig}
         />
       </div>
 
@@ -198,7 +203,7 @@ export function ObservationSaveNodeForm({ config, onChange, errors, setErrors }:
         config={saveConfig}
         keys={{ value: "tool_name", path: "tool_name_path" }}
         errors={errors}
-        onChange={onChange}
+        onChange={updateConfig}
       />
 
       <div className="grid gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 md:grid-cols-2">
