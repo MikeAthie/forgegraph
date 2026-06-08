@@ -22,13 +22,35 @@ DEFAULT_INTAKE_SOURCE = "operator"
 FORBIDDEN_KEY_TOKENS = (
     "api_key",
     "apikey",
+    "auth",
+    "authorization",
+    "bearer",
     "client_secret",
+    "cookie",
     "credential",
     "password",
     "private",
     "secret",
+    "session",
     "token",
 )
+FORBIDDEN_VALUE_TOKENS = (
+    "api_key=",
+    "apikey=",
+    "authorization:",
+    "authorization=",
+    "bearer ",
+    "cookie:",
+    "cookie=",
+    "credential=",
+    "password=",
+    "secret=",
+    "session:",
+    "session=",
+    "set-cookie",
+    "token=",
+)
+_OMIT_METADATA_VALUE = object()
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,7 +258,9 @@ def safe_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         key_text = str(key)
         if forbidden_key(key_text):
             continue
-        safe[key_text] = _safe_metadata_value(value)
+        sanitized = _safe_metadata_value(value)
+        if sanitized is not _OMIT_METADATA_VALUE:
+            safe[key_text] = sanitized
     return safe
 
 
@@ -497,7 +521,8 @@ def _sanitize_intake_value(key: str, value: Any) -> Any:
         if isinstance(value, dict):
             return safe_metadata(value)
         if isinstance(value, list):
-            return [_safe_metadata_value(item) for item in value]
+            sanitized = [_safe_metadata_value(item) for item in value]
+            return [item for item in sanitized if item is not _OMIT_METADATA_VALUE]
         return str(value or "").strip()
     if key == "contact_email":
         return str(value or "").strip().lower()
@@ -515,5 +540,13 @@ def _safe_metadata_value(value: Any) -> Any:
     if isinstance(value, dict):
         return safe_metadata(value)
     if isinstance(value, list):
-        return [_safe_metadata_value(item) for item in value]
+        sanitized = [_safe_metadata_value(item) for item in value]
+        return [item for item in sanitized if item is not _OMIT_METADATA_VALUE]
+    if isinstance(value, str) and _forbidden_value(value):
+        return _OMIT_METADATA_VALUE
     return value
+
+
+def _forbidden_value(value: str) -> bool:
+    normalized = value.strip().lower()
+    return any(token in normalized for token in FORBIDDEN_VALUE_TOKENS)

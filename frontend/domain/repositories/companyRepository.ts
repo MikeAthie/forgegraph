@@ -1,4 +1,4 @@
-import { approvalsApi, companiesApi, companyBlueprintsApi, credentialsApi, runsApi } from "@/lib/api";
+import { approvalsApi, companiesApi, companyBlueprintsApi, companyOpsApi, credentialsApi, runsApi } from "@/lib/api";
 import {
   buildCompanyGraphJson,
   buildCompanyProfile,
@@ -7,8 +7,10 @@ import {
 } from "@/lib/company-workspace";
 import {
   toCompanyVM,
+  toAgencyHealthSnapshotViewModel,
   toOperationListVM,
   toOperationVM,
+  type AgencyHealthSnapshotViewModel,
   type CompanyCreateInputVM,
   type CompanyUpdateInputVM,
   type CompanyVM,
@@ -79,6 +81,11 @@ export const companyRepository = {
       operations: translatedOperations,
       pendingApprovalCount,
     };
+  },
+
+  getAgencyHealth: async (companyId: string): Promise<AgencyHealthSnapshotViewModel> => {
+    const snapshot = await companyOpsApi.getAgencyHealth(companyId);
+    return toAgencyHealthSnapshotViewModel(snapshot);
   },
 
   create: async (input: CompanyCreateInputVM): Promise<{ companyId: string; firstOperation: OperationVM | null }> => {

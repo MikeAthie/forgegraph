@@ -1,5 +1,6 @@
 import type {
   ApprovalTask,
+  AgencyHealthSnapshotDTO,
   CompanyDTO,
   CompanyOperatingModelVersionDTO,
   DecisionRecord,
@@ -24,6 +25,19 @@ import { translateFailureDetails } from "@/domain/errors";
 import type {
   ApprovalRiskVM,
   ApprovalVM,
+  AgencyConnectorReadinessItemViewModel,
+  AgencyConnectorReadinessStatusViewModel,
+  AgencyConnectorReadinessValueViewModel,
+  AgencyConnectorReadinessViewModel,
+  AgencyConnectorStatusViewModel,
+  AgencyHealthDimensionViewModel,
+  AgencyHealthFindingViewModel,
+  AgencyHealthNextActionViewModel,
+  AgencyHealthOpportunityViewModel,
+  AgencyHealthSnapshotViewModel,
+  AgencyHealthStatusViewModel,
+  AgencyOnboardingItemStatusViewModel,
+  AgencyOnboardingItemViewModel,
   CompanyVM,
   DeliverableVM,
   DepartmentVM,
@@ -55,6 +69,41 @@ function stringifyPreview(value: unknown): string | null {
   } catch {
     return String(value);
   }
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as UnknownRecord) : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function textOr(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function nullableText(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function numericValue(value: unknown, fallback = 0): number {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function nonNegativeInteger(value: unknown): number {
+  return Math.max(0, Math.floor(numericValue(value)));
+}
+
+function scoreValue(value: unknown): number {
+  return Math.max(0, Math.min(100, Math.round(numericValue(value))));
+}
+
+function enumValue<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === "string" && allowed.includes(value as T) ? (value as T) : fallback;
 }
 
 export function toOperationStatusVM(status: string): OperationStatusVM {
@@ -349,6 +398,147 @@ export function toCompanyVM(
     pendingApprovalCount,
     operationCount: operations.length,
     latestOperation,
+  };
+}
+
+const AGENCY_HEALTH_STATUSES = ["healthy", "monitor", "attention", "blocked", "unknown"] as const;
+const AGENCY_ONBOARDING_STATUSES = ["completed", "in_progress", "blocked", "not_started", "unknown"] as const;
+const AGENCY_CONNECTOR_READINESS_STATUSES = ["ready", "degraded", "blocked", "unknown"] as const;
+const AGENCY_CONNECTOR_STATUSES = ["ready", "missing", "degraded", "disabled", "unknown"] as const;
+const AGENCY_CONNECTOR_READINESS_VALUES = ["ready", "action_required", "unknown"] as const;
+const AGENCY_PRIORITY_VALUES = ["low", "medium", "high", "unknown"] as const;
+
+function toAgencyHealthStatus(value: unknown): AgencyHealthStatusViewModel {
+  return enumValue(value, AGENCY_HEALTH_STATUSES, "unknown");
+}
+
+function toAgencyOnboardingStatus(value: unknown): AgencyOnboardingItemStatusViewModel {
+  return enumValue(value, AGENCY_ONBOARDING_STATUSES, "unknown");
+}
+
+function toAgencyConnectorReadinessStatus(value: unknown): AgencyConnectorReadinessStatusViewModel {
+  return enumValue(value, AGENCY_CONNECTOR_READINESS_STATUSES, "unknown");
+}
+
+function toAgencyConnectorStatus(value: unknown): AgencyConnectorStatusViewModel {
+  return enumValue(value, AGENCY_CONNECTOR_STATUSES, "unknown");
+}
+
+function toAgencyConnectorReadinessValue(value: unknown): AgencyConnectorReadinessValueViewModel {
+  return enumValue(value, AGENCY_CONNECTOR_READINESS_VALUES, "unknown");
+}
+
+function toAgencyPriority(value: unknown): "low" | "medium" | "high" | "unknown" {
+  return enumValue(value, AGENCY_PRIORITY_VALUES, "unknown");
+}
+
+function toAgencyHealthDimensionViewModel(value: unknown, index: number): AgencyHealthDimensionViewModel {
+  const dimension = asRecord(value);
+  return {
+    slug: textOr(dimension.slug, `dimension-${index + 1}`),
+    label: textOr(dimension.label, "Unknown dimension"),
+    score: scoreValue(dimension.score),
+    status: toAgencyHealthStatus(dimension.status),
+    weight: nonNegativeInteger(dimension.weight),
+    ownerDepartmentSlug: nullableText(dimension.owner_department_slug),
+    summary: textOr(dimension.summary, "No health summary is available."),
+  };
+}
+
+function toAgencyOnboardingItemViewModel(value: unknown, index: number): AgencyOnboardingItemViewModel {
+  const item = asRecord(value);
+  return {
+    slug: textOr(item.slug, `onboarding-item-${index + 1}`),
+    label: textOr(item.label, "Onboarding item"),
+    status: toAgencyOnboardingStatus(item.status),
+    ownerDepartmentSlug: nullableText(item.owner_department_slug),
+    message: textOr(item.message, "No onboarding guidance is available."),
+  };
+}
+
+function toAgencyConnectorReadinessItemViewModel(value: unknown, index: number): AgencyConnectorReadinessItemViewModel {
+  const connector = asRecord(value);
+  return {
+    slug: textOr(connector.slug, `connector-${index + 1}`),
+    label: textOr(connector.label, "Connector"),
+    category: textOr(connector.category, "general"),
+    required: connector.required === true,
+    status: toAgencyConnectorStatus(connector.status),
+    readiness: toAgencyConnectorReadinessValue(connector.readiness),
+    ownerDepartmentSlug: nullableText(connector.owner_department_slug),
+    source: textOr(connector.source, "backend"),
+    lastSeenAt: nullableText(connector.last_seen_at),
+    lastHealthCheckAt: nullableText(connector.last_health_check_at),
+    message: textOr(connector.message, "No connector guidance is available."),
+  };
+}
+
+function toAgencyConnectorReadinessViewModel(value: unknown): AgencyConnectorReadinessViewModel {
+  const readiness = asRecord(value);
+  const summary = asRecord(readiness.summary);
+  return {
+    status: toAgencyConnectorReadinessStatus(readiness.status),
+    summary: {
+      total: nonNegativeInteger(summary.total),
+      required: nonNegativeInteger(summary.required),
+      ready: nonNegativeInteger(summary.ready),
+      missing: nonNegativeInteger(summary.missing),
+      degraded: nonNegativeInteger(summary.degraded),
+      disabled: nonNegativeInteger(summary.disabled),
+    },
+    connectors: asArray(readiness.connectors).map(toAgencyConnectorReadinessItemViewModel),
+  };
+}
+
+function toAgencyHealthFindingViewModel(value: unknown, index: number): AgencyHealthFindingViewModel {
+  const finding = asRecord(value);
+  return {
+    slug: textOr(finding.slug, `risk-${index + 1}`),
+    label: textOr(finding.label, "Account risk"),
+    severity: toAgencyPriority(finding.severity),
+    ownerDepartmentSlug: nullableText(finding.owner_department_slug),
+    summary: textOr(finding.summary, "No risk summary is available."),
+  };
+}
+
+function toAgencyHealthOpportunityViewModel(value: unknown, index: number): AgencyHealthOpportunityViewModel {
+  const opportunity = asRecord(value);
+  return {
+    slug: textOr(opportunity.slug, `opportunity-${index + 1}`),
+    label: textOr(opportunity.label, "Account opportunity"),
+    priority: toAgencyPriority(opportunity.priority),
+    ownerDepartmentSlug: nullableText(opportunity.owner_department_slug),
+    summary: textOr(opportunity.summary, "No opportunity summary is available."),
+  };
+}
+
+function toAgencyHealthNextActionViewModel(value: unknown, index: number): AgencyHealthNextActionViewModel {
+  const action = asRecord(value);
+  return {
+    slug: textOr(action.slug, `next-action-${index + 1}`),
+    label: textOr(action.label, "Next action"),
+    priority: toAgencyPriority(action.priority),
+    ownerDepartmentSlug: nullableText(action.owner_department_slug),
+    reason: textOr(action.reason, "No action reason is available."),
+  };
+}
+
+export function toAgencyHealthSnapshotViewModel(snapshot: AgencyHealthSnapshotDTO): AgencyHealthSnapshotViewModel {
+  const source = asRecord(snapshot);
+  const health = asRecord(source.health);
+  return {
+    companyId: textOr(source.company_id, ""),
+    generatedAt: nullableText(source.generated_at),
+    health: {
+      score: scoreValue(health.score),
+      status: toAgencyHealthStatus(health.status),
+      dimensions: asArray(health.dimensions).map(toAgencyHealthDimensionViewModel),
+    },
+    onboardingItems: asArray(source.onboarding_items).map(toAgencyOnboardingItemViewModel),
+    connectorReadiness: toAgencyConnectorReadinessViewModel(source.connector_readiness),
+    risks: asArray(source.risks).map(toAgencyHealthFindingViewModel),
+    opportunities: asArray(source.opportunities).map(toAgencyHealthOpportunityViewModel),
+    nextActions: asArray(source.next_actions).map(toAgencyHealthNextActionViewModel),
   };
 }
 

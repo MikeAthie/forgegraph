@@ -186,7 +186,6 @@ class ServiceDeliverableActionSerializer(serializers.Serializer[Any]):
         ]
     )
 
-
 class DepartmentPipelineCreateSerializer(serializers.Serializer[Any]):
     template_id = serializers.CharField(
         max_length=160,
@@ -215,3 +214,20 @@ class AtlasDeliverableAssembleSerializer(serializers.Serializer[Any]):
         if get_deliverable_definition(value) is None:
             raise serializers.ValidationError("Unknown Atlas deliverable type.")
         return value
+
+
+class AtlasLaunchReadinessSerializer(serializers.Serializer[Any]):
+    mode = serializers.ChoiceField(
+        choices=["dry_run", "live"],
+        required=False,
+        default="dry_run",
+    )
+    dry_run = serializers.BooleanField(required=False, default=True)
+    live_mode = serializers.BooleanField(required=False, default=False)
+    create_receipt = serializers.BooleanField(required=False, default=False)
+    idempotency_key = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        default="",
+    )

@@ -11,6 +11,7 @@ from application.services.agency_account_catalog import (
     list_health_dimension_definitions,
 )
 from application.services.agency_connector_readiness import build_connector_readiness
+from application.services.agency_growth_signals import build_agency_growth_signals
 from application.services.agency_onboarding import (
     build_virtual_onboarding_checklist,
     has_recent_report,
@@ -18,6 +19,7 @@ from application.services.agency_onboarding import (
     in_review_deliverable_count,
     stale_approval_count,
 )
+from application.services.agency_reporting_cadence import build_recurring_reporting_status
 from infrastructure.orm.models import (
     Graph,
     ReportRun,
@@ -29,18 +31,32 @@ from infrastructure.orm.models import (
 
 def build_agency_account_health_snapshot(company: Graph) -> dict[str, Any]:
     connector_readiness = build_connector_readiness(company)
+    recurring_reporting = build_recurring_reporting_status(company)
+    growth_signals = build_agency_growth_signals(company)
     onboarding = build_virtual_onboarding_checklist(
         company,
         connector_readiness=connector_readiness,
     )
-    risks = _risks(company, connector_readiness)
-    opportunities = _opportunities(company)
+    risks = _risks(
+        company,
+        connector_readiness,
+        recurring_reporting=recurring_reporting,
+        growth_signals=growth_signals,
+    )
+    opportunities = _opportunities(company, growth_signals=growth_signals)
     next_actions = _next_actions(connector_readiness, risks, onboarding["items"])
-    dimensions = _health_dimensions(company, connector_readiness, onboarding, risks)
+    dimensions = _health_dimensions(
+        company,
+        connector_readiness,
+        onboarding,
+        risks,
+        recurring_reporting=recurring_reporting,
+        growth_signals=growth_signals,
+    )
     return {
         "company_id": str(company.id),
         "generated_at": timezone.now().isoformat(),
-        "profile": _profile(company),
+        "profile": _profile(company, commercial=growth_signals["commercial"]),
         "health": {
             "score": _overall_score(dimensions),
             "status": _status_for_score(_overall_score(dimensions)),
@@ -48,13 +64,15 @@ def build_agency_account_health_snapshot(company: Graph) -> dict[str, Any]:
         },
         "onboarding_items": onboarding["items"],
         "connector_readiness": connector_readiness,
+        "recurring_reporting": recurring_reporting,
+        "growth_signals": growth_signals,
         "risks": risks,
         "opportunities": opportunities,
         "next_actions": next_actions,
     }
 
 
-def _profile(company: Graph) -> dict[str, Any]:
+def _profile(company: Graph, *, commercial: dict[str, Any]) -> dict[str, Any]:
     latest_engagement = _latest_engagement(company)
     latest_whiteboard = _latest_whiteboard(company)
     return {
@@ -63,11 +81,7 @@ def _profile(company: Graph) -> dict[str, Any]:
         "description": company.description,
         "client_stage": _client_stage(latest_engagement, latest_whiteboard),
         "active_service_engagement": _engagement_profile(latest_engagement),
-        "commercial": {
-            "monthly_retainer": _unknown_money(),
-            "contract_value": _unknown_money(),
-            "gross_margin": {"status": "unknown", "value": None},
-        },
+        "commercial": commercial,
     }
 
 
@@ -76,14 +90,16 @@ def _health_dimensions(
     connector_readiness: dict[str, Any],
     onboarding: dict[str, Any],
     risks: list[dict[str, Any]],
+    recurring_reporting: dict[str, Any],
+    growth_signals: dict[str, Any],
 ) -> list[dict[str, Any]]:
     scores = {
         "onboarding": _onboarding_score(onboarding["summary"]),
         "connector_readiness": _connector_score(connector_readiness["summary"]),
         "delivery": _delivery_score(company),
-        "reporting": _reporting_score(company),
+        "reporting": _reporting_score(company, recurring_reporting),
         "approvals": _approval_score(company),
-        "commercial": 50,
+        "commercial": _commercial_score(growth_signals),
     }
     risk_slugs = {item["slug"] for item in risks}
     return [
@@ -108,7 +124,13 @@ def _dimension_payload(slug: str, score: int, risk_slugs: set[str]) -> dict[str,
     }
 
 
-def _risks(company: Graph, connector_readiness: dict[str, Any]) -> list[dict[str, Any]]:
+def _risks(
+    company: Graph,
+    connector_readiness: dict[str, Any],
+    *,
+    recurring_reporting: dict[str, Any],
+    growth_signals: dict[str, Any],
+) -> list[dict[str, Any]]:
     risks: list[dict[str, Any]] = []
     missing = _missing_required_connectors(connector_readiness)
     if missing:
@@ -131,7 +153,17 @@ def _risks(company: Graph, connector_readiness: dict[str, Any]) -> list[dict[str
                 "summary": "A customer-facing deliverable has been in review for more than seven days.",
             }
         )
-    if not has_recent_report(company) and not has_reporting_cadence(company):
+    reporting_summary = recurring_reporting.get("summary")
+    configured_cadences = (
+        int(reporting_summary.get("cadences_configured") or 0)
+        if isinstance(reporting_summary, dict)
+        else 0
+    )
+    if (
+        not has_recent_report(company)
+        and not has_reporting_cadence(company)
+        and not configured_cadences
+    ):
         risks.append(
             {
                 "slug": "reporting_cadence_missing",
@@ -141,10 +173,12 @@ def _risks(company: Graph, connector_readiness: dict[str, Any]) -> list[dict[str
                 "summary": "No recent report or reporting cadence is configured.",
             }
         )
-    return risks
+    risks.extend(_recurring_reporting_risks(recurring_reporting))
+    risks.extend(_growth_signal_risks(growth_signals))
+    return _dedupe_by_slug(risks)
 
 
-def _opportunities(company: Graph) -> list[dict[str, Any]]:
+def _opportunities(company: Graph, *, growth_signals: dict[str, Any]) -> list[dict[str, Any]]:
     opportunities: list[dict[str, Any]] = []
     latest_report = _latest_report(company)
     if latest_report is not None:
@@ -155,6 +189,16 @@ def _opportunities(company: Graph) -> list[dict[str, Any]]:
                 "priority": "medium",
                 "owner_department_slug": "analytics_performance",
                 "summary": "Use the recent report as client-facing proof of value.",
+            }
+        )
+    for opportunity in growth_signals.get("expansion", {}).get("opportunities", [])[:3]:
+        opportunities.append(
+            {
+                "slug": f"expansion_{opportunity['opportunity_id']}",
+                "label": opportunity["title"],
+                "priority": "medium",
+                "owner_department_slug": "strategy_research",
+                "summary": opportunity["summary"] or "Review qualified expansion opportunity.",
             }
         )
     return opportunities
@@ -246,12 +290,33 @@ def _delivery_score(company: Graph) -> int:
     return 35
 
 
-def _reporting_score(company: Graph) -> int:
+def _reporting_score(company: Graph, recurring_reporting: dict[str, Any]) -> int:
     if has_recent_report(company):
         return 85
+    summary = recurring_reporting.get("summary")
+    status = summary.get("status") if isinstance(summary, dict) else None
+    if status == "healthy":
+        return 85
+    if status == "monitor":
+        return 60
+    if status == "attention":
+        return 45
     if has_reporting_cadence(company):
         return 60
     return 30
+
+
+def _commercial_score(growth_signals: dict[str, Any]) -> int:
+    scope = growth_signals.get("scope")
+    retention = growth_signals.get("retention")
+    expansion = growth_signals.get("expansion")
+    if isinstance(scope, dict) and scope.get("status") == "warning":
+        return 45
+    if isinstance(retention, dict) and retention.get("status") == "risk":
+        return 45
+    if isinstance(expansion, dict) and expansion.get("status") == "opportunity":
+        return 65
+    return 50
 
 
 def _approval_score(company: Graph) -> int:
@@ -324,5 +389,44 @@ def _engagement_profile(engagement: ServiceEngagement | None) -> dict[str, Any] 
     }
 
 
-def _unknown_money() -> dict[str, Any]:
-    return {"status": "unknown", "amount": None, "currency": None}
+def _recurring_reporting_risks(recurring_reporting: dict[str, Any]) -> list[dict[str, Any]]:
+    risks = recurring_reporting.get("risks")
+    return [risk for risk in risks if isinstance(risk, dict)] if isinstance(risks, list) else []
+
+
+def _growth_signal_risks(growth_signals: dict[str, Any]) -> list[dict[str, Any]]:
+    risks: list[dict[str, Any]] = []
+    scope = growth_signals.get("scope")
+    if isinstance(scope, dict):
+        warnings = scope.get("warnings")
+        if isinstance(warnings, list):
+            for warning in warnings:
+                if isinstance(warning, dict):
+                    risks.append(
+                        {
+                            "slug": warning["slug"],
+                            "label": "Scope creep warning",
+                            "severity": warning["severity"],
+                            "owner_department_slug": "strategy_research",
+                            "summary": warning["summary"],
+                        }
+                    )
+    retention = growth_signals.get("retention")
+    if isinstance(retention, dict) and retention.get("status") == "risk":
+        risks.append(
+            {
+                "slug": "retention_risk_signal",
+                "label": "Retention risk signal",
+                "severity": "medium",
+                "owner_department_slug": "strategy_research",
+                "summary": "A backend-owned company signal indicates retention risk.",
+            }
+        )
+    return risks
+
+
+def _dedupe_by_slug(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[str, dict[str, Any]] = {}
+    for item in items:
+        deduped.setdefault(str(item["slug"]), item)
+    return list(deduped.values())

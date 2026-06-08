@@ -1,6 +1,6 @@
 import { companyRepository } from "@/domain/repositories/companyRepository";
 import { buildCompanyProfile } from "@/lib/company-workspace";
-import { companiesApi, companyBlueprintsApi, graphsApi } from "@/lib/api";
+import { companiesApi, companyBlueprintsApi, companyOpsApi, graphsApi } from "@/lib/api";
 
 jest.mock("@/lib/api", () => ({
   approvalsApi: {
@@ -8,6 +8,9 @@ jest.mock("@/lib/api", () => ({
   },
   companyBlueprintsApi: {
     createCompany: jest.fn(),
+  },
+  companyOpsApi: {
+    getAgencyHealth: jest.fn(),
   },
   companiesApi: {
     create: jest.fn(),
@@ -132,5 +135,133 @@ describe("companyRepository.create", () => {
     expect(companyBlueprintsApi.createCompany).not.toHaveBeenCalled();
     expect(graphsApi.create).not.toHaveBeenCalled();
     expect(graphsApi.createVersion).not.toHaveBeenCalled();
+  });
+});
+
+describe("companyRepository.getAgencyHealth", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("loads backend-owned agency health and returns a sanitized view model", async () => {
+    jest.mocked(companyOpsApi.getAgencyHealth).mockResolvedValue({
+      company_id: "company-1",
+      generated_at: "2026-06-04T12:00:00Z",
+      profile: {
+        company_id: "company-1",
+        name: "Atlas Agency",
+        description: "Run managed services.",
+        client_stage: "in_progress",
+        active_service_engagement: null,
+        commercial: {
+          metadata: { api_key: "sk-secret" },
+        },
+      },
+      health: {
+        score: 72,
+        status: "monitor",
+        dimensions: [
+          {
+            slug: "connector_readiness",
+            label: "Connector readiness",
+            score: 45,
+            status: "attention",
+            weight: 20,
+            owner_department_slug: "channel_execution",
+            summary: "Required connector gaps are lowering account health.",
+            internal_trace_id: "trace-1",
+          },
+        ],
+      },
+      onboarding_items: [
+        {
+          slug: "connector_setup",
+          label: "Connector setup",
+          status: "blocked",
+          owner_department_slug: "channel_execution",
+          message: "Required connectors are missing.",
+          secret_token: "sk-secret",
+        },
+      ],
+      connector_readiness: {
+        status: "blocked",
+        summary: {
+          total: 1,
+          required: 1,
+          ready: 0,
+          missing: 1,
+          degraded: 0,
+          disabled: 0,
+        },
+        connectors: [
+          {
+            slug: "whatsapp",
+            label: "WhatsApp",
+            category: "messaging",
+            required: true,
+            status: "missing",
+            readiness: "action_required",
+            owner_department_slug: "channel_execution",
+            source: "gateway_connection",
+            last_seen_at: null,
+            last_health_check_at: null,
+            message: "WhatsApp is not connected.",
+            oauth_client_secret: "sk-secret",
+          },
+        ],
+      },
+      recurring_reporting: { metadata: { api_key: "sk-secret" } },
+      growth_signals: { metadata: { api_key: "sk-secret" } },
+      risks: [
+        {
+          slug: "missing_required_connectors",
+          label: "Required connectors missing",
+          severity: "high",
+          owner_department_slug: "channel_execution",
+          summary: "1 required connector(s) are not ready.",
+          metadata: { api_key: "sk-secret" },
+        },
+      ],
+      opportunities: [],
+      next_actions: [
+        {
+          slug: "configure_whatsapp",
+          label: "Configure WhatsApp",
+          priority: "high",
+          owner_department_slug: "channel_execution",
+          reason: "WhatsApp is not connected.",
+        },
+      ],
+    } as never);
+
+    const result = await companyRepository.getAgencyHealth("company-1");
+
+    expect(companyOpsApi.getAgencyHealth).toHaveBeenCalledWith("company-1");
+    expect(result.companyId).toBe("company-1");
+    expect(result.health.dimensions[0]).toEqual({
+      slug: "connector_readiness",
+      label: "Connector readiness",
+      score: 45,
+      status: "attention",
+      weight: 20,
+      ownerDepartmentSlug: "channel_execution",
+      summary: "Required connector gaps are lowering account health.",
+    });
+    expect(result.connectorReadiness.connectors[0]).toEqual({
+      slug: "whatsapp",
+      label: "WhatsApp",
+      category: "messaging",
+      required: true,
+      status: "missing",
+      readiness: "action_required",
+      ownerDepartmentSlug: "channel_execution",
+      source: "gateway_connection",
+      lastSeenAt: null,
+      lastHealthCheckAt: null,
+      message: "WhatsApp is not connected.",
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-secret");
+    expect(result).not.toHaveProperty("growthSignals");
+    expect(result).not.toHaveProperty("recurringReporting");
   });
 });
