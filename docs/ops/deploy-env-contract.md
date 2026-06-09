@@ -26,6 +26,17 @@ Optional but required when enabled:
 - `RUN_QUEUE_ENABLED=true` -> at least one `python manage.py process_run_queue` worker
 - billing enabled -> `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET`
 - OAuth/SSO enabled -> provider client IDs and client secrets
+- Hermes-style WhatsApp bridge enabled -> `WHATSAPP_CONNECTOR_PROVIDER=hermes_bridge`,
+  `WHATSAPP_HERMES_BRIDGE_ENABLED=true`, `WHATSAPP_HERMES_BRIDGE_URL`,
+  and `WHATSAPP_HERMES_BRIDGE_SESSION_REF`
+
+The WhatsApp `hermes_bridge` provider is an HTTP boundary compatible with an
+operator-managed Hermes Agent-style Node/Baileys bridge. Hermes Agent is MIT
+licensed; ForgeGraph does not vendor it, start the bridge process, or manage QR
+pairing. Real sends still require the global real-send flag, human approval,
+operator confirmation, and recipient allowlists. Persisted receipts must remain
+sanitized and must not include raw recipients, message text, session refs, or
+bridge secrets.
 
 ## Required engine runtime variables
 
