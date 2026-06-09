@@ -40,6 +40,7 @@ ALLOWED_RUNTIME_WRITERS = {
     Path("backend/adapters/api/integrations/whatsapp_views.py"),
     Path("backend/adapters/api/integrations/webhook_views.py"),
     Path("backend/application/services/audit_log.py"),
+    Path("backend/application/services/gateway_schedules.py"),
     Path("backend/application/services/os_projections.py"),
     Path("backend/application/services/operator_actions.py"),
     Path("backend/application/services/runtime_write_intents.py"),
@@ -180,7 +181,7 @@ class Violation:
 
 
 def _is_ignored(path: Path) -> bool:
-    return any(part in IGNORED_PARTS for part in path.parts)
+    return any(part in IGNORED_PARTS or part.startswith(".venv") for part in path.parts)
 
 
 def _is_allowed(path: Path) -> bool:

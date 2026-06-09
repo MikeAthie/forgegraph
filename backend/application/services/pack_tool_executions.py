@@ -1886,8 +1886,7 @@ def _policy_inputs_for_tool(*, tool_id: str, inputs: dict[str, Any]) -> dict[str
     if _is_gateway_tool(tool_id):
         destinations = _gateway_destination_values(inputs)
         destination_hashes = [
-            f"sha256:{hashlib.sha256(value.encode('utf-8')).hexdigest()}"
-            for value in destinations
+            f"sha256:{hashlib.sha256(value.encode('utf-8')).hexdigest()}" for value in destinations
         ]
         message = str(inputs.get("text") or inputs.get("message") or inputs.get("body") or "")
         return {
@@ -2128,7 +2127,11 @@ def _gateway_request_from_inputs(
     if isinstance(raw_metadata, dict):
         metadata.update(raw_metadata)
     raw_thread = inputs.get("thread")
-    thread = {str(key): value for key, value in raw_thread.items()} if isinstance(raw_thread, dict) else {}
+    thread = (
+        {str(key): value for key, value in raw_thread.items()}
+        if isinstance(raw_thread, dict)
+        else {}
+    )
     return GatewaySendRequest(
         platform=platform,
         provider=provider,

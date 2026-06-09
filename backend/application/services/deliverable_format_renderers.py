@@ -89,7 +89,9 @@ def render_markdown_report(context: FormatRenderContext) -> RenderedArtifact:
     rendered_sections: list[RenderedSection] = []
     lines = list(header_lines)
     for section in profile.sections:
-        section_sources = _sources_for_section(tuple(context.sources), section.id, section.source_roles)
+        section_sources = _sources_for_section(
+            tuple(context.sources), section.id, section.source_roles
+        )
         section_content = _section_content(section_sources)
         rendered_sections.append(
             RenderedSection(
@@ -460,8 +462,7 @@ def _render_provenance(
             "name": renderer_name,
             "version": RENDERER_VERSION,
             "implementation": (
-                "application.services.deliverable_format_renderers."
-                f"{renderer_name}"
+                f"application.services.deliverable_format_renderers.{renderer_name}"
             ),
         },
         "profile": {

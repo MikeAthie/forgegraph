@@ -282,7 +282,9 @@ def test_hermes_bridge_session_status_falls_back_to_status_endpoint() -> None:
     assert status == "connected"
     assert [call["url"].rsplit("/", 1)[-1] for call in session.calls] == ["health", "status"]
     assert all("params" not in call for call in session.calls)
-    assert all(call["headers"]["X-ForgeGraph-Session-Ref"] == "session-secret" for call in session.calls)
+    assert all(
+        call["headers"]["X-ForgeGraph-Session-Ref"] == "session-secret" for call in session.calls
+    )
     assert "session-secret" not in status
     assert "+15550101234" not in status
 

@@ -26,7 +26,9 @@ def _user(org: Organization, email: str = "atlas-quality@example.com") -> User:
     user = User.objects.create_user(email=email, password="testpassword123")
     user.default_organization = org
     user.save(update_fields=["default_organization"])
-    OrganizationMembership.objects.create(organization=org, user=user, role="owner", is_default=True)
+    OrganizationMembership.objects.create(
+        organization=org, user=user, role="owner", is_default=True
+    )
     return user
 
 

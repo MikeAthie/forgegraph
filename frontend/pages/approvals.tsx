@@ -5,7 +5,14 @@ import { AlertTriangle, ArrowRight, HandCoins, ShieldCheck } from "lucide-react"
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock, InspectorPanel, MetricCard, Panel, SectionHeader, SelectionList, StatusBadge } from "@/components/os/operations-ui";
+  EmptyBlock,
+  InspectorPanel,
+  MetricCard,
+  Panel,
+  SectionHeader,
+  SelectionList,
+  StatusBadge,
+} from "@/components/os/operations-ui";
 import { formatCurrency, formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner, Textarea } from "@/components/ui";
@@ -261,18 +268,18 @@ function ApprovalQueuePanel({
   onSelectApproval: (approval: ApprovalVM) => void;
 }) {
   const emptyState = useMemo(
-    () => <EmptyBlock title="No items in this filter" description="Try another approval state to review earlier approvals." />,
+    () => (
+      <EmptyBlock
+        title="No items in this filter"
+        description="Try another approval state to review earlier approvals."
+      />
+    ),
     [],
   );
 
   return (
     <Panel title="Review queue" description="Every row should be understandable before it is opened.">
-      <SelectionList
-        items={approvals}
-        selectedId={selectedApproval.id}
-        onSelect={onSelectApproval}
-        empty={emptyState}
-      >
+      <SelectionList items={approvals} selectedId={selectedApproval.id} onSelect={onSelectApproval} empty={emptyState}>
         {(approval, { selected }) => {
           const approvalImpact = estimateImpact(approval);
           return (

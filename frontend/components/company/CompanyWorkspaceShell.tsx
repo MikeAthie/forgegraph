@@ -2,7 +2,16 @@ import { useCallback, useEffect, useMemo, useReducer, type SetStateAction } from
 import Link from "next/link";
 import { useRouter } from "next/router";
 import {
-  AlertTriangle, ArrowRight, Bot, FileText, PauseCircle, PlayCircle, RotateCcw, Send, Settings2, } from "lucide-react";
+  AlertTriangle,
+  ArrowRight,
+  Bot,
+  FileText,
+  PauseCircle,
+  PlayCircle,
+  RotateCcw,
+  Send,
+  Settings2,
+} from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { CommerceInventoryPanel } from "@/components/company/CommerceInventoryPanel";

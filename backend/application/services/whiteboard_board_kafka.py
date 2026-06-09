@@ -601,7 +601,8 @@ def whiteboard_board_kafka_transport_evidence(
     dead_letter_query = EventDeadLetterRecord.objects.filter(
         source="whiteboard_board_kafka_consumer",
     ).filter(
-        Q(organization=organization) | Q(organization__isnull=True, payload__organization_id=organization_id)
+        Q(organization=organization)
+        | Q(organization__isnull=True, payload__organization_id=organization_id)
     )
 
     if whiteboard_id:

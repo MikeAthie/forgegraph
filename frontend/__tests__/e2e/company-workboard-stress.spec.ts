@@ -283,7 +283,10 @@ test.describe("Company workboard stress flow", () => {
     await openBackendAuthenticatedPage(page, request, user, "/companies");
 
     await expect(page.getByRole("link", { name: /Stress Operations Studio/i })).toHaveCount(1);
-    await page.getByRole("link", { name: /Stress Operations Studio/i }).first().click();
+    await page
+      .getByRole("link", { name: /Stress Operations Studio/i })
+      .first()
+      .click();
     await page.waitForURL(new RegExp(`/companies/${seed.companyId}$`));
     await expect(page.getByTestId("command-ops-panel")).toBeVisible();
     await expect(page.getByText(/initial stress-cycle operating memo/i).first()).toBeVisible();
@@ -347,9 +350,7 @@ test.describe("Company workboard stress flow", () => {
     await expect(page.getByTestId("whiteboard-board-lane-traffic")).toContainText(/Strategy intake/i);
 
     await page.getByTestId(`whiteboard-card-evidence-button-${contentCardId}`).click();
-    await expect(page.getByTestId(`whiteboard-card-evidence-${contentCardId}`)).toContainText(
-      /2 evidence refs/i,
-    );
+    await expect(page.getByTestId(`whiteboard-card-evidence-${contentCardId}`)).toContainText(/2 evidence refs/i);
     await page.getByTestId(`whiteboard-card-ready-${contentCardId}`).click();
     await expect(page.getByTestId(`whiteboard-card-status-${contentCardId}`)).toContainText(/ready_for_review/i);
     await page.getByTestId(`whiteboard-card-complete-${contentCardId}`).click();
@@ -389,13 +390,15 @@ test.describe("Company workboard stress flow", () => {
     });
     expect(sawProductModeApiPath(apiRequests, "/api/companies/")).toBe(true);
     expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}`)).toBe(true);
+    expect(sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/operating-model-versions/latest`)).toBe(
+      true,
+    );
     expect(
-      sawProductModeApiPath(apiRequests, `/api/companies/${seed.companyId}/operating-model-versions/latest`),
+      sawProductModeApiPath(apiRequests, `/api/whiteboards/${legacyMultiPackIds.whiteboard}/ready-for-planning`),
     ).toBe(true);
-    expect(sawProductModeApiPath(apiRequests, `/api/whiteboards/${legacyMultiPackIds.whiteboard}/ready-for-planning`))
-      .toBe(true);
-    expect(sawApiEvent(diagnostics.apiEvents, "POST", `/api/whiteboards/${legacyMultiPackIds.whiteboard}/board/cards`))
-      .toBe(true);
+    expect(
+      sawApiEvent(diagnostics.apiEvents, "POST", `/api/whiteboards/${legacyMultiPackIds.whiteboard}/board/cards`),
+    ).toBe(true);
     expect(
       diagnostics.apiEvents.filter((event) => storageApiPattern.test(event.pathname)).map((event) => event.pathname),
     ).toEqual([]);

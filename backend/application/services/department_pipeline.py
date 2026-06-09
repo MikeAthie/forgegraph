@@ -603,7 +603,10 @@ def _append_stage_output(stage_state: ProgramStageState, output: dict[str, Any])
     stage_state = _locked_stage(stage_state)
     state = dict(stage_state.state_json or {})
     outputs = _json_list(state.get("outputs"))
-    if not any(item.get("id") == output.get("id") and item.get("type") == output.get("type") for item in outputs):
+    if not any(
+        item.get("id") == output.get("id") and item.get("type") == output.get("type")
+        for item in outputs
+    ):
         outputs.append(output)
     state["outputs"] = outputs
     stage_state.state_json = state
@@ -611,7 +614,10 @@ def _append_stage_output(stage_state: ProgramStageState, output: dict[str, Any])
 
 
 def _assert_same_scope(value: Any, stage_state: ProgramStageState) -> None:
-    if value.organization_id != stage_state.organization_id or value.company_id != stage_state.company_id:
+    if (
+        value.organization_id != stage_state.organization_id
+        or value.company_id != stage_state.company_id
+    ):
         raise DepartmentPipelineError(
             "SCOPE_MISMATCH",
             "Pipeline artifacts must belong to the same organization and company as the stage.",

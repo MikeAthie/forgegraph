@@ -945,7 +945,9 @@ def _review_payload(
             "approval_status": _approval_status(record),
         }
         decision_record_id = str(decision.id) if decision else ""
-        if internal or (decision_record_id and links.get("decision_record_id") == decision_record_id):
+        if internal or (
+            decision_record_id and links.get("decision_record_id") == decision_record_id
+        ):
             payload["decision_record_id"] = decision_record_id
         return payload
 

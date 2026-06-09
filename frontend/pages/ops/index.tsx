@@ -6,8 +6,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { DeadLetterTable } from "@/components/ops/DeadLetterTable";
 import { EventSpoolPanel } from "@/components/ops/EventSpoolPanel";
 import { ProjectionLagPanel } from "@/components/ops/ProjectionLagPanel";
-import {
-  InspectorPanel, KeyValueGrid, MetricCard, Panel, StatusBadge } from "@/components/os/operations-ui";
+import { InspectorPanel, KeyValueGrid, MetricCard, Panel, StatusBadge } from "@/components/os/operations-ui";
 import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Textarea } from "@/components/ui";

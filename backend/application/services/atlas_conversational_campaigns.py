@@ -177,10 +177,7 @@ def build_funnel_map(
     context: AtlasCampaignContext | Mapping[str, Any],
 ) -> dict[str, Any]:
     normalized = _normalize_context(context)
-    whatsapp_goal = (
-        f"Llevar a {normalized['primary_cta']} desde "
-        f"{normalized['primary_channel']}."
-    )
+    whatsapp_goal = f"Llevar a {normalized['primary_cta']} desde {normalized['primary_channel']}."
     stages = [
         {
             "key": "descubrimiento",
@@ -280,7 +277,7 @@ def build_scripts_and_followups(
         "cold_lead_recovery": (
             "Hola {nombre_contacto}, vuelvo a escribir porque estamos cerrando "
             f"una ronda para {segment}. Si todavía te interesa {cta}, responde con "
-            "\"cotización\" y retomamos desde ahí."
+            '"cotización" y retomamos desde ahí.'
         ),
     }
 
@@ -397,9 +394,7 @@ def render_campaign_package_markdown(
             "funnel_map": build_funnel_map(package_or_context),
             "scripts_and_followups": build_scripts_and_followups(package_or_context),
             "scale_kill_criteria": build_scale_kill_criteria(package_or_context),
-            "launch_readiness_scorecard": build_launch_readiness_scorecard(
-                package_or_context
-            ),
+            "launch_readiness_scorecard": build_launch_readiness_scorecard(package_or_context),
         }
 
     brief = package["campaign_brief"]
@@ -409,12 +404,8 @@ def render_campaign_package_markdown(
     scale_kill = package.get("scale_kill_criteria") or _scale_kill_from_brief(brief)
     scorecard = package["launch_readiness_scorecard"]
     offer_cta = offer.get("cta") or offer.get("CTA")
-    average_gate_result = (
-        "cumple" if scorecard["gates"]["average_at_least_4"] else "no cumple"
-    )
-    score_floor_result = (
-        "cumple" if scorecard["gates"]["no_score_below_3"] else "no cumple"
-    )
+    average_gate_result = "cumple" if scorecard["gates"]["average_at_least_4"] else "no cumple"
+    score_floor_result = "cumple" if scorecard["gates"]["no_score_below_3"] else "no cumple"
 
     lines = [
         f"# Paquete Atlas Conversión Local IA: {brief['business_name']}",
@@ -640,11 +631,7 @@ def _paired_bullet_lines(objections: list[str], responses: list[str]) -> list[st
     lines = []
     safe_responses = responses or ["Respuesta pendiente de validar con el cliente."]
     for index, objection in enumerate(objections):
-        response = (
-            safe_responses[index]
-            if index < len(safe_responses)
-            else safe_responses[-1]
-        )
+        response = safe_responses[index] if index < len(safe_responses) else safe_responses[-1]
         lines.append(f"  - Objeción: {objection} Respuesta: {response}")
     return lines
 

@@ -100,7 +100,9 @@ def prepare_legacy_handoff(
 
     markdown_text = markdown_path.read_text(encoding="utf-8")
     (output_dir / "email_body.md").write_text(markdown_text, encoding="utf-8")
-    (output_dir / "email_body.html").write_text(_markdown_email_html(markdown_text), encoding="utf-8")
+    (output_dir / "email_body.html").write_text(
+        _markdown_email_html(markdown_text), encoding="utf-8"
+    )
 
     summary: dict[str, object] = {
         "recipient": recipient,
@@ -159,7 +161,11 @@ def run(
         ).count()
     if whiteboard_id:
         whiteboard = WorkWhiteboard.objects.filter(id=whiteboard_id).first()
-        snapshot = (whiteboard.metadata_json or {}).get("company_run_task_snapshot", {}) if whiteboard else {}
+        snapshot = (
+            (whiteboard.metadata_json or {}).get("company_run_task_snapshot", {})
+            if whiteboard
+            else {}
+        )
         tasks = snapshot.get("tasks", []) if isinstance(snapshot, dict) else []
         result["whiteboard_id"] = whiteboard_id
         result["whiteboard_snapshot_task_count"] = len(tasks)
@@ -428,7 +434,9 @@ def _upsert_fixture_source_deliverable(
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Prepare the Legacy formatter-backed handoff package.")
+    parser = argparse.ArgumentParser(
+        description="Prepare the Legacy formatter-backed handoff package."
+    )
     parser.add_argument("--deterministic-fixture", action="store_true")
     parser.add_argument("--operator-email", default="admin@forgegraph.local")
     parser.add_argument("--recipient", default=DEFAULT_RECIPIENT)

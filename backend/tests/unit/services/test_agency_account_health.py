@@ -120,9 +120,7 @@ def test_account_health_snapshot_exposes_required_sections_and_unknown_commercia
     assert snapshot["profile"]["commercial"]["contract_value"]["status"] == "unknown"
     assert snapshot["profile"]["commercial"]["gross_margin"]["status"] == "unknown"
     assert snapshot["connector_readiness"]["summary"]["missing"] >= 1
-    assert any(
-        action["slug"].startswith("configure_") for action in snapshot["next_actions"]
-    )
+    assert any(action["slug"].startswith("configure_") for action in snapshot["next_actions"])
     assert snapshot["health"]["score"] < 80
     rendered = json.dumps(snapshot, sort_keys=True, default=str)
     assert str(credential.id) not in rendered
@@ -173,7 +171,6 @@ def test_account_health_snapshot_flags_stale_approval_and_recent_report(user) ->
     assert snapshot["growth_signals"]["commercial"]["gross_margin"]["status"] == "unknown"
     assert dimensions["reporting"]["score"] >= 80
     assert any(
-        action["owner_department_slug"] == "client_approval_ops"
-        and "approval" in action["slug"]
+        action["owner_department_slug"] == "client_approval_ops" and "approval" in action["slug"]
         for action in snapshot["next_actions"]
     )

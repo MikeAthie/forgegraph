@@ -503,7 +503,9 @@ def _redact_metadata(value: Any, *, field_name: str | None = None) -> Any:
     if field_name and _metadata_key_is_sensitive(field_name):
         return REDACTED_VALUE
     if isinstance(value, Mapping):
-        return {str(key): _redact_metadata(item, field_name=str(key)) for key, item in value.items()}
+        return {
+            str(key): _redact_metadata(item, field_name=str(key)) for key, item in value.items()
+        }
     if isinstance(value, list):
         return [_redact_metadata(item) for item in value]
     if isinstance(value, tuple):

@@ -423,8 +423,13 @@ def test_atlas_content_policy_failure_routes_revision_signal_without_approval() 
     assert failing_whiteboard.status == WorkWhiteboard.STATUS_IN_CONTENT
     assert not ApprovalTask.objects.filter(run=failing_eval.operation).exists()
     signal = CompanySignal.objects.get(
-        company=company, metadata_json__whiteboard_id=str(failing_whiteboard.id)
+        company=company,
+        source="workstream_gates",
+        external_key=(
+            f"whiteboard:{failing_whiteboard.id}:phase:{phase_id}:gate-signal:{failing_eval.id}"
+        ),
     )
+    assert signal.metadata_json["whiteboard_id"] == str(failing_whiteboard.id)
     assert set(signal.metadata_json["weak_areas"]) == {"strategy_alignment", "legal_compliance"}
     routing_record = TaskRoutingRecord.objects.get(
         company=company,

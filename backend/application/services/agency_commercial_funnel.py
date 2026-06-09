@@ -152,7 +152,9 @@ def _metadata_intake(metadata: dict[str, Any]) -> dict[str, Any]:
 
 def _icp_fit(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
-        label = _safe_text(_first_present(value.get("label"), value.get("value"), value.get("tier")))
+        label = _safe_text(
+            _first_present(value.get("label"), value.get("value"), value.get("tier"))
+        )
         score = _int_value(value.get("score"))
         if label is not None or score is not None:
             return {"status": "known", "value": label, "score": score}
@@ -282,7 +284,9 @@ def _roi_estimate(
     opportunity: CompanyOpportunity,
     engagement: ServiceEngagement | None,
 ) -> dict[str, Any]:
-    source = _mapping(_proposal_metadata(opportunity=opportunity, engagement=engagement).get("roi_estimate"))
+    source = _mapping(
+        _proposal_metadata(opportunity=opportunity, engagement=engagement).get("roi_estimate")
+    )
     projected_value = _money_value(
         _first_present(
             source.get("projected_value"),
@@ -421,11 +425,7 @@ def _current_opportunity_summary(opportunity: CompanyOpportunity | None) -> dict
 
 def _status_bucket(opportunities: Any, statuses: set[str]) -> dict[str, Any]:
     bucket_statuses = sorted(
-        {
-            opportunity.status
-            for opportunity in opportunities
-            if opportunity.status in statuses
-        }
+        {opportunity.status for opportunity in opportunities if opportunity.status in statuses}
     )
     return {
         "count": sum(1 for opportunity in opportunities if opportunity.status in statuses),

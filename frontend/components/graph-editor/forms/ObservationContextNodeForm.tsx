@@ -6,7 +6,11 @@ import { Separator } from "@/components/ui/separator";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import type { NodeFormProps } from "../NodeConfigDialog";
-import { compactObservationErrors, updateObservationNumberField, validateObservationSource } from "./observation-form-helpers";
+import {
+  compactObservationErrors,
+  updateObservationNumberField,
+  validateObservationSource,
+} from "./observation-form-helpers";
 import { ObservationSourceField } from "./observation-form-utils";
 
 export function ObservationContextNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
@@ -92,9 +96,7 @@ export function ObservationContextNodeForm({ config, onChange, errors, setErrors
             type="number"
             min={1}
             value={String(contextConfig.limit ?? "")}
-            onChange={(event) =>
-              updateConfig(updateObservationNumberField(contextConfig, "limit", event.target.value))
-            }
+            onChange={(event) => updateConfig(updateObservationNumberField(contextConfig, "limit", event.target.value))}
             placeholder="5"
             className="text-sm"
           />

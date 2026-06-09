@@ -201,7 +201,9 @@ def _deliverable_state(whiteboard: WorkWhiteboard) -> dict[str, Any]:
             missing_types.append(deliverable_type)
             items.append({"type": deliverable_type, "status": "missing", "ready": False})
             continue
-        ready = deliverable.status in DELIVERABLE_READY_STATUSES and deliverable.artifact_id is not None
+        ready = (
+            deliverable.status in DELIVERABLE_READY_STATUSES and deliverable.artifact_id is not None
+        )
         if not ready:
             not_ready_types.append(deliverable_type)
         items.append(
@@ -293,7 +295,9 @@ def _connector_blockers(connector_readiness: dict[str, Any]) -> list[dict[str, A
 def _approval_blockers(approval_state: dict[str, Any]) -> list[dict[str, Any]]:
     if bool(approval_state.get("approved")):
         return []
-    code = "approval_missing" if approval_state.get("status") == "missing" else "approval_not_approved"
+    code = (
+        "approval_missing" if approval_state.get("status") == "missing" else "approval_not_approved"
+    )
     return [
         {
             "code": code,
@@ -545,8 +549,12 @@ def _receipt_metadata(*, whiteboard: WorkWhiteboard, readiness: dict[str, Any]) 
         "blocked": blocked,
         "readiness_status": str(readiness.get("status") or ""),
         "live_execution_enabled": False,
-        "blocker_codes": [str(item.get("code") or "") for item in list(readiness.get("blockers") or [])],
-        "warning_codes": [str(item.get("code") or "") for item in list(readiness.get("warnings") or [])],
+        "blocker_codes": [
+            str(item.get("code") or "") for item in list(readiness.get("blockers") or [])
+        ],
+        "warning_codes": [
+            str(item.get("code") or "") for item in list(readiness.get("warnings") or [])
+        ],
     }
 
 
@@ -562,13 +570,17 @@ def _receipt_summary(readiness: dict[str, Any]) -> str:
 
 
 def _status_value(state: dict[str, Any], *, default: str) -> str:
-    return str(
-        state.get("status")
-        or state.get("readiness")
-        or state.get("state")
-        or state.get("result")
-        or default
-    ).strip().lower()
+    return (
+        str(
+            state.get("status")
+            or state.get("readiness")
+            or state.get("state")
+            or state.get("result")
+            or default
+        )
+        .strip()
+        .lower()
+    )
 
 
 def _truthy(value: Any) -> bool:

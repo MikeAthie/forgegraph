@@ -140,6 +140,7 @@ class TestRunStart:
             "provider": "openai",
             "credential_id": str(credential.id),
             "api_key_present": True,
+            "local_session_required": False,
         }
 
         run = Run.objects.get(id=run_data["id"])

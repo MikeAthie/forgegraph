@@ -106,7 +106,9 @@ def test_codex_session_runtime_uses_fake_runner_without_leaking_auth():
             exit_code=0,
         )
 
-    with override_settings(ENABLE_CODEX_SESSION_RUNTIME=True, CODEX_SESSION_WORKDIR="/tmp/fg-codex"):
+    with override_settings(
+        ENABLE_CODEX_SESSION_RUNTIME=True, CODEX_SESSION_WORKDIR="/tmp/fg-codex"
+    ):
         result = run_codex_session_prompt(prompt="Draft strategy", runner=fake_runner)
 
     assert result.status == "succeeded"
@@ -159,5 +161,12 @@ def test_codex_output_becomes_stage_owned_deliverable(user):
     assert routing["stage_id"] == "strategy_research"
     assert TaskRoutingRecord.objects.filter(id=routing["routing_record_id"]).exists()
     version = AssetVersion.objects.get(id=deliverable.metadata_json["asset_version_id"])
-    assert version.provenance_json["task_routing"]["routing_record_id"] == routing["routing_record_id"]
-    assert ServiceDeliverable.objects.filter(engagement=engagement, deliverable_type="codex_strategy_brief").count() == 1
+    assert (
+        version.provenance_json["task_routing"]["routing_record_id"] == routing["routing_record_id"]
+    )
+    assert (
+        ServiceDeliverable.objects.filter(
+            engagement=engagement, deliverable_type="codex_strategy_brief"
+        ).count()
+        == 1
+    )

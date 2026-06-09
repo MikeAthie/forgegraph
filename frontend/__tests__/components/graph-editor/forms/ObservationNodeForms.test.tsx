@@ -43,7 +43,10 @@ describe("Observation node forms", () => {
   }
 
   it("validates required save fields", async () => {
-    renderWithState(ObservationSaveNodeForm);
+    const user = setupUser();
+    renderWithState(ObservationSaveNodeForm, { type: "preference" });
+
+    await user.clear(screen.getByLabelText(/observation type/i));
 
     await waitFor(() => {
       expect(mockSetErrors).toHaveBeenCalledWith(
@@ -74,7 +77,10 @@ describe("Observation node forms", () => {
   });
 
   it("validates required search query source", async () => {
-    renderWithState(ObservationSearchNodeForm);
+    const user = setupUser();
+    renderWithState(ObservationSearchNodeForm, { query: "customer preferences" });
+
+    await user.clear(screen.getByLabelText(/^query/i));
 
     await waitFor(() => {
       expect(mockSetErrors).toHaveBeenCalledWith(

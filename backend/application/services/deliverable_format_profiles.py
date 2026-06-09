@@ -202,7 +202,9 @@ class FormatProfileRegistry:
         parse_profile_ref(profile_ref)
         profile = self._profiles_by_ref.get(profile_ref)
         if profile is None:
-            raise FormatProfileError("profile_not_found", f"Format profile not found: {profile_ref}")
+            raise FormatProfileError(
+                "profile_not_found", f"Format profile not found: {profile_ref}"
+            )
         return profile
 
     def resolve(
@@ -241,7 +243,9 @@ def profile_ref_for(profile_id: str, version: int) -> str:
 def parse_profile_ref(profile_ref: str) -> tuple[str, int]:
     match = _PROFILE_REF_RE.match(str(profile_ref or "").strip())
     if not match:
-        raise FormatProfileError("invalid_profile_ref", "Profile ref must be format_profile:<id>@<version>.")
+        raise FormatProfileError(
+            "invalid_profile_ref", "Profile ref must be format_profile:<id>@<version>."
+        )
     return match.group(1), int(match.group(2))
 
 

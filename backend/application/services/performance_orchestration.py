@@ -1722,14 +1722,18 @@ def _baseline_target_summary(sources: list[dict[str, Any]]) -> list[dict[str, An
                 {
                     "id": source.get("id"),
                     "status": source.get("status"),
-                    "metrics": source.get("metrics") if isinstance(source.get("metrics"), dict) else {},
+                    "metrics": source.get("metrics")
+                    if isinstance(source.get("metrics"), dict)
+                    else {},
                     "baseline_metrics": source.get("baseline_metrics")
                     if isinstance(source.get("baseline_metrics"), dict)
                     else {},
                     "target_metrics": source.get("target_metrics")
                     if isinstance(source.get("target_metrics"), dict)
                     else {},
-                    "variance": source.get("variance") if isinstance(source.get("variance"), dict) else {},
+                    "variance": source.get("variance")
+                    if isinstance(source.get("variance"), dict)
+                    else {},
                     "attribution_scope": source.get("attribution_scope"),
                     "evidence_mode": source.get("evidence_mode"),
                 }

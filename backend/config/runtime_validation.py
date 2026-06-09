@@ -139,9 +139,7 @@ def _validate_whiteboard_board_kafka_settings(errors: list[str]) -> None:
     if not _is_enabled_setting("WHITEBOARD_BOARD_KAFKA_ENABLED"):
         return
     if importlib.util.find_spec("confluent_kafka") is None:
-        errors.append(
-            "confluent-kafka must be installed when WHITEBOARD_BOARD_KAFKA_ENABLED=true."
-        )
+        errors.append("confluent-kafka must be installed when WHITEBOARD_BOARD_KAFKA_ENABLED=true.")
     bootstrap_servers = str(
         getattr(settings, "WHITEBOARD_BOARD_KAFKA_BOOTSTRAP_SERVERS", "")
         or getattr(settings, "KAFKA_BROKERS", "")
@@ -212,15 +210,9 @@ def _validate_whiteboard_board_kafka_security(errors: list[str]) -> None:
             "WHITEBOARD_BOARD_KAFKA_SECURITY_PROTOCOL must be SSL or SASL_SSL for production Kafka."
         )
     if security_protocol == "SASL_SSL":
-        sasl_mechanism = str(
-            getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM", "") or ""
-        )
-        sasl_username = str(
-            getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_USERNAME", "") or ""
-        )
-        sasl_password = str(
-            getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_PASSWORD", "") or ""
-        )
+        sasl_mechanism = str(getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM", "") or "")
+        sasl_username = str(getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_USERNAME", "") or "")
+        sasl_password = str(getattr(settings, "WHITEBOARD_BOARD_KAFKA_SASL_PASSWORD", "") or "")
         if not sasl_mechanism.strip():
             errors.append(
                 "WHITEBOARD_BOARD_KAFKA_SASL_MECHANISM is required when "

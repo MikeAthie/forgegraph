@@ -17,6 +17,7 @@ from infrastructure.orm.models import (
     Graph,
     Organization,
     OrganizationMembership,
+    ProcessedCommand,
     ReportRun,
     ServiceCatalogItem,
     ServiceDeliverable,
@@ -482,6 +483,7 @@ def test_service_deliverable_can_reference_company_report(authenticated_client, 
     assert response.status_code == 201
     assert response.data["data"]["deliverable"]["report_run_id"] == str(report.id)
 
+
 def test_service_deliverable_create_requires_idempotency_key(authenticated_client, user):
     company = _company(user, "Deliverable Idempotency Required")
     engagement = _engagement(user, company)
@@ -573,6 +575,7 @@ def test_service_deliverable_action_mark_ready_runs_quality_gate(authenticated_c
         resource_type="service_deliverable",
         resource_id=str(deliverable.id),
     ).exists()
+
 
 def test_service_deliverable_action_requires_idempotency_key(authenticated_client, user):
     company = _company(user, "Action Idempotency Required")
@@ -678,6 +681,7 @@ def test_service_deliverable_action_submit_for_approval(authenticated_client, us
     assert deliverable.status == "in_review"
     assert engagement.status == "waiting_on_customer"
     assert engagement.customer_status == "review_ready"
+
 
 def test_service_deliverable_action_deliver_to_client_sets_delivered_at(authenticated_client, user):
     company = _company(user, "Lifecycle Delivered Client")
@@ -863,6 +867,10 @@ def test_atlas_deliverables_batch_assemble_api(authenticated_client, user):
     }
     assert ServiceEngagement.objects.filter(company=company).count() == 1
     assert ServiceDeliverable.objects.filter(company=company).count() == 10
+    processed = ProcessedCommand.objects.get(idempotency_key="atlas-deliverables-batch")
+    assert processed.resource_type == "work_whiteboard"
+    assert processed.resource_id == str(whiteboard.id)
+    assert len(processed.resource_id) <= 128
     assert AuditLog.objects.filter(
         action="atlas_deliverables.assembled",
         resource_type="work_whiteboard",

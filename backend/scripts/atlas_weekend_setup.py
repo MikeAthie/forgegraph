@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import timedelta
 from typing import Any
 
 from django.db import transaction
@@ -35,13 +34,41 @@ PACK_ID = "digital_marketing_pro.v1"
 SOURCE = "atlas-weekend-setup.v1"
 
 DEPARTMENTS = [
-    ("strategy_research", "Strategy & Research", ["atlas", "digital_marketing_pro", "strategy", "research"]),
-    ("brand_content", "Brand & Content", ["atlas", "digital_marketing_pro", "brand", "content", "creative"]),
-    ("channel_execution", "Channel Execution", ["atlas", "digital_marketing_pro", "channels", "launch", "connectors"]),
-    ("crm_lifecycle", "CRM & Lifecycle", ["atlas", "digital_marketing_pro", "crm", "lifecycle", "consent"]),
-    ("analytics_performance", "Analytics & Performance", ["atlas", "digital_marketing_pro", "analytics", "performance", "measurement"]),
-    ("qa_compliance", "QA & Compliance", ["atlas", "digital_marketing_pro", "qa", "compliance", "risk"]),
-    ("client_approval_ops", "Client/Approval Ops", ["atlas", "digital_marketing_pro", "client", "approval", "ops"]),
+    (
+        "strategy_research",
+        "Strategy & Research",
+        ["atlas", "digital_marketing_pro", "strategy", "research"],
+    ),
+    (
+        "brand_content",
+        "Brand & Content",
+        ["atlas", "digital_marketing_pro", "brand", "content", "creative"],
+    ),
+    (
+        "channel_execution",
+        "Channel Execution",
+        ["atlas", "digital_marketing_pro", "channels", "launch", "connectors"],
+    ),
+    (
+        "crm_lifecycle",
+        "CRM & Lifecycle",
+        ["atlas", "digital_marketing_pro", "crm", "lifecycle", "consent"],
+    ),
+    (
+        "analytics_performance",
+        "Analytics & Performance",
+        ["atlas", "digital_marketing_pro", "analytics", "performance", "measurement"],
+    ),
+    (
+        "qa_compliance",
+        "QA & Compliance",
+        ["atlas", "digital_marketing_pro", "qa", "compliance", "risk"],
+    ),
+    (
+        "client_approval_ops",
+        "Client/Approval Ops",
+        ["atlas", "digital_marketing_pro", "client", "approval", "ops"],
+    ),
 ]
 
 DELIVERABLES = [
@@ -168,40 +195,62 @@ DELIVERABLES = [
 ]
 
 
-def graph_json(departments: dict[str, DepartmentRegistry], deliverables: list[ServiceDeliverable]) -> dict[str, Any]:
+def graph_json(
+    departments: dict[str, DepartmentRegistry], deliverables: list[ServiceDeliverable]
+) -> dict[str, Any]:
     nodes = []
     edges = []
     for idx, (slug, label, _tags) in enumerate(DEPARTMENTS):
-        nodes.append({
-            "id": f"dept_{slug}",
-            "type": "agent",
-            "name": label,
-            "config": {
-                "department_slug": slug,
-                "department_id": str(departments[slug].id),
-                "role": "atlas_agency_department",
-            },
-            "position": {"x": 100 + idx * 180, "y": 120},
-        })
-    nodes.append({
-        "id": "approval_gate_weekend_package",
-        "type": "human_gate",
-        "name": "Weekend Package Approval Gate",
-        "config": {"approval_scope": "weekend_launch_readiness_sprint"},
-        "position": {"x": 760, "y": 360},
-    })
-    nodes.append({
-        "id": "final_weekend_deliverable_package",
-        "type": "output",
-        "name": "Final Weekend Campaign Launch Package",
-        "config": {"deliverable_ids": [str(item.id) for item in deliverables]},
-        "position": {"x": 980, "y": 360},
-    })
-    for idx, (slug, _label, _tags) in enumerate(DEPARTMENTS):
+        nodes.append(
+            {
+                "id": f"dept_{slug}",
+                "type": "agent",
+                "name": label,
+                "config": {
+                    "department_slug": slug,
+                    "department_id": str(departments[slug].id),
+                    "role": "atlas_agency_department",
+                },
+                "position": {"x": 100 + idx * 180, "y": 120},
+            }
+        )
+    nodes.append(
+        {
+            "id": "approval_gate_weekend_package",
+            "type": "human_gate",
+            "name": "Weekend Package Approval Gate",
+            "config": {"approval_scope": "weekend_launch_readiness_sprint"},
+            "position": {"x": 760, "y": 360},
+        }
+    )
+    nodes.append(
+        {
+            "id": "final_weekend_deliverable_package",
+            "type": "output",
+            "name": "Final Weekend Campaign Launch Package",
+            "config": {"deliverable_ids": [str(item.id) for item in deliverables]},
+            "position": {"x": 980, "y": 360},
+        }
+    )
+    for slug, _label, _tags in DEPARTMENTS:
         edges.append({"id": f"edge_start_{slug}", "from": "START", "to": f"dept_{slug}"})
-        edges.append({"id": f"edge_{slug}_approval", "from": f"dept_{slug}", "to": "approval_gate_weekend_package"})
-    edges.append({"id": "edge_approval_output", "from": "approval_gate_weekend_package", "to": "final_weekend_deliverable_package"})
-    edges.append({"id": "edge_output_end", "from": "final_weekend_deliverable_package", "to": "END"})
+        edges.append(
+            {
+                "id": f"edge_{slug}_approval",
+                "from": f"dept_{slug}",
+                "to": "approval_gate_weekend_package",
+            }
+        )
+    edges.append(
+        {
+            "id": "edge_approval_output",
+            "from": "approval_gate_weekend_package",
+            "to": "final_weekend_deliverable_package",
+        }
+    )
+    edges.append(
+        {"id": "edge_output_end", "from": "final_weekend_deliverable_package", "to": "END"}
+    )
     return {
         "nodes": nodes,
         "edges": edges,
@@ -237,19 +286,23 @@ def markdown_for(item: dict[str, Any], company: Graph, engagement: ServiceEngage
         "## Client-ready content",
     ]
     body.extend(f"- {section}" for section in item["sections"])
-    body.extend([
-        "",
-        "## Evidence / caveats",
-        "- Produced inside ForgeGraph as part of the Atlas Mkt company workspace.",
-        "- Connector limitations are represented explicitly rather than hidden or treated as blockers to planning deliverables.",
-        "- Production launch claims require final client approval and live connector readiness.",
-    ])
+    body.extend(
+        [
+            "",
+            "## Evidence / caveats",
+            "- Produced inside ForgeGraph as part of the Atlas Mkt company workspace.",
+            "- Connector limitations are represented explicitly rather than hidden or treated as blockers to planning deliverables.",
+            "- Production launch claims require final client approval and live connector readiness.",
+        ]
+    )
     return "\n".join(body) + "\n"
 
 
 @transaction.atomic
-def run() -> dict[str, Any]:
-    password = os.environ.get("ATLAS_OPERATOR_PASSWORD") or User.objects.make_random_password(length=32)
+def run() -> dict[str, Any]:  # noqa: C901
+    password = os.environ.get("ATLAS_OPERATOR_PASSWORD") or User.objects.make_random_password(
+        length=32
+    )
     user, user_created = User.objects.get_or_create(email=EMAIL, defaults={})
     user.set_password(password)
     user.save(update_fields=["password"])
@@ -299,7 +352,14 @@ def run() -> dict[str, Any]:
         dept.service_tags_json = tags
         dept.active = True
         meta = dict(dept.metadata_json or {})
-        meta.update({"subject_id": slug, "operating_model_pack_id": PACK_ID, "company_id": str(company.id), "source": SOURCE})
+        meta.update(
+            {
+                "subject_id": slug,
+                "operating_model_pack_id": PACK_ID,
+                "company_id": str(company.id),
+                "source": SOURCE,
+            }
+        )
         dept.metadata_json = meta
         dept.save()
         DepartmentMembership.objects.get_or_create(
@@ -312,9 +372,13 @@ def run() -> dict[str, Any]:
 
     pack_status = "installed"
     try:
-        installation = install_pack_for_company(company=company, user=user, pack_id=PACK_ID, role="primary")
+        installation = install_pack_for_company(
+            company=company, user=user, pack_id=PACK_ID, role="primary"
+        )
     except Exception as exc:  # keep setup moving; surface exact error in evidence
-        installation = CompanyOperatingModelInstallation.objects.filter(company=company, pack_id=PACK_ID).first()
+        installation = CompanyOperatingModelInstallation.objects.filter(
+            company=company, pack_id=PACK_ID
+        ).first()
         pack_status = f"install_error:{exc.__class__.__name__}:{exc}"
 
     catalog, _ = ServiceCatalogItem.objects.get_or_create(
@@ -335,8 +399,15 @@ def run() -> dict[str, Any]:
     catalog.visibility = "organization"
     catalog.audience = "B2B service teams"
     catalog.required_pack_ids_json = [PACK_ID]
-    catalog.deliverables_schema_json = [{"type": item["type"], "title": item["title"], "department": item["department"]} for item in DELIVERABLES]
-    catalog.pricing_metadata_json = {"package": "weekend_sprint", "positioning": "fixed scope, approval-ready by Monday", "currency": "USD"}
+    catalog.deliverables_schema_json = [
+        {"type": item["type"], "title": item["title"], "department": item["department"]}
+        for item in DELIVERABLES
+    ]
+    catalog.pricing_metadata_json = {
+        "package": "weekend_sprint",
+        "positioning": "fixed scope, approval-ready by Monday",
+        "currency": "USD",
+    }
     catalog.metadata_json = {"source": SOURCE, "forgegraph_native": True}
     catalog.save()
 
@@ -365,7 +436,11 @@ def run() -> dict[str, Any]:
         "sales_goal": "Have durable client-ready deliverables to sell Atlas marketing services.",
     }
     engagement.required_pack_ids_json = [PACK_ID]
-    engagement.metadata_json = {"source": SOURCE, "forgegraph_native": True, "company_lives_inside_forgegraph": True}
+    engagement.metadata_json = {
+        "source": SOURCE,
+        "forgegraph_native": True,
+        "company_lives_inside_forgegraph": True,
+    }
     engagement.assigned_operator = user
     engagement.requested_by = user
     if not engagement.started_at:
@@ -387,10 +462,19 @@ def run() -> dict[str, Any]:
     whiteboard.request_summary = "Create a ForgeGraph-native Atlas marketing company workspace with client-ready weekend sprint deliverables."
     whiteboard.objective = "Produce enough client-facing deliverables by the end of the weekend to sell Atlas marketing services."
     whiteboard.timeline = "By end of weekend"
-    whiteboard.constraints_json = {"connector_policy": "Represent missing connectors honestly; do not block deliverable planning."}
+    whiteboard.constraints_json = {
+        "connector_policy": "Represent missing connectors honestly; do not block deliverable planning."
+    }
     whiteboard.stakeholder_context_json = {"operator": EMAIL, "approver": "Mike"}
-    whiteboard.delivery_context_json = {"package": "weekend_launch_readiness_sprint", "client_visible": True}
-    whiteboard.metadata_json = {"source": SOURCE, "agent_owned": True, "service_engagement_id": str(engagement.id)}
+    whiteboard.delivery_context_json = {
+        "package": "weekend_launch_readiness_sprint",
+        "client_visible": True,
+    }
+    whiteboard.metadata_json = {
+        "source": SOURCE,
+        "agent_owned": True,
+        "service_engagement_id": str(engagement.id),
+    }
     whiteboard.completion_score = 0.82
     whiteboard.save()
 
@@ -416,10 +500,21 @@ def run() -> dict[str, Any]:
         asset.title = item["title"]
         asset.asset_type = "deliverable"
         asset.status = "active"
-        asset.metadata_json = {"source": SOURCE, "deliverable_type": item["type"], "department_slug": item["department"], "inline_markdown": content}
+        asset.metadata_json = {
+            "source": SOURCE,
+            "deliverable_type": item["type"],
+            "department_slug": item["department"],
+            "inline_markdown": content,
+        }
         asset.save()
         if not AssetVersion.objects.filter(asset=asset, content_hash=digest).exists():
-            latest_num = AssetVersion.objects.filter(asset=asset).order_by("-version_number").values_list("version_number", flat=True).first() or 0
+            latest_num = (
+                AssetVersion.objects.filter(asset=asset)
+                .order_by("-version_number")
+                .values_list("version_number", flat=True)
+                .first()
+                or 0
+            )
             AssetVersion.objects.create(
                 asset=asset,
                 version_number=latest_num + 1,
@@ -427,7 +522,11 @@ def run() -> dict[str, Any]:
                 content_hash=digest,
                 mime_type="text/markdown",
                 size_bytes=len(content.encode("utf-8")),
-                provenance_json={"source": SOURCE, "generated_by": EMAIL, "content_inline_in_asset_metadata": True},
+                provenance_json={
+                    "source": SOURCE,
+                    "generated_by": EMAIL,
+                    "content_inline_in_asset_metadata": True,
+                },
             )
         deliverable, _ = ServiceDeliverable.objects.get_or_create(
             engagement=engagement,
@@ -454,7 +553,9 @@ def run() -> dict[str, Any]:
             ],
             "target_delivery_window": "end_of_weekend",
         }
-        deliverable.delivered_at = now if item["type"] in {"approval_packet", "campaign_launch_package"} else None
+        deliverable.delivered_at = (
+            now if item["type"] in {"approval_packet", "campaign_launch_package"} else None
+        )
         deliverable.save()
         asset.origin_deliverable_id = deliverable.id
         asset.save(update_fields=["origin_deliverable_id", "updated_at"])
@@ -464,7 +565,9 @@ def run() -> dict[str, Any]:
     latest = GraphVersion.objects.filter(graph=company).order_by("-version").first()
     should_create_version = latest is None or latest.graph_json != model
     if should_create_version:
-        version = GraphVersion.objects.create(graph=company, version=(latest.version + 1 if latest else 1), graph_json=model)
+        version = GraphVersion.objects.create(
+            graph=company, version=(latest.version + 1 if latest else 1), graph_json=model
+        )
     else:
         version = latest
 
@@ -472,12 +575,31 @@ def run() -> dict[str, Any]:
         "user": {"id": str(user.id), "email": user.email, "created": user_created},
         "organization": {"id": str(org.id), "name": org.name, "created": org_created},
         "company": {"id": str(company.id), "name": company.name, "created": company_created},
-        "pack": {"pack_id": PACK_ID, "status": pack_status, "installation_id": str(installation.id) if installation else None},
-        "departments": [{"id": str(departments[slug].id), "slug": slug, "name": departments[slug].name} for slug, _label, _tags in DEPARTMENTS],
-        "operating_model_version": {"id": str(version.id), "version": version.version, "created_or_updated": should_create_version},
+        "pack": {
+            "pack_id": PACK_ID,
+            "status": pack_status,
+            "installation_id": str(installation.id) if installation else None,
+        },
+        "departments": [
+            {"id": str(departments[slug].id), "slug": slug, "name": departments[slug].name}
+            for slug, _label, _tags in DEPARTMENTS
+        ],
+        "operating_model_version": {
+            "id": str(version.id),
+            "version": version.version,
+            "created_or_updated": should_create_version,
+        },
         "service_catalog": {"id": str(catalog.id), "slug": catalog.slug, "title": catalog.title},
-        "service_engagement": {"id": str(engagement.id), "status": engagement.status, "customer_status": engagement.customer_status},
-        "whiteboard": {"id": str(whiteboard.id), "status": whiteboard.status, "work_status": whiteboard.work_status},
+        "service_engagement": {
+            "id": str(engagement.id),
+            "status": engagement.status,
+            "customer_status": engagement.customer_status,
+        },
+        "whiteboard": {
+            "id": str(whiteboard.id),
+            "status": whiteboard.status,
+            "work_status": whiteboard.work_status,
+        },
         "deliverables": [
             {
                 "id": str(item.id),
@@ -486,7 +608,11 @@ def run() -> dict[str, Any]:
                 "status": item.status,
                 "department": item.department.slug if item.department else None,
                 "artifact_id": str(item.artifact_id) if item.artifact_id else None,
-                "latest_asset_version_id": str(item.artifact.versions.order_by("-version_number").first().id) if item.artifact and item.artifact.versions.exists() else None,
+                "latest_asset_version_id": str(
+                    item.artifact.versions.order_by("-version_number").first().id
+                )
+                if item.artifact and item.artifact.versions.exists()
+                else None,
             }
             for item in deliverables
         ],

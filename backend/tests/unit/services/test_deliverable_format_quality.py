@@ -66,9 +66,7 @@ def test_quality_gates_pass_client_ready_marketing_and_consulting_reports() -> N
             ),
         ]
         text = "\n\n".join(
-            [
-                section.content for section in sections
-            ]
+            [section.content for section in sections]
             + [
                 caveat,
                 "Approval required before production execution.",

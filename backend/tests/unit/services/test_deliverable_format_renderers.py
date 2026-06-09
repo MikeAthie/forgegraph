@@ -207,7 +207,9 @@ def test_pdf_report_renders_valid_pdf_with_readable_report_text() -> None:
     assert pdf.content_bytes.rstrip().endswith(b"%%EOF")
     assert b"Legacy Client Handoff" in pdf.content_bytes
     assert b"Atlas prepared the launch handoff for Legacy." in pdf.content_bytes
-    assert b"Recommendation: approve production execution after receipt review." in pdf.content_bytes
+    assert (
+        b"Recommendation: approve production execution after receipt review." in pdf.content_bytes
+    )
     assert b"C:\\\\Legacy\\\\handoff \\(review\\)" in pdf.content_bytes
     assert pdf.provenance["renderer"]["name"] == "pdf_report"
     assert pdf.provenance["profile"]["profile_ref"] == profile.profile_ref

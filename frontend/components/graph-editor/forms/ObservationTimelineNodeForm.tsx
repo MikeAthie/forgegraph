@@ -5,7 +5,11 @@ import { useCallback } from "react";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import type { NodeFormProps } from "../NodeConfigDialog";
-import { compactObservationErrors, updateObservationNumberField, validateObservationSource } from "./observation-form-helpers";
+import {
+  compactObservationErrors,
+  updateObservationNumberField,
+  validateObservationSource,
+} from "./observation-form-helpers";
 import { ObservationScopeField, ObservationSourceField } from "./observation-form-utils";
 
 export function ObservationTimelineNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
@@ -15,9 +19,7 @@ export function ObservationTimelineNodeForm({ config, onChange, errors, setError
     (nextConfig: Record<string, unknown>) =>
       compactObservationErrors({
         scope:
-          typeof nextConfig.scope === "string" && nextConfig.scope.trim().length > 0
-            ? undefined
-            : "Scope is required.",
+          typeof nextConfig.scope === "string" && nextConfig.scope.trim().length > 0 ? undefined : "Scope is required.",
         agent_id: validateObservationSource(
           nextConfig,
           "agent filter",

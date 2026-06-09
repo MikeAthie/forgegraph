@@ -41,7 +41,13 @@ export function GraphPrimaryActions({ controller }: { controller: GraphEditorCon
   );
 }
 
-function WizardButton({ buttonRef, onBeforeStart }: { buttonRef?: Ref<HTMLButtonElement>; onBeforeStart?: () => void }) {
+function WizardButton({
+  buttonRef,
+  onBeforeStart,
+}: {
+  buttonRef?: Ref<HTMLButtonElement>;
+  onBeforeStart?: () => void;
+}) {
   const { startWizard, state } = useWizard();
 
   return (

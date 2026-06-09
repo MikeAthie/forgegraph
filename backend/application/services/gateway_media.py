@@ -92,13 +92,13 @@ def media_artifact_payload(artifact: GatewayMediaArtifact) -> dict[str, Any]:
         "inbound_receipt_id": (
             str(artifact.inbound_receipt_id) if artifact.inbound_receipt_id else None
         ),
-        "tool_execution_id": str(artifact.tool_execution_id) if artifact.tool_execution_id else None,
+        "tool_execution_id": str(artifact.tool_execution_id)
+        if artifact.tool_execution_id
+        else None,
         "asset_id": str(artifact.asset_id) if artifact.asset_id else None,
         "asset_version_id": str(artifact.asset_version_id) if artifact.asset_version_id else None,
         "transcript_observation_id": (
-            str(artifact.transcript_observation_id)
-            if artifact.transcript_observation_id
-            else None
+            str(artifact.transcript_observation_id) if artifact.transcript_observation_id else None
         ),
         "platform": artifact.platform,
         "provider": artifact.provider,

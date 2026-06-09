@@ -125,7 +125,9 @@ def run(email: str = "admin@forgegraph.local") -> dict:
     if not (codex_workdir / ".git").exists():
         import subprocess
 
-        subprocess.run(["git", "init"], cwd=codex_workdir, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "init"], cwd=codex_workdir, check=True, capture_output=True, text=True
+        )
     settings.CODEX_SESSION_WORKDIR = str(codex_workdir)
     settings.CODEX_SESSION_TIMEOUT_SECONDS = 360
 
@@ -192,7 +194,13 @@ def run(email: str = "admin@forgegraph.local") -> dict:
         )
         complete_stage(
             stage,
-            outputs=[{"kind": "codex_session_deliverable", "type": "service_deliverable", "id": str(deliverable.id)}],
+            outputs=[
+                {
+                    "kind": "codex_session_deliverable",
+                    "type": "service_deliverable",
+                    "id": str(deliverable.id),
+                }
+            ],
             actor=user,
         )
         deliverable.refresh_from_db()
@@ -221,11 +229,29 @@ def run(email: str = "admin@forgegraph.local") -> dict:
         "run_completed_at": timezone.now().isoformat(),
         "organization": {"id": str(organization.id), "name": organization.name},
         "company": {"id": str(company.id), "name": company.name},
-        "pack": {"pack_id": PACK_ID, "status": pack_status, "installation_id": str(installation.id) if installation else None},
-        "engagement": {"id": str(engagement.id), "status": engagement.status, "customer_status": engagement.customer_status},
-        "whiteboard": {"id": str(whiteboard.id), "status": whiteboard.status, "work_status": whiteboard.work_status},
-        "program": {"id": str(program.id), "status": program.status, "current_stage_id": program.current_stage_id},
-        "stage_statuses": list(program.stage_states.order_by("sequence").values("stage_id", "status", "completed_at")),
+        "pack": {
+            "pack_id": PACK_ID,
+            "status": pack_status,
+            "installation_id": str(installation.id) if installation else None,
+        },
+        "engagement": {
+            "id": str(engagement.id),
+            "status": engagement.status,
+            "customer_status": engagement.customer_status,
+        },
+        "whiteboard": {
+            "id": str(whiteboard.id),
+            "status": whiteboard.status,
+            "work_status": whiteboard.work_status,
+        },
+        "program": {
+            "id": str(program.id),
+            "status": program.status,
+            "current_stage_id": program.current_stage_id,
+        },
+        "stage_statuses": list(
+            program.stage_states.order_by("sequence").values("stage_id", "status", "completed_at")
+        ),
         "deliverables": [
             {
                 "id": str(d.id),
@@ -237,9 +263,15 @@ def run(email: str = "admin@forgegraph.local") -> dict:
             }
             for d in deliverables
         ],
-        "deliverable_count": ServiceDeliverable.objects.filter(engagement=engagement, metadata_json__source="codex_session_runtime").count(),
-        "asset_version_count": AssetVersion.objects.filter(asset__company=company, provenance_json__source="codex_session_runtime").count(),
-        "routing_task_count": TaskRoutingRecord.objects.filter(service_engagement=engagement).count(),
+        "deliverable_count": ServiceDeliverable.objects.filter(
+            engagement=engagement, metadata_json__source="codex_session_runtime"
+        ).count(),
+        "asset_version_count": AssetVersion.objects.filter(
+            asset__company=company, provenance_json__source="codex_session_runtime"
+        ).count(),
+        "routing_task_count": TaskRoutingRecord.objects.filter(
+            service_engagement=engagement
+        ).count(),
         "handoff": handoff,
     }
     output_path = root / f"evidence_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"

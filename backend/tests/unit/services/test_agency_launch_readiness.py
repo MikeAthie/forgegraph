@@ -28,7 +28,9 @@ def _user(org: Organization, email: str = "atlas-launch-readiness@example.com") 
     user = User.objects.create_user(email=email, password="testpassword123")
     user.default_organization = org
     user.save(update_fields=["default_organization"])
-    OrganizationMembership.objects.create(organization=org, user=user, role="owner", is_default=True)
+    OrganizationMembership.objects.create(
+        organization=org, user=user, role="owner", is_default=True
+    )
     return user
 
 
@@ -125,7 +127,9 @@ def _tracking(whiteboard: WorkWhiteboard, *, status: str = "ready") -> None:
     )
 
 
-def _ready_launch_whiteboard(*, idempotency_key: str = "launch-ready-key") -> tuple[User, WorkWhiteboard]:
+def _ready_launch_whiteboard(
+    *, idempotency_key: str = "launch-ready-key"
+) -> tuple[User, WorkWhiteboard]:
     org = Organization.objects.create(name="ATLAS")
     owner = _user(org, f"atlas-launch-{uuid4().hex}@example.com")
     company = _company(org, owner)
@@ -163,7 +167,9 @@ def test_happy_dry_run_readiness_passes_without_side_effects() -> None:
     assert readiness["deliverable_state"]["required_count"] == len(MVP_DELIVERABLE_TYPES)
     assert readiness["tracking_state"]["status"] == "ready"
     assert readiness["side_effect_readiness"]["status"] == "dry_run"
-    assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
+    assert (
+        ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 0
+    )
 
 
 def test_missing_connector_is_blocker_even_in_dry_run() -> None:
@@ -269,8 +275,13 @@ def test_launch_receipt_deliverable_is_backend_owned_sanitized_and_idempotent() 
     assert deliverable.metadata_json["blocked"] is False
     assert deliverable.metadata_json["live_execution_enabled"] is False
     assert version.mime_type == "application/json"
-    assert Asset.objects.filter(source_key=f"atlas-launch-readiness:{whiteboard.id}:receipt").count() == 1
-    assert ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 1
+    assert (
+        Asset.objects.filter(source_key=f"atlas-launch-readiness:{whiteboard.id}:receipt").count()
+        == 1
+    )
+    assert (
+        ServiceDeliverable.objects.filter(deliverable_type="campaign_launch_receipt").count() == 1
+    )
     assert AssetVersion.objects.filter(asset=asset).count() == 1
     assert "secret" not in rendered
     assert "api_key" not in rendered

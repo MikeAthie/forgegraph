@@ -1112,7 +1112,9 @@ def test_atlas_rubric_scorecard_persists_sanitized_generic_evidence(
         "CompanySignal",
         "OperationRecommendation",
     }
-    assert all(signal.metadata_json["schema_version"] == "atlas_rubric_scorecard_v1" for signal in signals)
+    assert all(
+        signal.metadata_json["schema_version"] == "atlas_rubric_scorecard_v1" for signal in signals
+    )
 
 
 def test_atlas_rubric_scorecard_reports_low_quality_without_faking_sellability(
@@ -1159,7 +1161,9 @@ def test_atlas_rubric_scorecard_hard_fail_blocks_without_improvement_signals(
     assert evaluation["result"]["decision"] == "blocked"
     assert evaluation["findings"][0]["severity"] == "CRITICAL"
     assert evaluation["findings"][0]["blocking"] is True
-    assert not CompanySignal.objects.filter(company=company, source="atlas_rubric_scorecard").exists()
+    assert not CompanySignal.objects.filter(
+        company=company, source="atlas_rubric_scorecard"
+    ).exists()
 
 
 @pytest.mark.parametrize(
@@ -1167,10 +1171,18 @@ def test_atlas_rubric_scorecard_hard_fail_blocks_without_improvement_signals(
     [
         (lambda scorecard: scorecard["criteria"].pop(), "exactly five scored criteria"),
         (lambda scorecard: scorecard["criteria"][0].__setitem__("score", 6), "between 1 and 5"),
-        (lambda scorecard: scorecard.__setitem__("overall_average", 1), "server-computed criterion average"),
-        (lambda scorecard: scorecard.__setitem__("required_improvements", []), "At least one required improvement"),
         (
-            lambda scorecard: scorecard["improvement_plan"][0].__setitem__("primitive", "MarketingCampaign"),
+            lambda scorecard: scorecard.__setitem__("overall_average", 1),
+            "server-computed criterion average",
+        ),
+        (
+            lambda scorecard: scorecard.__setitem__("required_improvements", []),
+            "At least one required improvement",
+        ),
+        (
+            lambda scorecard: scorecard["improvement_plan"][0].__setitem__(
+                "primitive", "MarketingCampaign"
+            ),
             "generic ForgeGraph primitive",
         ),
         (
@@ -1347,4 +1359,6 @@ def test_company_ops_docs_keep_vertical_terms_out_of_generic_sections():
     for line in operating_templates.splitlines():
         if not any(term in line for term in vertical_terms):
             continue
-        assert "compatibility" in line or "domain-specific" in line or "operation type values" in line
+        assert (
+            "compatibility" in line or "domain-specific" in line or "operation type values" in line
+        )

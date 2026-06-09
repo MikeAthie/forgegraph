@@ -129,9 +129,9 @@ def test_create_pipeline_reuses_existing_program_and_stage_primitives(user):
     assert stages[-1].state_json["department_slug"] == "client_approval_ops"
     assert stages[0].state_json["company_run_task"]["status"] == "ready"
     assert stages[0].state_json["company_run_task"]["routing_record_id"]
-    assert {
-        record.metadata_json["company_run_task"]["stage_id"] for record in routing_records
-    } == {stage.stage_id for stage in stages}
+    assert {record.metadata_json["company_run_task"]["stage_id"] for record in routing_records} == {
+        stage.stage_id for stage in stages
+    }
 
 
 def test_create_pipeline_requires_all_atlas_departments(user):

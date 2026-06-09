@@ -34,7 +34,9 @@ def _user(org: Organization, email: str = "atlas-deliverables@example.com") -> U
     user = User.objects.create_user(email=email, password="testpassword123")
     user.default_organization = org
     user.save(update_fields=["default_organization"])
-    OrganizationMembership.objects.create(organization=org, user=user, role="owner", is_default=True)
+    OrganizationMembership.objects.create(
+        organization=org, user=user, role="owner", is_default=True
+    )
     return user
 
 
@@ -178,7 +180,9 @@ def test_assemble_atlas_mvp_deliverables_returns_all_types_and_is_idempotent() -
     assert all("quality_gate" in deliverable.metadata_json for deliverable in first)
 
     package = next(
-        deliverable for deliverable in first if deliverable.deliverable_type == "campaign_launch_package"
+        deliverable
+        for deliverable in first
+        if deliverable.deliverable_type == "campaign_launch_package"
     )
     content = _content_for(package)
     assert "Client Brief" in content
@@ -268,7 +272,10 @@ def test_performance_projection_feeds_performance_report() -> None:
         deliverable_type="performance_report",
     )
 
-    assert report.metadata_json["source_refs"]["performance"]["metric_snapshot_id"] == metric_snapshot_id
+    assert (
+        report.metadata_json["source_refs"]["performance"]["metric_snapshot_id"]
+        == metric_snapshot_id
+    )
     content = _content_for(report)
     assert metric_snapshot_id in content
     assert report_run_id in content

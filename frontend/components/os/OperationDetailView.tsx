@@ -20,14 +20,7 @@ import { operationRepository } from "@/domain/repositories";
 import { translateProductError } from "@/domain/errors";
 import type { OperationVM, TaskVM } from "@/domain/translation";
 import { useRunLiveUpdates } from "@/hooks/useRunLiveUpdates";
-import {
-  EmptyBlock,
-  InspectorPanel,
-  KeyValueGrid,
-  Panel,
-  SectionHeader,
-  StatusBadge,
-} from "./operations-ui";
+import { EmptyBlock, InspectorPanel, KeyValueGrid, Panel, SectionHeader, StatusBadge } from "./operations-ui";
 import { formatCurrency, formatDateTime, formatDuration, statusTone } from "./operations-format";
 import { showError, showSuccess } from "@/lib/toast";
 
@@ -162,9 +155,12 @@ function useOperationDetailController({ routeParam }: OperationDetailViewProps) 
     },
     [operationId, setError, setLoading, setOperation, setSelectedTaskId],
   );
-  const refreshOperation = useCallback((options?: { showSpinner?: boolean }) => {
-    void loadOperation(options);
-  }, [loadOperation]);
+  const refreshOperation = useCallback(
+    (options?: { showSpinner?: boolean }) => {
+      void loadOperation(options);
+    },
+    [loadOperation],
+  );
   const refreshOperationWithoutSpinner = useCallback(() => {
     refreshOperation({ showSpinner: false });
   }, [refreshOperation]);

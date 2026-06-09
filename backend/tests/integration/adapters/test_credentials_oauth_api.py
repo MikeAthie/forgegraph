@@ -63,6 +63,7 @@ def test_oauth_provider_status_shows_supported_providers(authenticated_client):
         "linear",
         "hubspot",
         "google_drive",
+        "microsoft_graph",
     }
     assert any(item["configured"] is False for item in data)
 

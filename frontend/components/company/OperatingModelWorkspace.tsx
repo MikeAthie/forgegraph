@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useMemo, useReducer, useState, type SetStateAction } from "react";
 import {
-  BookCheck, ClipboardCheck, FileStack, GitBranch, CalendarClock, Play, ListChecks, PackagePlus, RefreshCw, RotateCcw, ShieldCheck, Wrench, } from "lucide-react";
+  BookCheck,
+  ClipboardCheck,
+  FileStack,
+  GitBranch,
+  CalendarClock,
+  Play,
+  ListChecks,
+  PackagePlus,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  Wrench,
+} from "lucide-react";
 
 import { CommunicationPanel } from "@/components/company/CommunicationPanel";
 import { WhiteboardPanel } from "@/components/company/WhiteboardPanel";

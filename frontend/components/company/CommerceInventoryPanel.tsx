@@ -1,7 +1,23 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, type ReactNode, type SetStateAction } from "react";
 import NextImage from "next/image";
 import {
-  AlertTriangle, Brain, Clock3, CreditCard, ExternalLink, FileCheck2, Image as ImageIcon, Megaphone, PackageCheck, PackageOpen, PlayCircle, ReceiptText, RotateCcw, ShoppingBag, Truck, Video, } from "lucide-react";
+  AlertTriangle,
+  Brain,
+  Clock3,
+  CreditCard,
+  ExternalLink,
+  FileCheck2,
+  Image as ImageIcon,
+  Megaphone,
+  PackageCheck,
+  PackageOpen,
+  PlayCircle,
+  ReceiptText,
+  RotateCcw,
+  ShoppingBag,
+  Truck,
+  Video,
+} from "lucide-react";
 
 import { Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
 import { formatDateTime } from "@/components/os/operations-format";
@@ -1726,7 +1742,8 @@ function SignalRow({
 
 function ObjectiveContractRow({ objective }: { objective: CompanyOperationObjective }) {
   const scoreLabel = objective.success_score === null ? "pending score" : `${objective.success_score}/100`;
-  const operationFamily = objective.operation_family || objective.semantic_aliases?.operation_family || objective.run_type;
+  const operationFamily =
+    objective.operation_family || objective.semantic_aliases?.operation_family || objective.run_type;
   const integrityGateCount =
     objective.integrity_gates && typeof objective.integrity_gates === "object"
       ? Object.keys(objective.integrity_gates).length

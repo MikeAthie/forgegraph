@@ -169,12 +169,12 @@ def _normalize_gateway_input(platform: str, request: Request) -> dict[str, Any]:
             "platform": platform,
             "provider": platform,
             "event_id": event_id,
-                "conversation_id": conversation_id,
-                "sender": _as_str(payload.get("sender") or payload.get("from") or payload.get("user")),
-                "attachments": _attachment_values(payload.get("attachments")),
-                "payload": payload,
-                "headers": headers,
-                "query": query,
+            "conversation_id": conversation_id,
+            "sender": _as_str(payload.get("sender") or payload.get("from") or payload.get("user")),
+            "attachments": _attachment_values(payload.get("attachments")),
+            "payload": payload,
+            "headers": headers,
+            "query": query,
         },
         "payload": payload,
     }
@@ -210,7 +210,9 @@ def _whatsapp_attachments(message: dict[str, Any]) -> list[dict[str, Any]]:
     for media_kind in ("image", "audio", "video", "document", "sticker"):
         media = message.get(media_kind)
         if isinstance(media, dict):
-            result.append({"media_kind": media_kind, **{str(key): value for key, value in media.items()}})
+            result.append(
+                {"media_kind": media_kind, **{str(key): value for key, value in media.items()}}
+            )
     return result
 
 
@@ -256,7 +258,11 @@ def _verify_gateway_request(platform: str, request: Request, payload: dict[str, 
         if not expected:
             return True
         notifications = payload.get("value") if isinstance(payload.get("value"), list) else []
-        return any(hmac.compare_digest(_as_str(item.get("clientState")), expected) for item in notifications if isinstance(item, dict))
+        return any(
+            hmac.compare_digest(_as_str(item.get("clientState")), expected)
+            for item in notifications
+            if isinstance(item, dict)
+        )
     expected_secret = _as_str(getattr(settings, "GENERIC_WEBHOOK_SECRET", ""))
     if not expected_secret:
         return True
@@ -310,9 +316,9 @@ class GatewayWebhookView(APIView):
             )
 
         try:
-            graph_version = GraphVersion.objects.select_related("graph__owner", "graph__organization").get(
-                id=graph_version_id
-            )
+            graph_version = GraphVersion.objects.select_related(
+                "graph__owner", "graph__organization"
+            ).get(id=graph_version_id)
         except GraphVersion.DoesNotExist:
             return error_response(
                 code="NOT_FOUND",

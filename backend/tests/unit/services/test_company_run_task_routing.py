@@ -161,9 +161,7 @@ def test_bootstrap_creates_agnostic_stage_task_cards_and_whiteboard_snapshot(use
     assert len(records) == 3
     assert {record.id for record in records} == {record.id for record in again}
     assert TaskRoutingRecord.objects.filter(company=company).count() == 3
-    by_stage = {
-        record.metadata_json[TASK_METADATA_KEY]["stage_id"]: record for record in records
-    }
+    by_stage = {record.metadata_json[TASK_METADATA_KEY]["stage_id"]: record for record in records}
     assert by_stage["discovery"].metadata_json["title"] == "Scope Discovery"
     assert by_stage["analysis"].to_department.slug == "analysis"
     assert by_stage["recommendation"].metadata_json["title"] == "Recommendation Brief"

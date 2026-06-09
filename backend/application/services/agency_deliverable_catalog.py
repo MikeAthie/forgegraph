@@ -107,7 +107,9 @@ DELIVERABLE_DEFINITIONS: dict[str, DeliverableDefinition] = {
 
 
 def list_deliverable_definitions() -> tuple[DeliverableDefinition, ...]:
-    return tuple(DELIVERABLE_DEFINITIONS[deliverable_type] for deliverable_type in MVP_DELIVERABLE_TYPES)
+    return tuple(
+        DELIVERABLE_DEFINITIONS[deliverable_type] for deliverable_type in MVP_DELIVERABLE_TYPES
+    )
 
 
 def get_deliverable_definition(deliverable_type: str) -> DeliverableDefinition | None:

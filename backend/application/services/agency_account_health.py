@@ -209,7 +209,9 @@ def _next_actions(
     risks: list[dict[str, Any]],
     onboarding_items: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    actions = [_connector_action(item) for item in _missing_required_connectors(connector_readiness)]
+    actions = [
+        _connector_action(item) for item in _missing_required_connectors(connector_readiness)
+    ]
     if any(risk["slug"] == "stale_client_approval" for risk in risks):
         actions.append(
             {
@@ -269,7 +271,9 @@ def _onboarding_score(summary: dict[str, int]) -> int:
     completed = int(summary.get("completed") or 0)
     in_progress = int(summary.get("in_progress") or 0)
     blocked = int(summary.get("blocked") or 0)
-    return max(0, min(100, round(((completed + (in_progress * 0.5)) / total * 100) - (blocked * 10))))
+    return max(
+        0, min(100, round(((completed + (in_progress * 0.5)) / total * 100) - (blocked * 10)))
+    )
 
 
 def _connector_score(summary: dict[str, int]) -> int:
@@ -281,9 +285,13 @@ def _connector_score(summary: dict[str, int]) -> int:
 
 
 def _delivery_score(company: Graph) -> int:
-    if ServiceDeliverable.objects.filter(company=company, status__in={"ready", "delivered", "accepted"}).exists():
+    if ServiceDeliverable.objects.filter(
+        company=company, status__in={"ready", "delivered", "accepted"}
+    ).exists():
         return 80
-    if ServiceEngagement.objects.filter(company=company, status__in={"in_progress", "in_review", "delivered"}).exists():
+    if ServiceEngagement.objects.filter(
+        company=company, status__in={"in_progress", "in_review", "delivered"}
+    ).exists():
         return 60
     if WorkWhiteboard.objects.filter(company=company).exists():
         return 55
