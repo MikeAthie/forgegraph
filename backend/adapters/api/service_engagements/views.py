@@ -721,11 +721,28 @@ class AtlasLaunchReadinessView(APIView):
         )
         receipt = readiness.get("receipt_deliverable")
         readiness_payload = {
-            key: value for key, value in readiness.items() if key != "receipt_deliverable"
+            key: value
+            for key, value in readiness.items()
+            if key not in {"receipt_deliverable", "launch_attempt"}
         }
+        launch_attempt = readiness.get("launch_attempt")
+        if live_mode and str(readiness_payload.get("status") or "") != "ready":
+            return error_response(
+                "ATLAS_LIVE_LAUNCH_BLOCKED",
+                "Atlas live launch is blocked until readiness checks pass.",
+                status=http_status.HTTP_409_CONFLICT,
+                details=[
+                    {
+                        "launch_attempt": launch_attempt,
+                        "readiness": readiness_payload,
+                    }
+                ],
+            )
         payload: dict[str, Any] = {"readiness": readiness_payload}
         if isinstance(receipt, dict):
             payload["receipt_deliverable"] = receipt
+        if isinstance(launch_attempt, dict):
+            payload["launch_attempt"] = launch_attempt
         response = success_response(payload)
         return record_processed_command(
             context=context,
