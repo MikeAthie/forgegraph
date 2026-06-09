@@ -298,6 +298,41 @@ def markdown_for(item: dict[str, Any], company: Graph, engagement: ServiceEngage
     return "\n".join(body) + "\n"
 
 
+def ensure_departments(
+    org: Organization, user: User, company: Graph
+) -> dict[str, DepartmentRegistry]:
+    departments: dict[str, DepartmentRegistry] = {}
+    for slug, label, tags in DEPARTMENTS:
+        dept, _ = DepartmentRegistry.objects.get_or_create(
+            organization=org,
+            slug=slug,
+            defaults={"name": label},
+        )
+        dept.name = label
+        dept.department_type = "agency_department"
+        dept.service_tags_json = tags
+        dept.active = True
+        meta = dict(dept.metadata_json or {})
+        meta.update(
+            {
+                "subject_id": slug,
+                "operating_model_pack_id": PACK_ID,
+                "company_id": str(company.id),
+                "source": SOURCE,
+            }
+        )
+        dept.metadata_json = meta
+        dept.save()
+        DepartmentMembership.objects.get_or_create(
+            organization=org,
+            department=dept,
+            user=user,
+            defaults={"role": "lead", "status": "active", "created_by": user},
+        )
+        departments[slug] = dept
+    return departments
+
+
 @transaction.atomic
 def run() -> dict[str, Any]:  # noqa: C901
     password = os.environ.get("ATLAS_OPERATOR_PASSWORD") or User.objects.make_random_password(
@@ -340,35 +375,7 @@ def run() -> dict[str, Any]:  # noqa: C901
     if changed:
         company.save()
 
-    departments: dict[str, DepartmentRegistry] = {}
-    for slug, label, tags in DEPARTMENTS:
-        dept, _ = DepartmentRegistry.objects.get_or_create(
-            organization=org,
-            slug=slug,
-            defaults={"name": label},
-        )
-        dept.name = label
-        dept.department_type = "agency_department"
-        dept.service_tags_json = tags
-        dept.active = True
-        meta = dict(dept.metadata_json or {})
-        meta.update(
-            {
-                "subject_id": slug,
-                "operating_model_pack_id": PACK_ID,
-                "company_id": str(company.id),
-                "source": SOURCE,
-            }
-        )
-        dept.metadata_json = meta
-        dept.save()
-        DepartmentMembership.objects.get_or_create(
-            organization=org,
-            department=dept,
-            user=user,
-            defaults={"role": "lead", "status": "active", "created_by": user},
-        )
-        departments[slug] = dept
+    departments = ensure_departments(org, user, company)
 
     pack_status = "installed"
     try:
