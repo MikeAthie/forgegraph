@@ -157,13 +157,17 @@ def run_legacy_weekend_pipeline(
     strategy = stage_state_for_engagement(engagement, "strategy_research")
     start_stage(strategy, actor=user)
     for definition in _definitions_for_stage("strategy_research"):
-        deliverables.append(_upsert_file_deliverable(definition, root, engagement, user, whiteboard))
+        deliverables.append(
+            _upsert_file_deliverable(definition, root, engagement, user, whiteboard)
+        )
     complete_stage(strategy, actor=user)
 
     brand = stage_state_for_engagement(engagement, "brand_content")
     start_stage(brand, actor=user)
     for definition in _definitions_for_stage("brand_content"):
-        deliverables.append(_upsert_file_deliverable(definition, root, engagement, user, whiteboard))
+        deliverables.append(
+            _upsert_file_deliverable(definition, root, engagement, user, whiteboard)
+        )
     complete_stage(brand, actor=user)
 
     crm = stage_state_for_engagement(engagement, "crm_lifecycle")
@@ -201,9 +205,13 @@ def run_legacy_weekend_pipeline(
     channel = stage_state_for_engagement(engagement, "channel_execution")
     start_stage(channel, actor=user)
     for definition in _definitions_for_stage("channel_execution"):
-        deliverables.append(_upsert_file_deliverable(definition, root, engagement, user, whiteboard))
+        deliverables.append(
+            _upsert_file_deliverable(definition, root, engagement, user, whiteboard)
+        )
     for post in manifest.get("posts", []):
-        deliverables.append(_upsert_post_media_deliverable(post, root, engagement, user, whiteboard))
+        deliverables.append(
+            _upsert_post_media_deliverable(post, root, engagement, user, whiteboard)
+        )
         routing_records.append(_upsert_social_task(post, engagement, user, whiteboard))
     deliverables.append(_upsert_reel_deliverable(root, engagement, user, whiteboard))
     complete_stage(
@@ -234,7 +242,9 @@ def run_legacy_weekend_pipeline(
     approval = stage_state_for_engagement(engagement, "client_approval_ops")
     start_stage(approval, actor=user)
     for definition in _definitions_for_stage("client_approval_ops"):
-        deliverables.append(_upsert_file_deliverable(definition, root, engagement, user, whiteboard))
+        deliverables.append(
+            _upsert_file_deliverable(definition, root, engagement, user, whiteboard)
+        )
     complete_stage(approval, actor=user)
 
     engagement.customer_status = "review_ready"
@@ -260,7 +270,9 @@ def run_legacy_weekend_pipeline(
         },
         "whiteboard": {"id": str(whiteboard.id), "status": whiteboard.status},
         "deliverable_count": ServiceDeliverable.objects.filter(engagement=engagement).count(),
-        "routing_task_count": TaskRoutingRecord.objects.filter(service_engagement=engagement).count(),
+        "routing_task_count": TaskRoutingRecord.objects.filter(
+            service_engagement=engagement
+        ).count(),
         "files_root": str(root),
     }
 
@@ -306,7 +318,9 @@ def _ensure_pack(
     user: User,
 ) -> tuple[str, CompanyOperatingModelInstallation | None]:
     try:
-        installation = install_pack_for_company(company=company, user=user, pack_id=PACK_ID, role="primary")
+        installation = install_pack_for_company(
+            company=company, user=user, pack_id=PACK_ID, role="primary"
+        )
         return "installed", installation
     except Exception as exc:  # pragma: no cover - fallback depends on pack fixture availability.
         installation = CompanyOperatingModelInstallation.objects.filter(
@@ -364,7 +378,11 @@ def _ensure_catalog(
         {"type": item["type"], "title": item["title"], "stage_id": item["stage_id"]}
         for item in FILE_DELIVERABLES
     ] + [
-        {"type": f"instagram_post_media:{post['id']}", "title": post["asset"], "stage_id": "channel_execution"}
+        {
+            "type": f"instagram_post_media:{post['id']}",
+            "title": post["asset"],
+            "stage_id": "channel_execution",
+        }
         for post in manifest.get("posts", [])
     ]
     catalog.metadata_json = {"source": SOURCE, "client": "legacy", "agency_mode": True}
@@ -402,7 +420,9 @@ def _ensure_engagement(
         "Legacy weekend marketing sprint routed through Strategy, Brand, Channel, CRM, "
         "Analytics, QA, and Client Approval departments."
     )
-    engagement.internal_notes = "Deliverables are created through department pipeline stages, not tagged after generation."
+    engagement.internal_notes = (
+        "Deliverables are created through department pipeline stages, not tagged after generation."
+    )
     engagement.intake_data_json = {
         "client": "Legacy",
         "category": "luxury glasswear / sunglasses",
@@ -455,15 +475,28 @@ def _ensure_whiteboard(
     whiteboard.project_name = "Legacy Weekend Social Launch Sprint"
     whiteboard.client_name = "Legacy"
     whiteboard.request_summary = "Produce marketing agency deliverables through Atlas departments."
-    whiteboard.objective = "Have client-ready Legacy strategy, content, media, metrics, QA, and approval package."
+    whiteboard.objective = (
+        "Have client-ready Legacy strategy, content, media, metrics, QA, and approval package."
+    )
     whiteboard.timeline = "Weekend sprint"
     whiteboard.constraints_json = {
         "brand": "Optical Noir; Spanish-first; restrained luxury; CDMX night energy",
         "privacy": "Do not expose exact inventory counts, cost, margins, supplier data, or raw client file paths publicly.",
     }
-    whiteboard.stakeholder_context_json = {"client": "Legacy", "operator_id": str(user.id), "approver": "Mike"}
-    whiteboard.delivery_context_json = {"deliverables_root": str(root), "media_root": str(root / "media")}
-    whiteboard.metadata_json = {"source": SOURCE, "agent_owned": True, "social_schedule": manifest.get("posts", [])}
+    whiteboard.stakeholder_context_json = {
+        "client": "Legacy",
+        "operator_id": str(user.id),
+        "approver": "Mike",
+    }
+    whiteboard.delivery_context_json = {
+        "deliverables_root": str(root),
+        "media_root": str(root / "media"),
+    }
+    whiteboard.metadata_json = {
+        "source": SOURCE,
+        "agent_owned": True,
+        "social_schedule": manifest.get("posts", []),
+    }
     whiteboard.completion_score = 0.85
     whiteboard.save()
     return whiteboard
@@ -482,7 +515,9 @@ def _upsert_file_deliverable(
 ) -> ServiceDeliverable:
     path = root / definition["filename"]
     data = path.read_bytes()
-    content_preview = data.decode("utf-8", errors="replace")[:12000] if path.suffix in {".md", ".json"} else ""
+    content_preview = (
+        data.decode("utf-8", errors="replace")[:12000] if path.suffix in {".md", ".json"} else ""
+    )
     return _upsert_deliverable_from_bytes(
         engagement=engagement,
         user=user,
@@ -617,7 +652,13 @@ def _upsert_deliverable_from_bytes(
     asset.save()
     version = AssetVersion.objects.filter(asset=asset, content_hash=digest).first()
     if version is None:
-        latest_num = AssetVersion.objects.filter(asset=asset).order_by("-version_number").values_list("version_number", flat=True).first() or 0
+        latest_num = (
+            AssetVersion.objects.filter(asset=asset)
+            .order_by("-version_number")
+            .values_list("version_number", flat=True)
+            .first()
+            or 0
+        )
         version = AssetVersion.objects.create(
             asset=asset,
             version_number=latest_num + 1,
@@ -630,7 +671,11 @@ def _upsert_deliverable_from_bytes(
     deliverable, _ = ServiceDeliverable.objects.get_or_create(
         engagement=engagement,
         deliverable_type=deliverable_type,
-        defaults={"organization": engagement.organization, "company": engagement.company, "created_by": user},
+        defaults={
+            "organization": engagement.organization,
+            "company": engagement.company,
+            "created_by": user,
+        },
     )
     deliverable.organization = engagement.organization
     deliverable.company = engagement.company
@@ -674,7 +719,9 @@ def _upsert_social_task(
     route.service_engagement = engagement
     route.to_department = department
     route.assigned_user = user
-    route.reason = f"Prepare/publish scheduled Legacy social post: {post['theme']} — {post['headline']}"
+    route.reason = (
+        f"Prepare/publish scheduled Legacy social post: {post['theme']} — {post['headline']}"
+    )
     route.status = "ready_for_review" if str(post["date"]) <= "2026-06-12" else "queued"
     route.priority = "high" if post["date"] in {"2026-06-05", "2026-06-06"} else "normal"
     route.due_at = _due_at_for(str(post["date"]))
@@ -759,13 +806,15 @@ def _manual_metrics_template(manifest: dict[str, Any]) -> str:
 
 
 def _qa_report(*, manifest: dict[str, Any], deliverables: list[ServiceDeliverable]) -> str:
-    media_count = len([item for item in deliverables if item.deliverable_type.startswith("instagram_post_media")])
+    media_count = len(
+        [item for item in deliverables if item.deliverable_type.startswith("instagram_post_media")]
+    )
     return f"""# Legacy Launch QA Report
 
 ## Automated checks
 - Deliverables created: {len(deliverables)}
 - Instagram media assets created: {media_count}
-- Scheduled posts in manifest: {len(manifest.get('posts', []))}
+- Scheduled posts in manifest: {len(manifest.get("posts", []))}
 - All generated deliverables carry department-pipeline lineage.
 
 ## Human review notes

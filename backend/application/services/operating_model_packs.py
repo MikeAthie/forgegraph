@@ -961,9 +961,7 @@ def _pack_contains(definition: PackDefinition) -> list[str]:
 def _collect_atlas_pack_identifiers(value: Any, contains: set[str]) -> None:
     if isinstance(value, dict):
         for key, item in value.items():
-            if key in {"id", "phase_id", "policy_id", "source_policy_id"} and isinstance(
-                item, str
-            ):
+            if key in {"id", "phase_id", "policy_id", "source_policy_id"} and isinstance(item, str):
                 tail = item.rsplit(".", maxsplit=1)[-1].strip()
                 if tail.startswith("atlas_"):
                     contains.add(tail)

@@ -351,7 +351,9 @@ def connection_payload(connection: GatewayConnection) -> dict[str, Any]:
     return {
         "id": str(connection.id),
         "organization_id": str(connection.organization_id),
-        "graph_version_id": str(connection.graph_version_id) if connection.graph_version_id else None,
+        "graph_version_id": str(connection.graph_version_id)
+        if connection.graph_version_id
+        else None,
         "credential_id": str(connection.credential_id) if connection.credential_id else None,
         "platform": connection.platform,
         "provider": connection.provider,
@@ -362,9 +364,7 @@ def connection_payload(connection: GatewayConnection) -> dict[str, Any]:
         "capability": capability_payload(capability),
         "last_seen_at": connection.last_seen_at.isoformat() if connection.last_seen_at else None,
         "last_health_check_at": (
-            connection.last_health_check_at.isoformat()
-            if connection.last_health_check_at
-            else None
+            connection.last_health_check_at.isoformat() if connection.last_health_check_at else None
         ),
         "last_error_at": connection.last_error_at.isoformat() if connection.last_error_at else None,
         "last_error_code": connection.last_error_code,
@@ -418,7 +418,9 @@ def update_connection(
 ) -> GatewayConnection:
     update_fields: list[str] = []
     if status is not None:
-        connection.status = status if status in {"enabled", "disabled", "degraded", "error"} else "error"
+        connection.status = (
+            status if status in {"enabled", "disabled", "degraded", "error"} else "error"
+        )
         update_fields.append("status")
     if graph_version is not None:
         connection.graph_version = graph_version
@@ -464,7 +466,9 @@ def connection_diagnostics(connection: GatewayConnection) -> GatewayConnectionDi
 
 def record_connection_health(connection: GatewayConnection) -> GatewayConnectionDiagnostics:
     diagnostics = connection_diagnostics(connection)
-    status_value = diagnostics.status if diagnostics.status in {"enabled", "disabled"} else "degraded"
+    status_value = (
+        diagnostics.status if diagnostics.status in {"enabled", "disabled"} else "degraded"
+    )
     error_checks = [check for check in diagnostics.checks if check["status"] != "ok"]
     GatewayConnection.objects.filter(id=connection.id).update(
         last_health_check_at=timezone.now(),
@@ -516,17 +520,33 @@ def _modes(capabilities: dict[str, Any], *, inbound: bool) -> list[str]:
 
 def _capability_check(capability: GatewayConnectorCapability | None) -> dict[str, Any]:
     if capability is None:
-        return {"code": "capability_missing", "status": "error", "message": "Capability is not registered."}
+        return {
+            "code": "capability_missing",
+            "status": "error",
+            "message": "Capability is not registered.",
+        }
     if not capability.enabled:
-        return {"code": "capability_disabled", "status": "error", "message": "Capability is disabled."}
+        return {
+            "code": "capability_disabled",
+            "status": "error",
+            "message": "Capability is disabled.",
+        }
     return {"code": "capability_registered", "status": "ok", "message": "Capability is registered."}
 
 
 def _connection_status_check(connection: GatewayConnection) -> dict[str, Any]:
     if connection.status == "disabled":
-        return {"code": "connection_disabled", "status": "warning", "message": "Connection is disabled."}
+        return {
+            "code": "connection_disabled",
+            "status": "warning",
+            "message": "Connection is disabled.",
+        }
     if connection.status == "error":
-        return {"code": "connection_error", "status": "error", "message": "Connection is in error state."}
+        return {
+            "code": "connection_error",
+            "status": "error",
+            "message": "Connection is in error state.",
+        }
     return {"code": "connection_enabled", "status": "ok", "message": "Connection can be evaluated."}
 
 
@@ -537,12 +557,24 @@ def _credential_check(
     if capability is None:
         return {"code": "credential_skipped", "status": "warning", "message": "Capability missing."}
     if not capability.credential_provider:
-        return {"code": "credential_not_required", "status": "ok", "message": "No credential required."}
+        return {
+            "code": "credential_not_required",
+            "status": "ok",
+            "message": "No credential required.",
+        }
     if connection.credential_id is None:
-        return {"code": "credential_missing", "status": "error", "message": "Credential is not attached."}
+        return {
+            "code": "credential_missing",
+            "status": "error",
+            "message": "Credential is not attached.",
+        }
     metadata = normalize_token_metadata(connection.credential.token_metadata)
     if is_credential_revoked(metadata):
-        return {"code": "credential_revoked", "status": "error", "message": "Credential is revoked."}
+        return {
+            "code": "credential_revoked",
+            "status": "error",
+            "message": "Credential is revoked.",
+        }
     if connection.credential.provider != capability.credential_provider:
         return {
             "code": "credential_provider_mismatch",
@@ -577,15 +609,23 @@ def _webhook_check(
     capability: GatewayConnectorCapability | None,
 ) -> dict[str, Any]:
     if capability is None or not (capability.capabilities_json or {}).get("inbound_webhook"):
-        return {"code": "webhook_not_required", "status": "ok", "message": "Webhook is not required."}
+        return {
+            "code": "webhook_not_required",
+            "status": "ok",
+            "message": "Webhook is not required.",
+        }
     configured = bool(connection.webhook_secret_hash or connection.verify_token_hash)
     if not configured:
         config = connection.config_json if isinstance(connection.config_json, dict) else {}
-        configured = bool(config.get("webhook_secret_configured") or config.get("verify_token_configured"))
+        configured = bool(
+            config.get("webhook_secret_configured") or config.get("verify_token_configured")
+        )
     return {
         "code": "webhook_verification",
         "status": "ok" if configured else "warning",
-        "message": "Webhook verification is configured." if configured else "Webhook verification is not configured.",
+        "message": "Webhook verification is configured."
+        if configured
+        else "Webhook verification is not configured.",
     }
 
 
@@ -594,14 +634,20 @@ def _last_seen_check(
     capability: GatewayConnectorCapability | None,
 ) -> dict[str, Any]:
     if capability is None or not _modes(capability.capabilities_json or {}, inbound=True):
-        return {"code": "last_seen_not_required", "status": "ok", "message": "Inbound liveness is not required."}
+        return {
+            "code": "last_seen_not_required",
+            "status": "ok",
+            "message": "Inbound liveness is not required.",
+        }
     latest = (
-        GatewayInboundReceipt.objects.filter(connection=connection)
-        .order_by("-received_at")
-        .first()
+        GatewayInboundReceipt.objects.filter(connection=connection).order_by("-received_at").first()
     )
     if latest is None:
-        return {"code": "no_inbound_seen", "status": "warning", "message": "No inbound event has been seen."}
+        return {
+            "code": "no_inbound_seen",
+            "status": "warning",
+            "message": "No inbound event has been seen.",
+        }
     return {
         "code": "last_inbound_seen",
         "status": "ok",
@@ -638,7 +684,11 @@ def _sidecar_check(
         or _setting(f"{connection.platform.upper()}_SIDECAR_URL")
     ).rstrip("/")
     if not base_url:
-        return {"code": "sidecar_url_missing", "status": "error", "message": "Sidecar URL is missing."}
+        return {
+            "code": "sidecar_url_missing",
+            "status": "error",
+            "message": "Sidecar URL is missing.",
+        }
     health_path = capability.sidecar_health_path or "/health"
     url = f"{base_url}{health_path if health_path.startswith('/') else '/' + health_path}"
     try:
@@ -647,7 +697,11 @@ def _sidecar_check(
             timeout=float(getattr(settings, "GATEWAY_CONNECTOR_TIMEOUT_SECONDS", 10)),
         )
     except requests.RequestException:
-        return {"code": "sidecar_unreachable", "status": "error", "message": "Sidecar is unreachable."}
+        return {
+            "code": "sidecar_unreachable",
+            "status": "error",
+            "message": "Sidecar is unreachable.",
+        }
     return {
         "code": "sidecar_health",
         "status": "ok" if response.status_code < 500 else "error",
@@ -684,7 +738,9 @@ def _safe_allowlist(values: list[Any]) -> list[str]:
 
 def _sensitive_key(value: str) -> bool:
     lowered = value.lower()
-    return any(token in lowered for token in ("secret", "token", "password", "authorization", "api_key"))
+    return any(
+        token in lowered for token in ("secret", "token", "password", "authorization", "api_key")
+    )
 
 
 def _hash_value(value: Any) -> str:

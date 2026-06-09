@@ -122,9 +122,12 @@ function useNodeInspectorMetadata({
     return () => clearTimeout(timer);
   }, [shouldDeferGraphText]);
 
-  const notifyEditingMetadataChange = useCallback((editing: boolean) => {
-    onEditingMetadataChange?.(editing);
-  }, [onEditingMetadataChange]);
+  const notifyEditingMetadataChange = useCallback(
+    (editing: boolean) => {
+      onEditingMetadataChange?.(editing);
+    },
+    [onEditingMetadataChange],
+  );
 
   useEffect(() => {
     if ((!selectedNode && !selectedEdge) || !editingMetadata) return;

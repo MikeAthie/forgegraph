@@ -50,7 +50,11 @@ class LLMAccessConfig:
 
 
 def allowed_llm_providers() -> set[str]:
-    providers = getattr(settings, "ALLOWED_LLM_PROVIDERS", [DEFAULT_LLM_PROVIDER, "anthropic", CODEX_SESSION_PROVIDER])
+    providers = getattr(
+        settings,
+        "ALLOWED_LLM_PROVIDERS",
+        [DEFAULT_LLM_PROVIDER, "anthropic", CODEX_SESSION_PROVIDER],
+    )
     return {str(provider).strip().lower() for provider in providers if str(provider).strip()}
 
 
@@ -286,7 +290,9 @@ def public_llm_access_from_graph(graph_json: dict[str, Any] | None) -> dict[str,
         "credential_id": (
             str(access.get("credential_id") or "") if access.get("credential_id") else None
         ),
-        "local_session_required": bool(access.get("local_session_required")) if mode == LLM_MODE_CODEX_SESSION else False,
+        "local_session_required": bool(access.get("local_session_required"))
+        if mode == LLM_MODE_CODEX_SESSION
+        else False,
     }
 
 

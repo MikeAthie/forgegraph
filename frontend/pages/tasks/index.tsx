@@ -5,7 +5,14 @@ import { Play, Save, Scale, Trash2 } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock, InspectorPanel, KeyValueGrid, Panel, SectionHeader, SelectionList, StatusBadge } from "@/components/os/operations-ui";
+  EmptyBlock,
+  InspectorPanel,
+  KeyValueGrid,
+  Panel,
+  SectionHeader,
+  SelectionList,
+  StatusBadge,
+} from "@/components/os/operations-ui";
 import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";

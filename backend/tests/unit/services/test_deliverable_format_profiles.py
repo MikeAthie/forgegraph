@@ -96,9 +96,7 @@ def test_profile_validation_rejects_unsafe_or_ambiguous_configs() -> None:
 def test_registry_resolution_precedence_is_backend_metadata_then_default() -> None:
     registry = load_format_profile_registry()
     program = SimpleNamespace(
-        metadata_json={
-            "formatting": {"profile_ref": "format_profile:legacy.client_handoff@1"}
-        }
+        metadata_json={"formatting": {"profile_ref": "format_profile:legacy.client_handoff@1"}}
     )
     engagement = SimpleNamespace(
         metadata_json={

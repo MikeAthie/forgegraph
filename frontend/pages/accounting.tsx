@@ -3,7 +3,14 @@ import { Building2, CircleDollarSign, CircleOff, ReceiptText, Wallet } from "luc
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock, InspectorPanel, MetricCard, Panel, SectionHeader, StatusBadge, TrendBar } from "@/components/os/operations-ui";
+  EmptyBlock,
+  InspectorPanel,
+  MetricCard,
+  Panel,
+  SectionHeader,
+  StatusBadge,
+  TrendBar,
+} from "@/components/os/operations-ui";
 import { formatCurrency, formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Spinner } from "@/components/ui";

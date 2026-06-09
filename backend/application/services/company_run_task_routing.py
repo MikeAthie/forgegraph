@@ -59,10 +59,14 @@ def bootstrap_task_routing_for_program(
 ) -> list[TaskRoutingRecord]:
     """Create or update one visible routing record for every program stage."""
 
-    program = CompanyProgram.objects.select_for_update().select_related(
-        "organization",
-        "company",
-    ).get(id=program.id)
+    program = (
+        CompanyProgram.objects.select_for_update()
+        .select_related(
+            "organization",
+            "company",
+        )
+        .get(id=program.id)
+    )
     if whiteboard is not None:
         _assert_whiteboard_scope(whiteboard=whiteboard, program=program)
     stages = list(
@@ -121,7 +125,9 @@ def bootstrap_task_routing_for_program(
     return records
 
 
-def mark_task_running(stage_state: ProgramStageState, *, actor: User | None = None) -> TaskRoutingRecord:
+def mark_task_running(
+    stage_state: ProgramStageState, *, actor: User | None = None
+) -> TaskRoutingRecord:
     """Mark the stage's routing task as running."""
 
     return _mark_task_status(stage_state, "running", actor=actor)
@@ -179,10 +185,15 @@ def attach_deliverable_to_stage_task(
 ) -> ServiceDeliverable:
     """Attach task routing provenance to a produced deliverable and its asset versions."""
 
-    stage = ProgramStageState.objects.select_for_update().select_related("program").get(
-        id=stage_state.id
+    stage = (
+        ProgramStageState.objects.select_for_update()
+        .select_related("program")
+        .get(id=stage_state.id)
     )
-    if deliverable.organization_id != stage.organization_id or deliverable.company_id != stage.company_id:
+    if (
+        deliverable.organization_id != stage.organization_id
+        or deliverable.company_id != stage.company_id
+    ):
         raise CompanyRunTaskRoutingError(
             "scope_mismatch",
             "Deliverable must belong to the same organization and company as the stage.",
@@ -287,8 +298,10 @@ def _mark_task_status(
 ) -> TaskRoutingRecord:
     if status not in GENERIC_STATUSES:
         raise CompanyRunTaskRoutingError("invalid_status", "Company-run task status is invalid.")
-    stage = ProgramStageState.objects.select_for_update().select_related("program").get(
-        id=stage_state.id
+    stage = (
+        ProgramStageState.objects.select_for_update()
+        .select_related("program")
+        .get(id=stage_state.id)
     )
     record = _routing_record_for_stage(stage)
     if record is None:
@@ -424,7 +437,9 @@ def _record_metadata(
         "links": {
             "program_id": str(program.id),
             "stage_state_id": str(stage.id),
-            "service_engagement_id": _service_engagement_id_for(program=program, whiteboard=whiteboard),
+            "service_engagement_id": _service_engagement_id_for(
+                program=program, whiteboard=whiteboard
+            ),
         },
         TASK_METADATA_KEY: {
             "program_id": str(program.id),
@@ -487,7 +502,10 @@ def _append_stage_task_output(stage: ProgramStageState, *, output: dict[str, Any
     state = dict(stage.state_json or {})
     task = dict(state.get(TASK_METADATA_KEY) or {})
     outputs = _json_list(task.get("outputs"))
-    if not any(item.get("type") == output.get("type") and item.get("id") == output.get("id") for item in outputs):
+    if not any(
+        item.get("type") == output.get("type") and item.get("id") == output.get("id")
+        for item in outputs
+    ):
         outputs.append(output)
     task["outputs"] = outputs
     task["updated_at"] = timezone.now().isoformat()
@@ -500,7 +518,10 @@ def _append_task_evidence(record: TaskRoutingRecord, *, evidence: dict[str, Any]
     record = TaskRoutingRecord.objects.select_for_update().get(id=record.id)
     resolution = dict(record.resolution_json or {})
     evidence_items = _json_list(resolution.get("evidence"))
-    if not any(item.get("type") == evidence.get("type") and item.get("id") == evidence.get("id") for item in evidence_items):
+    if not any(
+        item.get("type") == evidence.get("type") and item.get("id") == evidence.get("id")
+        for item in evidence_items
+    ):
         evidence_items.append(sanitize_outbox_payload(evidence))
     resolution["evidence"] = evidence_items
     record.resolution_json = sanitize_outbox_payload(resolution)
@@ -802,7 +823,9 @@ def _whiteboard_for_program(program: CompanyProgram) -> WorkWhiteboard | None:
         whiteboard = queryset.filter(service_engagement_id=service_engagement_id).first()
         if whiteboard is not None:
             return whiteboard
-    return queryset.filter(metadata_json__company_run_task_snapshot__program_id=str(program.id)).first()
+    return queryset.filter(
+        metadata_json__company_run_task_snapshot__program_id=str(program.id)
+    ).first()
 
 
 def _refresh_linked_whiteboard(program: CompanyProgram) -> None:
@@ -835,13 +858,17 @@ def _task_idempotency_key(stage: ProgramStageState) -> str:
 
 
 def _record_stage_state_id(record: TaskRoutingRecord) -> str:
-    return str(dict(record.metadata_json or {}).get(TASK_METADATA_KEY, {}).get("stage_state_id") or "")
+    return str(
+        dict(record.metadata_json or {}).get(TASK_METADATA_KEY, {}).get("stage_state_id") or ""
+    )
 
 
 def _runtime_provider(run_context: dict[str, Any] | None) -> str:
     if not isinstance(run_context, dict):
         return ""
-    return str(run_context.get("runtime_provider") or run_context.get("provider") or "").strip()[:80]
+    return str(run_context.get("runtime_provider") or run_context.get("provider") or "").strip()[
+        :80
+    ]
 
 
 def _safe_slug(value: Any) -> str:

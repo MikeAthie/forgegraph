@@ -125,11 +125,9 @@ describe("whiteboardRepository", () => {
     expect(whiteboardsApi.evaluatePhase).toHaveBeenCalledWith("whiteboard-1", "phase-1", {
       scores: {},
     });
-    expect(whiteboardsApi.executeDeploymentChannel).toHaveBeenCalledWith(
-      "whiteboard-1",
-      "channel-1",
-      { dry_run: true },
-    );
+    expect(whiteboardsApi.executeDeploymentChannel).toHaveBeenCalledWith("whiteboard-1", "channel-1", {
+      dry_run: true,
+    });
     expect(whiteboardsApi.evaluatePerformance).toHaveBeenCalledWith("whiteboard-1", {
       scores: {},
     });

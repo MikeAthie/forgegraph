@@ -265,9 +265,7 @@ def test_snapshot_ignores_task_record_projection_without_routing_record() -> Non
     )
     snapshot = build_whiteboard_board_snapshot(whiteboard, user=owner)
 
-    assert [card["routing_record_id"] for card in snapshot["cards"]] == [
-        str(routing_record.id)
-    ]
+    assert [card["routing_record_id"] for card in snapshot["cards"]] == [str(routing_record.id)]
     assert str(projected_task.id) not in str(snapshot)
 
 

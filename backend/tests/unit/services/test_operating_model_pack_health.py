@@ -25,7 +25,9 @@ def test_operating_model_pack_health_reports_required_atlas_pack(monkeypatch) ->
     }.issubset(set(pack["contains"]))
 
 
-def test_required_operating_model_pack_validation_fails_for_missing_dir(monkeypatch, tmp_path) -> None:
+def test_required_operating_model_pack_validation_fails_for_missing_dir(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.setenv("OPERATING_MODEL_PACKS_DIR", str(tmp_path / "missing-packs"))
     monkeypatch.setenv("REQUIRED_OPERATING_MODEL_PACKS", "digital_marketing_pro")
 

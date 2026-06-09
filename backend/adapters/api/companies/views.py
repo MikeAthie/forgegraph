@@ -56,7 +56,9 @@ def _companies_for_user(user: User, *, minimum_role: str = "viewer") -> QuerySet
     return accessible_company_queryset(user, minimum_role=minimum_role)
 
 
-def _company_for_user(company_id: UUID, user: User, *, minimum_role: str = "viewer") -> Graph | None:
+def _company_for_user(
+    company_id: UUID, user: User, *, minimum_role: str = "viewer"
+) -> Graph | None:
     company = (
         _companies_for_user(user, minimum_role=minimum_role)
         .filter(id=company_id)
@@ -105,8 +107,7 @@ def _validation_error(details: Any) -> Response:
         message="The request contains invalid fields.",
         status=status.HTTP_400_BAD_REQUEST,
         details=[
-            {"field": field, "issue": ", ".join(errors)}
-            for field, errors in dict(details).items()
+            {"field": field, "issue": ", ".join(errors)} for field, errors in dict(details).items()
         ],
     )
 

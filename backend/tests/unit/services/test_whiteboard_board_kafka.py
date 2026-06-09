@@ -279,9 +279,7 @@ def test_board_kafka_readiness_reports_admin_metadata_and_backlog(settings) -> N
     settings.WHITEBOARD_BOARD_KAFKA_OUTBOX_BACKLOG_READY_THRESHOLD = 1000
     _whiteboard, _card, _outbox = _create_card_and_outbox()
 
-    payload = build_whiteboard_board_kafka_readiness_payload(
-        admin_client_factory=_AdminClient
-    )
+    payload = build_whiteboard_board_kafka_readiness_payload(admin_client_factory=_AdminClient)
 
     assert payload["ready"] is True
     assert payload["broker_ready"] is True

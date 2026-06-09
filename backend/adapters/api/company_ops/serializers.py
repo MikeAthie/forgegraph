@@ -86,9 +86,7 @@ class AtlasOnboardingIntakeSerializer(serializers.Serializer[Any]):
             if field in normalized:
                 normalized[field] = str(normalized.get(field) or "").strip()
         if "contact_email" in normalized:
-            normalized["contact_email"] = (
-                str(normalized.get("contact_email") or "").strip().lower()
-            )
+            normalized["contact_email"] = str(normalized.get("contact_email") or "").strip().lower()
         if "metadata" in normalized:
             raw_metadata = normalized.get("metadata")
             normalized["metadata"] = (

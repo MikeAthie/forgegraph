@@ -582,10 +582,7 @@ def normalize_work_status(work_status: str) -> str:
 
 
 def effective_work_status_for_whiteboard(whiteboard: WorkWhiteboard) -> str:
-    if (
-        whiteboard.work_status
-        and whiteboard.work_status != WorkWhiteboard.WORK_STATUS_DRAFT
-    ):
+    if whiteboard.work_status and whiteboard.work_status != WorkWhiteboard.WORK_STATUS_DRAFT:
         return whiteboard.work_status
     if whiteboard.status and whiteboard.status != WorkWhiteboard.STATUS_DRAFT:
         return work_status_for_legacy_status(whiteboard.status)
@@ -919,8 +916,12 @@ def _active_whiteboard_for(
     source_message: CommunicationMessage | None,
     service_engagement: ServiceEngagement | None,
 ) -> WorkWhiteboard | None:
-    queryset = _whiteboard_queryset().filter(company=company).filter(
-        Q(status__in=ACTIVE_WHITEBOARD_STATUSES) | Q(work_status__in=ACTIVE_WORKBOARD_STATUSES)
+    queryset = (
+        _whiteboard_queryset()
+        .filter(company=company)
+        .filter(
+            Q(status__in=ACTIVE_WHITEBOARD_STATUSES) | Q(work_status__in=ACTIVE_WORKBOARD_STATUSES)
+        )
     )
     if source_message is not None:
         by_message = queryset.filter(source_message=source_message).first()
@@ -1030,9 +1031,7 @@ def whiteboard_semantic_aliases(whiteboard: WorkWhiteboard) -> dict[str, Any]:
         "work_missing_fields": {
             "legacy_field": "missing_fields",
             "legacy_value": list(whiteboard.missing_fields_json or []),
-            "mapped_from_legacy": _work_missing_fields_from_legacy(
-                whiteboard.missing_fields_json
-            ),
+            "mapped_from_legacy": _work_missing_fields_from_legacy(whiteboard.missing_fields_json),
         },
     }
 
@@ -1061,9 +1060,7 @@ def _workboard_context_from_data(
         else _dict(data.get("target_audience"))
     )
     target_audience = (
-        stakeholder_context
-        if "stakeholder_context" in data
-        else _dict(data.get("target_audience"))
+        stakeholder_context if "stakeholder_context" in data else _dict(data.get("target_audience"))
     )
     if "resource_context" in data:
         resource_context = _dict(data.get("resource_context"))
@@ -1081,8 +1078,8 @@ def _workboard_context_from_data(
         if "delivery_context" in data
         else _dict(data.get("channel_context"))
     )
-    channel_context = delivery_context if "delivery_context" in data else _dict(
-        data.get("channel_context")
+    channel_context = (
+        delivery_context if "delivery_context" in data else _dict(data.get("channel_context"))
     )
     return {
         "status": status,
@@ -1129,8 +1126,7 @@ def _legacy_brand_context_from_resource(resource_context: Any) -> dict[str, Any]
 
 def _work_missing_fields_from_legacy(value: Any) -> list[str]:
     mapped = {
-        LEGACY_MISSING_FIELD_TO_WORK_FIELD.get(str(field), str(field))
-        for field in _list(value)
+        LEGACY_MISSING_FIELD_TO_WORK_FIELD.get(str(field), str(field)) for field in _list(value)
     }
     return [field for field in WORKBOARD_REQUIRED_FIELDS if field in mapped]
 

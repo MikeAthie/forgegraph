@@ -60,9 +60,7 @@ def schedule_payload(schedule: GatewayAutomationSchedule) -> dict[str, Any]:
         "graph_version_id": str(schedule.graph_version_id),
         "connection_id": str(schedule.connection_id) if schedule.connection_id else None,
         "last_materialized_run_id": (
-            str(schedule.last_materialized_run_id)
-            if schedule.last_materialized_run_id
-            else None
+            str(schedule.last_materialized_run_id) if schedule.last_materialized_run_id else None
         ),
         "platform": schedule.platform,
         "provider": schedule.provider,
@@ -99,7 +97,9 @@ def create_schedule(
     _validate_schedule_type(schedule_type)
     organization = graph_version.graph.organization or user.default_organization
     if organization is None:
-        raise GatewayScheduleError("organization_required", "Gateway schedules require an organization.")
+        raise GatewayScheduleError(
+            "organization_required", "Gateway schedules require an organization."
+        )
     now = timezone.now()
     next_run_at = compute_next_run_at(
         schedule_type=schedule_type,
@@ -162,7 +162,9 @@ def update_schedule(
     return schedule
 
 
-def run_due_schedules(*, limit: int = 50, now: datetime | None = None) -> list[GatewayScheduleRunResult]:
+def run_due_schedules(
+    *, limit: int = 50, now: datetime | None = None
+) -> list[GatewayScheduleRunResult]:
     effective_now = now or timezone.now()
     results: list[GatewayScheduleRunResult] = []
     schedule_ids: list[UUID] = list(
@@ -191,7 +193,9 @@ def run_schedule(
     with transaction.atomic():
         schedule = (
             GatewayAutomationSchedule.objects.select_for_update(of=("self",))
-            .select_related("graph_version__graph__owner", "graph_version__graph__organization", "connection")
+            .select_related(
+                "graph_version__graph__owner", "graph_version__graph__organization", "connection"
+            )
             .get(id=schedule_id)
         )
         if schedule.status != "enabled" and not force:
@@ -207,7 +211,9 @@ def run_schedule(
                 next_run_at=schedule.next_run_at.isoformat() if schedule.next_run_at else None,
             )
         try:
-            run = _materialize_schedule_run(schedule=schedule, fire_key=fire_key, fire_time=effective_fire_time)
+            run = _materialize_schedule_run(
+                schedule=schedule, fire_key=fire_key, fire_time=effective_fire_time
+            )
         except Exception as exc:
             schedule.status = "error"
             schedule.last_error_code = "schedule_materialization_failed"
@@ -278,9 +284,13 @@ def compute_next_run_at(
     if schedule_type == "interval":
         seconds = int(schedule_json.get("seconds") or schedule_json.get("interval_seconds") or 0)
         if seconds <= 0:
-            raise GatewayScheduleError("invalid_interval", "Interval schedules require positive seconds.")
+            raise GatewayScheduleError(
+                "invalid_interval", "Interval schedules require positive seconds."
+            )
         return base_time + timedelta(seconds=seconds)
-    return _next_cron_time(schedule_json=schedule_json, timezone_name=timezone_name, base_time=base_time)
+    return _next_cron_time(
+        schedule_json=schedule_json, timezone_name=timezone_name, base_time=base_time
+    )
 
 
 def _materialize_schedule_run(
@@ -352,7 +362,9 @@ def _next_cron_time(
     local_base = base_time.astimezone(tz).replace(second=0, microsecond=0) + timedelta(minutes=1)
     for offset in range(0, 366 * 24 * 60):
         candidate = local_base + timedelta(minutes=offset)
-        if _matches_cron_field(candidate.minute, minute) and _matches_cron_field(candidate.hour, hour):
+        if _matches_cron_field(candidate.minute, minute) and _matches_cron_field(
+            candidate.hour, hour
+        ):
             return candidate.astimezone(UTC)
     raise GatewayScheduleError("invalid_cron", "Could not compute next cron run within one year.")
 
@@ -369,7 +381,9 @@ def _matches_cron_field(value: int, raw: Any) -> bool:
 def _parse_run_at(raw: Any) -> datetime:
     parsed = parse_datetime(str(raw or ""))
     if parsed is None:
-        raise GatewayScheduleError("invalid_run_at", "Once schedules require a valid run_at datetime.")
+        raise GatewayScheduleError(
+            "invalid_run_at", "Once schedules require a valid run_at datetime."
+        )
     if timezone.is_naive(parsed):
         parsed = timezone.make_aware(parsed, UTC)
     return parsed

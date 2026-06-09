@@ -48,11 +48,7 @@ class GatewayCapabilityListView(APIView):
         if not has_min_role(user, "member"):
             return _forbidden("You do not have permission to view gateway capabilities.")
         return success_response(
-            {
-                "capabilities": [
-                    capability_payload(capability) for capability in list_capabilities()
-                ]
-            }
+            {"capabilities": [capability_payload(capability) for capability in list_capabilities()]}
         )
 
 
@@ -105,7 +101,9 @@ class GatewayConnectionListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         _audit(user, "gateway.connection.created", "gateway_connection", connection.id)
-        return success_response({"connection": connection_payload(connection)}, status=status.HTTP_201_CREATED)
+        return success_response(
+            {"connection": connection_payload(connection)}, status=status.HTTP_201_CREATED
+        )
 
 
 class GatewayConnectionDetailView(APIView):
@@ -149,7 +147,9 @@ class GatewayConnectionHealthView(APIView):
             return connection
         diagnostics = record_connection_health(connection)
         _audit(user, "gateway.connection.health_checked", "gateway_connection", connection.id)
-        return success_response({"diagnostics": diagnostics.as_dict(), "connection": connection_payload(connection)})
+        return success_response(
+            {"diagnostics": diagnostics.as_dict(), "connection": connection_payload(connection)}
+        )
 
 
 class GatewayConnectionDiagnosticsView(APIView):
@@ -187,7 +187,9 @@ class GatewayScheduleListCreateView(APIView):
         if not has_min_role(user, "admin"):
             return _forbidden("You do not have permission to create gateway schedules.")
         payload = _payload(request)
-        graph_version = _graph_version_for_user(user, payload.get("graph_version_id"), required=True)
+        graph_version = _graph_version_for_user(
+            user, payload.get("graph_version_id"), required=True
+        )
         if isinstance(graph_version, Response):
             return graph_version
         connection = _connection_for_user(user, payload.get("connection_id"), required=False)
@@ -198,8 +200,12 @@ class GatewayScheduleListCreateView(APIView):
                 graph_version=graph_version,
                 user=user,
                 connection=connection,
-                platform=str(payload.get("platform") or (connection.platform if connection else "")),
-                provider=str(payload.get("provider") or (connection.provider if connection else "")),
+                platform=str(
+                    payload.get("platform") or (connection.platform if connection else "")
+                ),
+                provider=str(
+                    payload.get("provider") or (connection.provider if connection else "")
+                ),
                 name=str(payload.get("name") or ""),
                 schedule_type=str(payload.get("schedule_type") or ""),
                 schedule_json=_dict(payload.get("schedule")),
@@ -214,7 +220,9 @@ class GatewayScheduleListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         _audit(user, "gateway.schedule.created", "gateway_automation_schedule", schedule.id)
-        return success_response({"schedule": schedule_payload(schedule)}, status=status.HTTP_201_CREATED)
+        return success_response(
+            {"schedule": schedule_payload(schedule)}, status=status.HTTP_201_CREATED
+        )
 
 
 class GatewayScheduleDetailView(APIView):
@@ -366,7 +374,9 @@ def _graph_version_for_user(
 def _credential_for_user(user: User, credential_id: Any) -> APIKey | Response | None:
     if not credential_id:
         return None
-    credential = APIKey.objects.filter(id=credential_id, organization=user.default_organization).first()
+    credential = APIKey.objects.filter(
+        id=credential_id, organization=user.default_organization
+    ).first()
     if credential is None:
         return error_response(
             code="NOT_FOUND",

@@ -57,7 +57,9 @@ def in_review_deliverable_count(company: Graph) -> int:
     return ServiceDeliverable.objects.filter(company=company, status="in_review").count()
 
 
-def _item_payload(definition: Any, *, company: Graph, connector_readiness: dict[str, Any]) -> dict[str, Any]:
+def _item_payload(
+    definition: Any, *, company: Graph, connector_readiness: dict[str, Any]
+) -> dict[str, Any]:
     status, message = _item_status(definition.slug, company, connector_readiness)
     return {
         "slug": definition.slug,

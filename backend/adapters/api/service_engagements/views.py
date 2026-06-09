@@ -599,6 +599,7 @@ class ServiceDeliverableActionView(APIView):
             resource_id=str(deliverable.id),
         )
 
+
 class AtlasDeliverableAssembleView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -661,11 +662,17 @@ class AtlasDeliverableAssembleView(APIView):
                 ],
             }
         )
+        if len(deliverables) == 1:
+            idempotency_resource_type = "service_deliverable"
+            idempotency_resource_id = str(deliverables[0].id)
+        else:
+            idempotency_resource_type = "work_whiteboard"
+            idempotency_resource_id = str(whiteboard.id)
         return record_processed_command(
             context=context,
             response=response,
-            resource_type="service_deliverable",
-            resource_id=",".join(str(deliverable.id) for deliverable in deliverables),
+            resource_type=idempotency_resource_type,
+            resource_id=idempotency_resource_id,
         )
 
 

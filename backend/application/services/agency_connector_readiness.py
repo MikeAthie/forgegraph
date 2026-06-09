@@ -122,9 +122,7 @@ def _connection_state(connection: GatewayConnection) -> dict[str, Any]:
         "source": "gateway_connection",
         "last_seen_at": connection.last_seen_at.isoformat() if connection.last_seen_at else None,
         "last_health_check_at": (
-            connection.last_health_check_at.isoformat()
-            if connection.last_health_check_at
-            else None
+            connection.last_health_check_at.isoformat() if connection.last_health_check_at else None
         ),
     }
 
@@ -162,7 +160,9 @@ def _items_from_dict(raw: dict[str, Any]) -> list[Any]:
         if isinstance(value, dict):
             items.append({"id": key, **value})
         else:
-            items.append({"id": key, "active": bool(value), "status": "ready" if value else "missing"})
+            items.append(
+                {"id": key, "active": bool(value), "status": "ready" if value else "missing"}
+            )
     return items
 
 

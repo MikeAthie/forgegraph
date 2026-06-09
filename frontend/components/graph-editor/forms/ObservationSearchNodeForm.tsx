@@ -6,7 +6,11 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import type { NodeFormProps } from "../NodeConfigDialog";
-import { compactObservationErrors, updateObservationNumberField, validateObservationSource } from "./observation-form-helpers";
+import {
+  compactObservationErrors,
+  updateObservationNumberField,
+  validateObservationSource,
+} from "./observation-form-helpers";
 import { ObservationScopeField, ObservationSourceField } from "./observation-form-utils";
 
 export function ObservationSearchNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
@@ -16,9 +20,7 @@ export function ObservationSearchNodeForm({ config, onChange, errors, setErrors 
     (nextConfig: Record<string, unknown>) =>
       compactObservationErrors({
         scope:
-          typeof nextConfig.scope === "string" && nextConfig.scope.trim().length > 0
-            ? undefined
-            : "Scope is required.",
+          typeof nextConfig.scope === "string" && nextConfig.scope.trim().length > 0 ? undefined : "Scope is required.",
         query: validateObservationSource(
           nextConfig,
           "query",

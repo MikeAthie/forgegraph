@@ -8,9 +8,7 @@ from application.services.atlas_weekly_reports import (
 
 def _section(report, title):
     return next(
-        section
-        for section in report["client_report"]["sections"]
-        if section["title"] == title
+        section for section in report["client_report"]["sections"] if section["title"] == title
     )
 
 
@@ -62,9 +60,7 @@ def test_qualified_no_sales_scenario_diagnoses_trust_pricing_sales_process():
     assert report["diagnosis"]["bottleneck"] == BOTTLENECK_NO_QUOTES
 
     report_text = " ".join(
-        line
-        for section in report["client_report"]["sections"]
-        for line in section["body"]
+        line for section in report["client_report"]["sections"] for line in section["body"]
     ).lower()
     assert "cierre" in report_text
     assert "confianza" in report_text
@@ -170,9 +166,6 @@ def test_report_includes_explicit_next_actions_and_commission_summary():
 
     assert len(next_actions) >= 2
     assert all(action.endswith(".") for action in next_actions)
-    assert any(
-        "Comisión / success fee estimada: MXN 1,500." == line
-        for line in commission
-    )
+    assert any("Comisión / success fee estimada: MXN 1,500." == line for line in commission)
     assert any("Ingreso atribuido: MXN 15,000." == line for line in commission)
     assert any("Base de atribución" in line for line in commission)

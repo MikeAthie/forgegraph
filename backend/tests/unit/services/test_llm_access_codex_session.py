@@ -15,7 +15,9 @@ from application.services.llm_access import (
 
 
 def test_codex_session_llm_access_rejected_when_disabled():
-    with override_settings(ENABLE_CODEX_SESSION_RUNTIME=False, ALLOWED_LLM_PROVIDERS=["openai", "codex"]):
+    with override_settings(
+        ENABLE_CODEX_SESSION_RUNTIME=False, ALLOWED_LLM_PROVIDERS=["openai", "codex"]
+    ):
         with pytest.raises(LLMAccessValidationError) as exc_info:
             validate_llm_access_config(LLMAccessConfig(llm_mode="codex_session", provider="codex"))
 
@@ -23,8 +25,12 @@ def test_codex_session_llm_access_rejected_when_disabled():
 
 
 def test_codex_session_llm_access_is_sanitized_when_enabled(user):
-    with override_settings(ENABLE_CODEX_SESSION_RUNTIME=True, ALLOWED_LLM_PROVIDERS=["openai", "codex"]):
-        config = validate_llm_access_config(LLMAccessConfig(llm_mode="codex_session", provider="codex"))
+    with override_settings(
+        ENABLE_CODEX_SESSION_RUNTIME=True, ALLOWED_LLM_PROVIDERS=["openai", "codex"]
+    ):
+        config = validate_llm_access_config(
+            LLMAccessConfig(llm_mode="codex_session", provider="codex")
+        )
         graph = attach_llm_access_to_graph({"nodes": [], "metadata": {}}, config)
         public = public_llm_access_from_graph(graph)
         engine_config = engine_llm_access_from_graph(graph, user)

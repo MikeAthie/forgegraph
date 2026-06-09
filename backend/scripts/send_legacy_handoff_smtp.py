@@ -31,7 +31,9 @@ def main() -> None:
         subtype="zip",
         filename=ZIP_PATH.name,
     )
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context(), timeout=30) as server:
+    with smtplib.SMTP_SSL(
+        "smtp.gmail.com", 465, context=ssl.create_default_context(), timeout=30
+    ) as server:
         server.login(FROM_EMAIL, password)
         refused = server.send_message(message)
     print(

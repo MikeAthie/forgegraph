@@ -5,8 +5,7 @@ import { ArrowRight, Building2, Plus } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import {
-  EmptyBlock, InspectorPanel, Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
+import { EmptyBlock, InspectorPanel, Panel, SectionHeader, StatusBadge } from "@/components/os/operations-ui";
 import { formatCompactNumber, formatDateTime } from "@/components/os/operations-format";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
 import { companyRepository, portfolioRepository } from "@/domain/repositories";
@@ -238,9 +237,9 @@ function CompanyWorkspacePanel({
 
 function PortfolioQueuesPanel({ portfolioHome }: { portfolioHome: PortfolioHomeVM | null }) {
   const counts = portfolioHome?.queues.counts ?? {};
-  const attentionRows = PORTFOLIO_QUEUE_ORDER
-    .flatMap((queueName) => portfolioHome?.queues.queues[queueName]?.slice(0, 3) ?? [])
-    .slice(0, 8);
+  const attentionRows = PORTFOLIO_QUEUE_ORDER.flatMap(
+    (queueName) => portfolioHome?.queues.queues[queueName]?.slice(0, 3) ?? [],
+  ).slice(0, 8);
 
   if (!portfolioHome) {
     return null;

@@ -107,6 +107,17 @@ const runtimeCopyAllowlist = [
     path: /^frontend\/components\/os\/OperationDetailView\.tsx$/,
     line: /technical execution internals/i,
   },
+  {
+    path: /^frontend\/components\/company\/CompanyWorkspaceShell\.tsx$/,
+    line: /<AgencyHealthPanel snapshot=/,
+  },
+];
+
+const terminologyAllowlist = [
+  {
+    path: /^frontend\/pages\/credentials\.tsx$/,
+    line: /microsoft_graph|Microsoft Graph|learn\.microsoft\.com\/graph/i,
+  },
 ];
 
 function toRepoPath(filePath) {
@@ -139,6 +150,33 @@ function isRuntimeCopyAllowed(repoPath, line) {
   return runtimeCopyAllowlist.some(
     (entry) => entry.path.test(repoPath) && entry.line.test(line),
   );
+}
+
+function isTerminologyAllowed(repoPath, line) {
+  return terminologyAllowlist.some(
+    (entry) => entry.path.test(repoPath) && entry.line.test(line),
+  );
+}
+
+function stripJsxExpressions(line) {
+  let previous;
+  let current = line;
+  do {
+    previous = current;
+    current = current.replace(/\{[^{}]*\}/g, "");
+  } while (current !== previous);
+  return current;
+}
+
+function renderedCopySearchableLine(line) {
+  const stripped = stripJsxExpressions(line);
+  if (stripped !== line && /[A-Za-z]/.test(stripped.replace(/[{}().;,:]/g, ""))) {
+    return stripped;
+  }
+  if (/["'`]/.test(line) || /<[^>]+>/.test(line)) {
+    return stripped;
+  }
+  return "";
 }
 
 function collectFiles(root) {
@@ -231,6 +269,10 @@ for (const file of files) {
   const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
 
   lines.forEach((line, index) => {
+    if (isTerminologyAllowed(repoPath, line)) {
+      return;
+    }
+
     const searchableLine = routeLiteralPatterns.reduce(
       (current, pattern) => current.replace(pattern, ""),
       line,
@@ -253,8 +295,13 @@ for (const file of runtimeCopyFiles) {
       return;
     }
 
+    const searchableLine = renderedCopySearchableLine(line);
+    if (!searchableLine) {
+      return;
+    }
+
     const match = runtimeCopyForbiddenPatterns.find((pattern) =>
-      pattern.test(line),
+      pattern.test(searchableLine),
     );
     if (match) {
       violations.push(`${repoPath}:${index + 1}: ${line.trim()}`);

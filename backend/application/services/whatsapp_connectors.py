@@ -315,9 +315,7 @@ class OpenWaWebAutomationAdapter:
                 mode=request.mode,
                 retryable=True,
             ) from exc
-        payload = _provider_json_or_error(
-            response, provider=self.provider, mode=request.mode
-        )
+        payload = _provider_json_or_error(response, provider=self.provider, mode=request.mode)
         return sanitize_provider_response(
             payload, provider=self.provider, request=request, session_status=status
         )
@@ -338,10 +336,14 @@ class HermesBridgeWhatsAppAdapter:
         session: Any = None,
     ) -> None:
         self.bridge_url = (
-            bridge_url
-            if bridge_url is not None
-            else getattr(settings, "WHATSAPP_HERMES_BRIDGE_URL", "")
-        ).strip().rstrip("/")
+            (
+                bridge_url
+                if bridge_url is not None
+                else getattr(settings, "WHATSAPP_HERMES_BRIDGE_URL", "")
+            )
+            .strip()
+            .rstrip("/")
+        )
         self.session_ref = (
             session_ref
             if session_ref is not None
@@ -453,7 +455,9 @@ class WhatsAppCloudApiAdapter:
         session: Any = None,
     ) -> None:
         self.api_token = (
-            api_token if api_token is not None else getattr(settings, "WHATSAPP_CLOUD_API_TOKEN", "")
+            api_token
+            if api_token is not None
+            else getattr(settings, "WHATSAPP_CLOUD_API_TOKEN", "")
         ).strip()
         self.phone_number_id = (
             phone_number_id
@@ -463,7 +467,9 @@ class WhatsAppCloudApiAdapter:
         self.api_base_url = (
             api_base_url
             if api_base_url is not None
-            else getattr(settings, "WHATSAPP_CLOUD_API_BASE_URL", "https://graph.facebook.com/v20.0")
+            else getattr(
+                settings, "WHATSAPP_CLOUD_API_BASE_URL", "https://graph.facebook.com/v20.0"
+            )
         ).rstrip("/")
         self.timeout_seconds = float(
             timeout_seconds
@@ -802,7 +808,8 @@ def sanitize_provider_response(
         provider_message_id=message_id,
         accepted_recipients_count=evidence["recipient_count"],
         rejected_recipients_count=0,
-        session_required=provider in {WHATSAPP_PROVIDER_OPEN_WA_WEB, WHATSAPP_PROVIDER_HERMES_BRIDGE},
+        session_required=provider
+        in {WHATSAPP_PROVIDER_OPEN_WA_WEB, WHATSAPP_PROVIDER_HERMES_BRIDGE},
         session_status=_safe_session_status(session_status),
         completed_at=completed_at,
         sent_at=completed_at,
@@ -865,13 +872,17 @@ def _provider_json_or_error(response: Any, *, provider: str, mode: str) -> dict[
 
 
 def _provider_message_id(response_json: dict[str, Any]) -> str:
-    direct = response_json.get("id") or response_json.get("message_id") or response_json.get("messageId")
+    direct = (
+        response_json.get("id") or response_json.get("message_id") or response_json.get("messageId")
+    )
     if direct:
         return _safe_provider_message_id(direct)
     for container_key in ("message", "result"):
         container = response_json.get(container_key)
         if isinstance(container, dict):
-            nested = container.get("id") or container.get("message_id") or container.get("messageId")
+            nested = (
+                container.get("id") or container.get("message_id") or container.get("messageId")
+            )
             if nested:
                 return _safe_provider_message_id(nested)
     messages = response_json.get("messages")

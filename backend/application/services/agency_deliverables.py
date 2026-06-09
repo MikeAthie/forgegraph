@@ -220,7 +220,11 @@ def _update_catalog_defaults(catalog: ServiceCatalogItem, *, user: User | None) 
         }
         for definition in list_deliverable_definitions()
     ]
-    metadata = {**(catalog.metadata_json or {}), "source": ASSEMBLY_SOURCE, "source_key": CATALOG_SOURCE_KEY}
+    metadata = {
+        **(catalog.metadata_json or {}),
+        "source": ASSEMBLY_SOURCE,
+        "source_key": CATALOG_SOURCE_KEY,
+    }
     changed = False
     for attr, value in {
         "title": "Digital Marketing Agency Engagement",
@@ -239,18 +243,20 @@ def _update_catalog_defaults(catalog: ServiceCatalogItem, *, user: User | None) 
         catalog.created_by = user
         changed = True
     if changed:
-        catalog.save(update_fields=[
-            "title",
-            "description",
-            "status",
-            "visibility",
-            "audience",
-            "required_pack_ids_json",
-            "deliverables_schema_json",
-            "metadata_json",
-            "created_by",
-            "updated_at",
-        ])
+        catalog.save(
+            update_fields=[
+                "title",
+                "description",
+                "status",
+                "visibility",
+                "audience",
+                "required_pack_ids_json",
+                "deliverables_schema_json",
+                "metadata_json",
+                "created_by",
+                "updated_at",
+            ]
+        )
 
 
 def _update_engagement_defaults(
@@ -336,7 +342,9 @@ def _source_state_for_whiteboard(
             }
         if "channels" in source_state:
             return {"deployment": dict(source_state), "performance": {}}
-        if any(key in source_state for key in ("metric_snapshot_id", "report_run_id", "evaluation_id")):
+        if any(
+            key in source_state for key in ("metric_snapshot_id", "report_run_id", "evaluation_id")
+        ):
             return {"deployment": {}, "performance": dict(source_state)}
         return {"deployment": {}, "performance": {}}
     return {
@@ -376,7 +384,9 @@ def _markdown_content(
         "",
         "## Source Evidence",
     ]
-    lines.extend(_source_evidence_lines(definition=definition, sources=sources, package_items=package_items))
+    lines.extend(
+        _source_evidence_lines(definition=definition, sources=sources, package_items=package_items)
+    )
     lines.extend(
         [
             "",
@@ -397,10 +407,7 @@ def _source_evidence_lines(
     if definition.type == "campaign_launch_package":
         if not package_items:
             return ["- No assembled deliverables are linked yet."]
-        return [
-            f"- {item['label']} (`{item['type']}`): {item['status']}"
-            for item in package_items
-        ]
+        return [f"- {item['label']} (`{item['type']}`): {item['status']}" for item in package_items]
 
     lines = [f"- Source kinds: {', '.join(definition.source_kinds)}."]
     deployment = sources.get("deployment") if isinstance(sources.get("deployment"), dict) else {}
@@ -447,7 +454,9 @@ def _performance_lines(performance: dict[str, Any]) -> list[str]:
 
 
 def _status_line(*, definition: DeliverableDefinition, sources: dict[str, Any]) -> str:
-    if definition.type == "connector_gap_report" and _blocked_channel_ids(sources.get("deployment")):
+    if definition.type == "connector_gap_report" and _blocked_channel_ids(
+        sources.get("deployment")
+    ):
         return "Ready with connector gaps identified."
     return "Ready for customer review."
 

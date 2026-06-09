@@ -42,7 +42,9 @@ from infrastructure.security import s2s
 def _serialize_release(release: NodeRegistryRelease | None) -> dict[str, Any] | None:
     if release is None:
         return None
-    runtime_manifest = release.runtime_manifest if isinstance(release.runtime_manifest, dict) else {}
+    runtime_manifest = (
+        release.runtime_manifest if isinstance(release.runtime_manifest, dict) else {}
+    )
     tool_id = str(
         runtime_manifest.get("name")
         or (runtime_manifest.get("execution") or {}).get("local", {}).get("handler")

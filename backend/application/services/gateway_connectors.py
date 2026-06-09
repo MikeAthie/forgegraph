@@ -242,7 +242,9 @@ class BaseGatewayAdapter:
         self.timeout_seconds = float(getattr(settings, "GATEWAY_CONNECTOR_TIMEOUT_SECONDS", 10))
 
     def credentials_configured(self) -> bool:
-        return bool(_credential_token(self._last_request) if hasattr(self, "_last_request") else True)
+        return bool(
+            _credential_token(self._last_request) if hasattr(self, "_last_request") else True
+        )
 
     def health_check(self) -> str:
         return "ready"
@@ -372,7 +374,9 @@ class WhatsAppCloudGatewayAdapter(BaseGatewayAdapter):
     provider = "whatsapp_cloud_api"
 
     def credentials_configured(self) -> bool:
-        return bool(_setting("WHATSAPP_CLOUD_API_TOKEN") and _setting("WHATSAPP_CLOUD_PHONE_NUMBER_ID"))
+        return bool(
+            _setting("WHATSAPP_CLOUD_API_TOKEN") and _setting("WHATSAPP_CLOUD_PHONE_NUMBER_ID")
+        )
 
     def send(self, request: GatewaySendRequest) -> GatewaySendReceipt:
         token = _credential_token(request) or _setting("WHATSAPP_CLOUD_API_TOKEN")
@@ -542,7 +546,9 @@ class MatrixGatewayAdapter(BaseGatewayAdapter):
         return bool(_setting("MATRIX_HOMESERVER") and _setting("MATRIX_ACCESS_TOKEN"))
 
     def send(self, request: GatewaySendRequest) -> GatewaySendReceipt:
-        homeserver = str(request.metadata.get("homeserver") or _setting("MATRIX_HOMESERVER")).rstrip("/")
+        homeserver = str(
+            request.metadata.get("homeserver") or _setting("MATRIX_HOMESERVER")
+        ).rstrip("/")
         token = _credential_token(request) or _setting("MATRIX_ACCESS_TOKEN")
         room_id = _first_destination(request)
         txn_id = quote(request.idempotency_key or _deterministic_message_id("fg-matrix", request))
@@ -744,7 +750,11 @@ def validate_gateway_request(request: GatewaySendRequest, *, dry_run: bool) -> N
             mode=mode,
             blocked_before_provider_call=True,
         )
-    if not dry_run and not destinations and platform not in {"webhook", "api_server", "homeassistant"}:
+    if (
+        not dry_run
+        and not destinations
+        and platform not in {"webhook", "api_server", "homeassistant"}
+    ):
         raise GatewayConnectorError(
             "destination_required",
             "Real gateway send requires at least one destination.",
@@ -810,7 +820,9 @@ def validate_real_send_allowed(
     selected_adapter = adapter or get_gateway_adapter(request.platform, request.provider)
     if not selected_adapter.credentials_configured() and not _credential_token(request):
         raise _missing_credentials(request, provider=selected_adapter.provider)
-    validate_destination_allowlist(request.destinations(), platform=request.platform, provider=request.provider)
+    validate_destination_allowlist(
+        request.destinations(), platform=request.platform, provider=request.provider
+    )
 
 
 def validate_destination_allowlist(
@@ -873,7 +885,9 @@ def sanitize_provider_error(
     ).as_dict()
 
 
-def verify_hmac_signature(*, secret: str, body: bytes, signature: str, algorithm: str = "sha256") -> bool:
+def verify_hmac_signature(
+    *, secret: str, body: bytes, signature: str, algorithm: str = "sha256"
+) -> bool:
     if not secret or not signature:
         return False
     digestmod = hashlib.sha1 if algorithm == "sha1" else hashlib.sha256
@@ -942,7 +956,11 @@ def _generic_http_spec(request: GatewaySendRequest) -> dict[str, Any]:
         "Content-Type": "application/json",
         **({} if not token else {"Authorization": f"Bearer {token}"}),
     }
-    headers.update({str(k): str(v) for k, v in (metadata.get("headers") or {}).items()} if isinstance(metadata.get("headers"), dict) else {})
+    headers.update(
+        {str(k): str(v) for k, v in (metadata.get("headers") or {}).items()}
+        if isinstance(metadata.get("headers"), dict)
+        else {}
+    )
     return {
         "method": str(metadata.get("method") or "POST").upper(),
         "url": endpoint_url,
@@ -956,28 +974,52 @@ def _official_endpoint_for_platform(request: GatewaySendRequest, *, token: str) 
     platform = normalize_platform(request.platform)
     metadata = request.metadata
     if platform == "dingtalk":
-        access_token = token or str(metadata.get("access_token") or _setting("DINGTALK_ACCESS_TOKEN"))
-        return f"https://oapi.dingtalk.com/robot/send?access_token={quote(access_token)}" if access_token else ""
+        access_token = token or str(
+            metadata.get("access_token") or _setting("DINGTALK_ACCESS_TOKEN")
+        )
+        return (
+            f"https://oapi.dingtalk.com/robot/send?access_token={quote(access_token)}"
+            if access_token
+            else ""
+        )
     if platform == "feishu":
         receive_id_type = str(metadata.get("receive_id_type") or "chat_id")
         return f"https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type={quote(receive_id_type)}"
     if platform == "feishu_comment":
         file_token = str(metadata.get("file_token") or "")
-        return f"https://open.feishu.cn/open-apis/drive/v1/files/{quote(file_token)}/comments" if file_token else ""
+        return (
+            f"https://open.feishu.cn/open-apis/drive/v1/files/{quote(file_token)}/comments"
+            if file_token
+            else ""
+        )
     if platform == "qqbot":
         channel_id = _first_destination(request)
-        return f"https://api.sgroup.qq.com/channels/{quote(channel_id)}/messages" if channel_id else ""
+        return (
+            f"https://api.sgroup.qq.com/channels/{quote(channel_id)}/messages" if channel_id else ""
+        )
     if platform == "wecom":
         access_token = token or str(metadata.get("access_token") or _setting("WECOM_ACCESS_TOKEN"))
-        return f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={quote(access_token)}" if access_token else ""
+        return (
+            f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={quote(access_token)}"
+            if access_token
+            else ""
+        )
     if platform == "weixin":
         access_token = token or str(metadata.get("access_token") or _setting("WEIXIN_ACCESS_TOKEN"))
-        return f"https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token={quote(access_token)}" if access_token else ""
+        return (
+            f"https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token={quote(access_token)}"
+            if access_token
+            else ""
+        )
     if platform == "bluebubbles":
-        server_url = str(metadata.get("server_url") or _setting("BLUEBUBBLES_SERVER_URL")).rstrip("/")
+        server_url = str(metadata.get("server_url") or _setting("BLUEBUBBLES_SERVER_URL")).rstrip(
+            "/"
+        )
         return f"{server_url}/api/v1/message/text" if server_url else ""
     if platform == "signal":
-        base_url = str(metadata.get("signal_cli_rest_url") or _setting("SIGNAL_HTTP_URL")).rstrip("/")
+        base_url = str(metadata.get("signal_cli_rest_url") or _setting("SIGNAL_HTTP_URL")).rstrip(
+            "/"
+        )
         account = str(metadata.get("account") or _setting("SIGNAL_ACCOUNT"))
         return f"{base_url}/v2/send/{quote(account)}" if base_url and account else ""
     if platform in {"api_server", "webhook", "yuanbao"}:
@@ -991,7 +1033,11 @@ def _generic_body(request: GatewaySendRequest) -> dict[str, Any]:
     if platform == "dingtalk":
         return {"msgtype": "text", "text": {"content": request.text}}
     if platform == "feishu":
-        return {"receive_id": destination, "msg_type": "text", "content": json.dumps({"text": request.text})}
+        return {
+            "receive_id": destination,
+            "msg_type": "text",
+            "content": json.dumps({"text": request.text}),
+        }
     if platform == "qqbot":
         return {"content": request.text}
     if platform == "wecom":
@@ -1023,7 +1069,9 @@ def _generic_body(request: GatewaySendRequest) -> dict[str, Any]:
     }
 
 
-def _provider_json_or_error(response: Any, *, request: GatewaySendRequest, provider: str) -> dict[str, Any]:
+def _provider_json_or_error(
+    response: Any, *, request: GatewaySendRequest, provider: str
+) -> dict[str, Any]:
     content = getattr(response, "content", b"") or b""
     if len(content) > _MAX_PROVIDER_RESPONSE_BYTES:
         raise GatewayConnectorError(
@@ -1127,9 +1175,10 @@ def _capability_for_request(request: GatewaySendRequest) -> dict[str, Any]:
     try:
         from application.services.gateway_registry import capability_payload, get_capability
 
-        return capability_payload(
-            get_capability(platform=request.platform, provider=request.provider)
-        ) or {}
+        return (
+            capability_payload(get_capability(platform=request.platform, provider=request.provider))
+            or {}
+        )
     except Exception:
         return {}
 

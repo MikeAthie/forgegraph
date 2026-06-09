@@ -4,7 +4,13 @@ import { useRouter } from "next/router";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock, InspectorPanel, Panel, SectionHeader, SelectionList, StatusBadge } from "@/components/os/operations-ui";
+  EmptyBlock,
+  InspectorPanel,
+  Panel,
+  SectionHeader,
+  SelectionList,
+  StatusBadge,
+} from "@/components/os/operations-ui";
 import { formatDateTime } from "@/components/os/operations-format";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Alert, AlertDescription, Button, Spinner } from "@/components/ui";
@@ -275,7 +281,9 @@ export default function LibraryPage() {
     [selectedPrompt],
   );
   const promptListEmptyState = useMemo(
-    () => <EmptyBlock title="Marketplace is empty" description="Create or import prompts to populate this workspace." />,
+    () => (
+      <EmptyBlock title="Marketplace is empty" description="Create or import prompts to populate this workspace." />
+    ),
     [],
   );
 

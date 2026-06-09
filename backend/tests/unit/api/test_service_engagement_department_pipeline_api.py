@@ -135,7 +135,9 @@ def test_department_pipeline_api_create_get_and_transition(authenticated_client,
         format="json",
     )
     assert complete_strategy.status_code == 200
-    strategy = ProgramStageState.objects.get(program__company=engagement.company, stage_id="strategy_research")
+    strategy = ProgramStageState.objects.get(
+        program__company=engagement.company, stage_id="strategy_research"
+    )
     assert strategy.status == "completed"
     assert strategy.state_json["outputs"] == [{"kind": "brief", "id": "legacy-strategy"}]
 

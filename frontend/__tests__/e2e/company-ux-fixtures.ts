@@ -585,13 +585,16 @@ export async function installCompanyWorkspaceMocks(page: Page, state: CompanyWor
     });
   });
 
-  route(new RegExp(`/api/companies/${state.companyId}/operating-model-versions/latest(?:\\?.*)?$`), async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(apiSuccess(buildCompanyOperatingModelVersion(state))),
-    });
-  });
+  route(
+    new RegExp(`/api/companies/${state.companyId}/operating-model-versions/latest(?:\\?.*)?$`),
+    async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(apiSuccess(buildCompanyOperatingModelVersion(state))),
+      });
+    },
+  );
 
   route(new RegExp(`/api/companies/${state.companyId}(?:\\?.*)?$`), async (route: Route) => {
     if (route.request().method() !== "GET") {

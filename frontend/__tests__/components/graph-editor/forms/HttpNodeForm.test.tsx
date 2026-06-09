@@ -347,8 +347,10 @@ describe("HttpNodeForm", () => {
 
   describe("URL Validation", () => {
     it("should call setErrors with URL validation error for invalid URL", async () => {
-      const config = { url: "invalid-url" };
-      renderWithConfig(config);
+      const user = setupUser();
+      renderWithConfig();
+
+      await user.type(screen.getByLabelText(/url/i), "invalid-url");
 
       await waitFor(() => {
         expect(mockSetErrors).toHaveBeenCalledWith(
@@ -395,8 +397,12 @@ describe("HttpNodeForm", () => {
 
   describe("JSON Body Validation", () => {
     it("should call setErrors with body validation error for invalid JSON", async () => {
-      const config = { method: "POST" as const, body: "{invalid json}" };
+      const config = { method: "POST" as const };
       renderWithConfig(config);
+
+      fireEvent.change(screen.getByLabelText(/request body/i), {
+        target: { value: "{invalid json}" },
+      });
 
       await waitFor(() => {
         expect(mockSetErrors).toHaveBeenCalledWith(

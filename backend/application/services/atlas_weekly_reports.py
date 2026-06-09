@@ -239,9 +239,7 @@ def _economics_are_acceptable(summary: Payload) -> bool:
         return roi >= Decimal("1")
 
     revenue = _to_decimal(
-        summary.get("revenue")
-        or summary.get("new_business_revenue")
-        or summary.get("sales_value")
+        summary.get("revenue") or summary.get("new_business_revenue") or summary.get("sales_value")
     )
     commission = _to_decimal(summary.get("commission") or summary.get("success_fee"))
     if revenue is not None and commission is not None:
@@ -257,10 +255,7 @@ def _activity_lines(
     if not activity_list:
         campaign_name = campaign_summary.get("name") or campaign_summary.get("campaign_name")
         if campaign_name:
-            return [
-                f"Operamos la campaña {campaign_name} y medimos el avance "
-                "del funnel."
-            ]
+            return [f"Operamos la campaña {campaign_name} y medimos el avance del funnel."]
         return ["Operamos la campaña y medimos el avance del funnel."]
 
     lines = []
@@ -310,8 +305,7 @@ def _learning_lines(bottleneck: str) -> list[str]:
             "mensaje o canal hasta provocar respuestas."
         ],
         BOTTLENECK_LOW_QUALIFIED: [
-            "El mercado sí responde, pero la calidad cae; hay que ajustar "
-            "oferta y targeting."
+            "El mercado sí responde, pero la calidad cae; hay que ajustar oferta y targeting."
         ],
         BOTTLENECK_NO_QUOTES: [
             "Si hay leads calificados y no avanzan a cita o cotización, falta "
@@ -349,8 +343,7 @@ def _bottleneck_client_line(bottleneck: str, funnel: Payload) -> str:
             "pero falta confianza, precio claro o proceso comercial de cierre."
         ),
         BOTTLENECK_NO_WINS: (
-            "Se atoró en cierre: hubo citas o cotizaciones, pero no se "
-            "convirtieron en ventas."
+            "Se atoró en cierre: hubo citas o cotizaciones, pero no se convirtieron en ventas."
         ),
         BOTTLENECK_SCALE: (
             f"El funnel ya produjo {funnel['wins']} venta(s) con economía "
@@ -364,8 +357,7 @@ def _next_actions_for_bottleneck(bottleneck: str) -> list[str]:
         BOTTLENECK_NO_REPLIES: [
             "Probar un segmento alterno con el mismo volumen base.",
             "Reescribir el primer mensaje con una prueba de valor más concreta.",
-            "Mover el canal principal solo después de comparar tasa de "
-            "respuesta.",
+            "Mover el canal principal solo después de comparar tasa de respuesta.",
         ],
         BOTTLENECK_LOW_QUALIFIED: [
             "Endurecer criterios de ICP antes de contactar.",
@@ -374,23 +366,18 @@ def _next_actions_for_bottleneck(bottleneck: str) -> list[str]:
         ],
         BOTTLENECK_NO_QUOTES: [
             "Agregar prueba social y expectativas de precio antes de pedir cita.",
-            "Reducir fricción del siguiente paso con una cita corta o "
-            "cotización guiada.",
-            "Dar seguimiento a cada lead calificado con una razón concreta "
-            "para avanzar.",
+            "Reducir fricción del siguiente paso con una cita corta o cotización guiada.",
+            "Dar seguimiento a cada lead calificado con una razón concreta para avanzar.",
         ],
         BOTTLENECK_NO_WINS: [
             "Revisar objeciones de cierre y ajustar guión comercial.",
-            "Validar que precio, margen y promesa de fulfillment sean "
-            "sostenibles.",
+            "Validar que precio, margen y promesa de fulfillment sean sostenibles.",
             "Priorizar leads con dolor urgente antes de ampliar volumen.",
         ],
         BOTTLENECK_SCALE: [
             "Subir volumen gradualmente manteniendo el mismo ICP ganador.",
-            "Mantener tope de costo por lead y pausar segmentos que bajen "
-            "calidad.",
-            "Duplicar solo los mensajes y canales que ya generaron venta "
-            "atribuible.",
+            "Mantener tope de costo por lead y pausar segmentos que bajen calidad.",
+            "Duplicar solo los mensajes y canales que ya generaron venta atribuible.",
         ],
     }[bottleneck]
 
@@ -422,9 +409,7 @@ def _approval_lines(blockers_approvals_needed: Sequence[Any]) -> list[str]:
             text = str(item).strip()
         if text:
             lines.append(_sentence(text))
-    return lines or [
-        "Sin aprobaciones pendientes; seguiremos con el plan de la próxima semana."
-    ]
+    return lines or ["Sin aprobaciones pendientes; seguiremos con el plan de la próxima semana."]
 
 
 def _operator_recommendation(
@@ -433,16 +418,11 @@ def _operator_recommendation(
     funnel: Payload,
     economics_acceptable: bool,
 ) -> dict[str, Any]:
-    if (
-        bottleneck == BOTTLENECK_NO_WINS
-        and funnel["wins"] > 0
-        and not economics_acceptable
-    ):
+    if bottleneck == BOTTLENECK_NO_WINS and funnel["wins"] > 0 and not economics_acceptable:
         return {
             "recommendation": "kill",
             "rationale": (
-                "Hay venta atribuible, pero la economía no sostiene success fee "
-                "ni escala rentable."
+                "Hay venta atribuible, pero la economía no sostiene success fee ni escala rentable."
             ),
             "guardrails": [
                 "No escalar hasta corregir precio, margen o fulfillment.",
@@ -454,8 +434,7 @@ def _operator_recommendation(
         BOTTLENECK_NO_REPLIES: {
             "recommendation": "iterate",
             "rationale": (
-                "No hay evidencia para aumentar gasto; primero hay que generar "
-                "respuesta."
+                "No hay evidencia para aumentar gasto; primero hay que generar respuesta."
             ),
             "guardrails": [
                 "No aumentar presupuesto hasta recuperar tasa de respuesta.",
@@ -464,9 +443,7 @@ def _operator_recommendation(
         },
         BOTTLENECK_LOW_QUALIFIED: {
             "recommendation": "iterate",
-            "rationale": (
-                "La respuesta existe, pero la calidad no sostiene ventas."
-            ),
+            "rationale": ("La respuesta existe, pero la calidad no sostiene ventas."),
             "guardrails": [
                 "No optimizar por volumen bruto de respuestas.",
                 "Medir calificados sobre respuestas por segmento.",
@@ -485,10 +462,7 @@ def _operator_recommendation(
         },
         BOTTLENECK_NO_WINS: {
             "recommendation": "iterate",
-            "rationale": (
-                "El cuello de botella está en cierre o economía, no en "
-                "adquisición."
-            ),
+            "rationale": ("El cuello de botella está en cierre o economía, no en adquisición."),
             "guardrails": [
                 "No escalar canales hasta cerrar al menos una venta atribuible.",
                 "Validar margen antes de prometer descuentos o tiempos de entrega.",

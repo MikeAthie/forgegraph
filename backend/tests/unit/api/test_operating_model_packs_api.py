@@ -227,8 +227,7 @@ def test_install_pack_creates_company_scoped_generic_records_idempotently(
         for profile in installed_judges.values()
     )
     assert all(
-        len(profile.rubric_json.get("criteria", [])) == 5
-        for profile in installed_judges.values()
+        len(profile.rubric_json.get("criteria", [])) == 5 for profile in installed_judges.values()
     )
     assert PolicyPack.objects.filter(
         company=company, policy_pack_id="dmp.side_effect_governance"

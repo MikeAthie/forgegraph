@@ -106,7 +106,9 @@ function getHttpContentTypeHeader(headers: HttpConfig["headers"]): string {
 function shouldValidateHttpJsonBody(httpConfig: HttpConfig): boolean {
   const effectiveMethod = httpConfig.method ?? "GET";
   const contentTypeHeader = getHttpContentTypeHeader(httpConfig.headers);
-  return effectiveMethod !== "GET" && (contentTypeHeader.includes("application/json") || contentTypeHeader.trim() === "");
+  return (
+    effectiveMethod !== "GET" && (contentTypeHeader.includes("application/json") || contentTypeHeader.trim() === "")
+  );
 }
 
 function validateHttpConfig(httpConfig: HttpConfig): Record<string, string> {

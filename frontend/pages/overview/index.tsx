@@ -2,11 +2,28 @@ import { useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowRight, Activity, BellRing, BrainCircuit, Database, HandCoins, Siren, TimerReset, Waypoints, } from "lucide-react";
+  ArrowRight,
+  Activity,
+  BellRing,
+  BrainCircuit,
+  Database,
+  HandCoins,
+  Siren,
+  TimerReset,
+  Waypoints,
+} from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  EmptyBlock, InspectorPanel, KeyValueGrid, MetricCard, Panel, StatusBadge, TimelineList, TrendBar } from "@/components/os/operations-ui";
+  EmptyBlock,
+  InspectorPanel,
+  KeyValueGrid,
+  MetricCard,
+  Panel,
+  StatusBadge,
+  TimelineList,
+  TrendBar,
+} from "@/components/os/operations-ui";
 import { formatCompactNumber, formatCurrency, formatDateTime, formatDuration } from "@/components/os/operations-format";
 import { overviewIcons } from "@/components/os/overview-icons";
 import ProtectedRoute from "@/components/ProtectedRoute";

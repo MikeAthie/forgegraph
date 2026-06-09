@@ -222,7 +222,10 @@ def test_formatting_service_persists_generic_derived_artifacts_for_distinct_busi
         "zip_package",
     }
     assert all(artifact.asset_version_id for artifact in result.artifacts)
-    assert all(artifact.renderer_name in {"markdown_report", "manifest", "zip_package"} for artifact in result.artifacts)
+    assert all(
+        artifact.renderer_name in {"markdown_report", "manifest", "zip_package"}
+        for artifact in result.artifacts
+    )
     assert result.quality_result.status == "passed"
 
     for artifact in result.artifacts:
@@ -291,7 +294,12 @@ def test_formatting_service_is_idempotent_for_same_request_and_source_hashes(use
     assert [artifact.asset_version_id for artifact in second.artifacts] == [
         artifact.asset_version_id for artifact in first.artifacts
     ]
-    assert Asset.objects.filter(company=company, metadata_json__source="deliverable_formatting").count() == 3
+    assert (
+        Asset.objects.filter(
+            company=company, metadata_json__source="deliverable_formatting"
+        ).count()
+        == 3
+    )
 
 
 def test_formatting_service_persists_pdf_and_packages_it_when_requested(user: User) -> None:
@@ -368,11 +376,14 @@ def test_formatting_service_persists_pdf_and_packages_it_when_requested(user: Us
     package = result.artifact_by_format("zip_package")
     with zipfile.ZipFile(BytesIO(package.content_bytes)) as archive:
         names = set(archive.namelist())
-        assert names == {result.artifact_by_format(format_id).filename for format_id in (
-            "markdown_report",
-            "pdf_report",
-            "manifest",
-        )}
+        assert names == {
+            result.artifact_by_format(format_id).filename
+            for format_id in (
+                "markdown_report",
+                "pdf_report",
+                "manifest",
+            )
+        }
         pdf_bytes = archive.read(pdf.filename)
         assert pdf_bytes.startswith(b"%PDF-")
         assert pdf_bytes.rstrip().endswith(b"%%EOF")

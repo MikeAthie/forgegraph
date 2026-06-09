@@ -50,10 +50,7 @@ def test_legacy_glassware_package_names_offer_cta_segment_and_readiness_gates():
         package["campaign_brief"]["offer"]
         == "paquetes de cristalería Legacy para reposición y apertura"
     )
-    assert (
-        package["campaign_brief"]["primary_cta"]
-        == "solicitar cotización por WhatsApp"
-    )
+    assert package["campaign_brief"]["primary_cta"] == "solicitar cotización por WhatsApp"
     assert package["campaign_brief"]["commission_model"] == "20-50% de utilidad"
     assert package["offer_sheet"]["para_quien"] == LEGACY_CONTEXT["target_segment"]
     assert package["offer_sheet"]["cta"] == LEGACY_CONTEXT["primary_cta"]
@@ -101,9 +98,7 @@ def test_scripts_use_safe_placeholders_without_fake_phone_numbers():
 def test_funnel_map_uses_standard_atlas_stages():
     funnel = build_funnel_map(LEGACY_CONTEXT)
 
-    assert [
-        stage["name"] for stage in funnel["stages"]
-    ] == [
+    assert [stage["name"] for stage in funnel["stages"]] == [
         "descubrimiento",
         "WhatsApp/landing",
         "calificación",
@@ -167,9 +162,7 @@ def test_context_accepts_split_city_neighborhood_and_empty_response_override():
     package = build_campaign_package(context, readiness_scores=READY_SCORES)
 
     assert package["campaign_brief"]["city_neighborhood"] == "Polanco, CDMX"
-    assert package["offer_sheet"]["objeciones"] == [
-        "¿Me puedes mandar precio primero?"
-    ]
+    assert package["offer_sheet"]["objeciones"] == ["¿Me puedes mandar precio primero?"]
     assert package["offer_sheet"]["respuestas"]
     assert "Polanco, CDMX" in package["markdown"]
 
@@ -182,9 +175,7 @@ def test_markdown_renderer_accepts_package_without_scale_kill_payload():
         if key not in {"markdown", "scale_kill_criteria"}
     }
     partial_package["offer_sheet"] = {
-        key: value
-        for key, value in package["offer_sheet"].items()
-        if key != "cta"
+        key: value for key, value in package["offer_sheet"].items() if key != "cta"
     }
 
     markdown = render_campaign_package_markdown(partial_package)

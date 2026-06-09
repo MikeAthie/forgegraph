@@ -186,6 +186,7 @@ class ServiceDeliverableActionSerializer(serializers.Serializer[Any]):
         ]
     )
 
+
 class DepartmentPipelineCreateSerializer(serializers.Serializer[Any]):
     template_id = serializers.CharField(
         max_length=160,

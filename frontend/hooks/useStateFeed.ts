@@ -142,7 +142,6 @@ export function useStateFeed(options: StateFeedOptions) {
 
         const ticket = await authApi.issueWsTicket();
         if (!closed) {
-
           const params = new URLSearchParams({
             ticket: ticket.ticket,
           });

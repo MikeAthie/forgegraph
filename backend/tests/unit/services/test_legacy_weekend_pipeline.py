@@ -99,7 +99,9 @@ def _fixture_root(tmp_path: Path) -> Path:
         "legacy_client_approval_packet.md",
         "legacy_campaign_launch_package.md",
     ]:
-        (root / filename).write_text(f"# {filename}\nLegacy weekend fixture content.\n", encoding="utf-8")
+        (root / filename).write_text(
+            f"# {filename}\nLegacy weekend fixture content.\n", encoding="utf-8"
+        )
     for filename in ["legacy_ig_01_launch.png", "legacy_ig_02_monroe.png"]:
         (media / filename).write_bytes(b"fixture-png-bytes")
     (media / "legacy_reel_01_optical_noir.mp4").write_bytes(b"fixture-mp4-bytes")
@@ -384,12 +386,8 @@ def test_legacy_weekend_pipeline_routes_social_tasks_through_channel_execution(u
 
     engagement = ServiceEngagement.objects.get(id=result["service_engagement"]["id"])
     tasks = list(TaskRoutingRecord.objects.filter(service_engagement=engagement))
-    stage_tasks = [
-        task for task in tasks if (task.metadata_json or {}).get("company_run_task")
-    ]
-    social_tasks = [
-        task for task in tasks if (task.metadata_json or {}).get("department_pipeline")
-    ]
+    stage_tasks = [task for task in tasks if (task.metadata_json or {}).get("company_run_task")]
+    social_tasks = [task for task in tasks if (task.metadata_json or {}).get("department_pipeline")]
     assert len(stage_tasks) == 7
     assert len(social_tasks) == 2
     assert result["routing_task_count"] == 9
@@ -412,6 +410,12 @@ def test_legacy_weekend_pipeline_is_idempotent(user, tmp_path):
 
     assert first["service_engagement"]["id"] == second["service_engagement"]["id"]
     engagement = ServiceEngagement.objects.get(id=first["service_engagement"]["id"])
-    assert ServiceDeliverable.objects.filter(engagement=engagement).count() == first["deliverable_count"]
+    assert (
+        ServiceDeliverable.objects.filter(engagement=engagement).count()
+        == first["deliverable_count"]
+    )
     company = cast(Graph, engagement.company)
-    assert TaskRoutingRecord.objects.filter(company=company, service_engagement=engagement).count() == 9
+    assert (
+        TaskRoutingRecord.objects.filter(company=company, service_engagement=engagement).count()
+        == 9
+    )

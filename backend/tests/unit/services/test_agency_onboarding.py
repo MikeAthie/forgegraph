@@ -38,9 +38,7 @@ def test_virtual_onboarding_checklist_marks_missing_connectors_blocked(user) -> 
     assert by_slug["connector_setup"]["status"] == "blocked"
     assert by_slug["client_profile"]["status"] == "not_started"
     assert checklist["summary"]["blocked"] >= 1
-    assert {
-        item["owner_department_slug"] for item in checklist["items"]
-    } <= ATLAS_DEPARTMENT_SLUGS
+    assert {item["owner_department_slug"] for item in checklist["items"]} <= ATLAS_DEPARTMENT_SLUGS
 
 
 def test_virtual_onboarding_checklist_reflects_active_service_engagement(user) -> None:

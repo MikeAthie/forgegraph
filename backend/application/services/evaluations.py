@@ -886,7 +886,9 @@ def _submitted_atlas_rubric_criterion(value: Any, *, index: int) -> dict[str, An
             f"{field}.improvement",
             "Criterion improvement is required.",
         )
-    evidence_refs = _submitted_evidence_refs(raw.get("evidence_refs"), field=f"{field}.evidence_refs")
+    evidence_refs = _submitted_evidence_refs(
+        raw.get("evidence_refs"), field=f"{field}.evidence_refs"
+    )
     if not evidence_refs:
         _raise_submitted_scorecard_error(
             f"{field}.evidence_refs",
@@ -1010,11 +1012,20 @@ def _submitted_atlas_rubric_decision(
     criteria: list[dict[str, Any]],
 ) -> str:
     min_score = _atlas_rubric_min_score({"criteria": criteria})
-    if hard_fail or raw_decision == "blocked" or overall_average < 3.0 or _atlas_rubric_has_critical_score_one(criteria):
+    if (
+        hard_fail
+        or raw_decision == "blocked"
+        or overall_average < 3.0
+        or _atlas_rubric_has_critical_score_one(criteria)
+    ):
         return "blocked"
     if raw_decision == "sellable" and overall_average >= 4.2 and min_score >= 3:
         return "sellable"
-    if raw_decision in {"sellable", "sellable_with_minor_revisions"} and overall_average >= 3.5 and min_score >= 3:
+    if (
+        raw_decision in {"sellable", "sellable_with_minor_revisions"}
+        and overall_average >= 3.5
+        and min_score >= 3
+    ):
         return "sellable_with_minor_revisions"
     return "needs_revision"
 

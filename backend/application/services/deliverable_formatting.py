@@ -82,7 +82,9 @@ def format_service_deliverables(request: FormatDeliverablesRequest) -> Formatted
         company=request.company,
     )
     requested_formats = _requested_formats(request, profile)
-    sources = tuple(_source_from_deliverable(deliverable) for deliverable in request.source_deliverables)
+    sources = tuple(
+        _source_from_deliverable(deliverable) for deliverable in request.source_deliverables
+    )
     context = FormatRenderContext(
         request_id=request.request_id,
         profile=profile,
@@ -108,22 +110,40 @@ def format_service_deliverables(request: FormatDeliverablesRequest) -> Formatted
 
     report = _with_quality(report, quality_result)
     if "markdown_report" in requested_formats:
-        report = _persist_artifact(request=request, profile=profile, artifact=report) if persisted else report
+        report = (
+            _persist_artifact(request=request, profile=profile, artifact=report)
+            if persisted
+            else report
+        )
         rendered.append(report)
 
     if "pdf_report" in requested_formats:
         pdf = render_pdf_report(context, markdown_report=report, quality_result=quality_result)
-        pdf = _persist_artifact(request=request, profile=profile, artifact=pdf) if persisted else pdf
+        pdf = (
+            _persist_artifact(request=request, profile=profile, artifact=pdf) if persisted else pdf
+        )
         rendered.append(pdf)
 
     if "manifest" in requested_formats:
-        manifest = render_manifest_json(context, outputs=tuple(rendered), quality_result=quality_result)
-        manifest = _persist_artifact(request=request, profile=profile, artifact=manifest) if persisted else manifest
+        manifest = render_manifest_json(
+            context, outputs=tuple(rendered), quality_result=quality_result
+        )
+        manifest = (
+            _persist_artifact(request=request, profile=profile, artifact=manifest)
+            if persisted
+            else manifest
+        )
         rendered.append(manifest)
 
     if "zip_package" in requested_formats:
-        package = render_zip_package(context, outputs=tuple(rendered), quality_result=quality_result)
-        package = _persist_artifact(request=request, profile=profile, artifact=package) if persisted else package
+        package = render_zip_package(
+            context, outputs=tuple(rendered), quality_result=quality_result
+        )
+        package = (
+            _persist_artifact(request=request, profile=profile, artifact=package)
+            if persisted
+            else package
+        )
         rendered.append(package)
 
     return FormattedDeliverablesResult(
@@ -189,7 +209,9 @@ def _asset_version_for_deliverable(
         version = AssetVersion.objects.filter(id=version_id, asset=deliverable.artifact).first()
         if version is not None:
             return version
-    return AssetVersion.objects.filter(asset=deliverable.artifact).order_by("-version_number").first()
+    return (
+        AssetVersion.objects.filter(asset=deliverable.artifact).order_by("-version_number").first()
+    )
 
 
 def _inline_content(version: AssetVersion | None, *, fallback: str) -> str:
@@ -354,7 +376,9 @@ def _version_provenance(artifact: RenderedArtifact) -> dict[str, Any]:
     if artifact.text:
         provenance["inline_content"] = artifact.text
     else:
-        provenance["inline_content_base64"] = base64.b64encode(artifact.content_bytes).decode("ascii")
+        provenance["inline_content_base64"] = base64.b64encode(artifact.content_bytes).decode(
+            "ascii"
+        )
     return provenance
 
 

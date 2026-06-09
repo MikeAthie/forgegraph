@@ -102,7 +102,9 @@ def build_codex_deliverable_for_stage(
     if (stage_state.state_json or {}).get("service_engagement_id") != str(engagement.id):
         raise ValueError("Codex deliverable stage must belong to the target engagement.")
 
-    result = (runtime or run_codex_session_prompt)(prompt=_stage_prompt(engagement, stage_state, prompt))
+    result = (runtime or run_codex_session_prompt)(
+        prompt=_stage_prompt(engagement, stage_state, prompt)
+    )
     if result.status != "succeeded" or not result.output_text.strip():
         raise CodexSessionRuntimeError("Codex session did not return usable deliverable output.")
 
@@ -246,7 +248,9 @@ def _subprocess_runner(
     )
 
 
-def _stage_prompt(engagement: ServiceEngagement, stage_state: ProgramStageState, prompt: str) -> str:
+def _stage_prompt(
+    engagement: ServiceEngagement, stage_state: ProgramStageState, prompt: str
+) -> str:
     state = stage_state.state_json or {}
     return "\n".join(
         [

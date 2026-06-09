@@ -28,10 +28,14 @@ pytestmark = pytest.mark.django_db
 
 def _company_version() -> tuple[Organization, User, Graph, GraphVersion]:
     org = Organization.objects.create(name="Gateway Platform Org")
-    user = User.objects.create_user(email="gateway-platform@example.com", password="testpassword123")
+    user = User.objects.create_user(
+        email="gateway-platform@example.com", password="testpassword123"
+    )
     user.default_organization = org
     user.save(update_fields=["default_organization"])
-    company = cast(Graph, Graph.objects.create(owner=user, organization=org, name="Gateway Platform Co"))
+    company = cast(
+        Graph, Graph.objects.create(owner=user, organization=org, name="Gateway Platform Co")
+    )
     version = GraphVersion.objects.create(
         graph=company,
         version=1,

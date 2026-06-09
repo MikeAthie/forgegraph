@@ -351,7 +351,7 @@ def create_company_signal(
     order = _resolve_order(company=company, order_id=order_id)
     fulfillment = _resolve_fulfillment(company=company, fulfillment_id=fulfillment_id)
     clean_source = _clean_key(source or "manual", limit=64)
-    clean_external_key = _safe_text(external_key, limit=255)
+    clean_external_key = _safe_identifier(external_key, limit=255)
     defaults = {
         "organization": organization,
         "created_by": actor,
@@ -1546,14 +1546,30 @@ def _sanitized_metadata(value: dict[str, Any]) -> dict[str, Any]:
         key_text = _safe_text(key, limit=80)
         if key_text in blocked:
             continue
+        preserve_identifier = key_text.endswith("_id") or key_text.endswith("_ids")
         if isinstance(item, dict):
             result[key_text] = _sanitized_metadata(item)
         elif isinstance(item, list):
-            result[key_text] = [_safe_text(entry, limit=500) for entry in item[:20]]
+            result[key_text] = [
+                _safe_identifier(entry, limit=500)
+                if preserve_identifier
+                else _safe_text(entry, limit=500)
+                for entry in item[:20]
+            ]
         elif isinstance(item, (str, int, float, bool)) or item is None:
-            result[key_text] = _safe_text(item, limit=500) if isinstance(item, str) else item
+            result[key_text] = (
+                _safe_identifier(item, limit=500)
+                if isinstance(item, str) and preserve_identifier
+                else _safe_text(item, limit=500)
+                if isinstance(item, str)
+                else item
+            )
         else:
-            result[key_text] = _safe_text(item, limit=500)
+            result[key_text] = (
+                _safe_identifier(item, limit=500)
+                if preserve_identifier
+                else _safe_text(item, limit=500)
+            )
     return result
 
 
@@ -1561,6 +1577,12 @@ def _safe_text(value: Any, *, limit: int) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     text = re.sub(r"[\w.\-+]+@[\w.\-]+\.\w+", "[redacted-email]", text)
     text = re.sub(r"\b\d[\d\s\-]{5,}\d\b", "[redacted-number]", text)
+    return text[:limit]
+
+
+def _safe_identifier(value: Any, *, limit: int) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    text = re.sub(r"[\w.\-+]+@[\w.\-]+\.\w+", "[redacted-email]", text)
     return text[:limit]
 
 

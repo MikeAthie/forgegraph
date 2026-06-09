@@ -102,9 +102,12 @@ def evaluate_render_quality(
         "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
         "checks": [check.as_dict() for check in checks],
     }
-    gate_result_id = "qgr_" + hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()[:24]
+    gate_result_id = (
+        "qgr_"
+        + hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:24]
+    )
     gate_set = profile.quality_gates[0] if profile.quality_gates else "format_quality@1"
     return QualityGateResult(
         gate_set=gate_set,
@@ -145,7 +148,9 @@ def _required_sections_check(
     sections: tuple[RenderedSection, ...],
 ) -> QualityCheck:
     present = {section.id for section in sections if section.content.strip()}
-    missing = tuple(section.id for section in profile.required_sections if section.id not in present)
+    missing = tuple(
+        section.id for section in profile.required_sections if section.id not in present
+    )
     if missing:
         return _failed("required_sections", "Required sections are missing.", missing)
     return _passed("required_sections", "All required sections are present.")
@@ -245,7 +250,8 @@ def _approval_language_check(
 def _has_unverified_source(source_metadata: tuple[dict[str, Any], ...]) -> bool:
     return any(
         metadata.get("requires_connector_caveat") is True
-        or str(metadata.get("connector_status") or "").lower() in {"unverified", "blocked", "missing"}
+        or str(metadata.get("connector_status") or "").lower()
+        in {"unverified", "blocked", "missing"}
         for metadata in source_metadata
     )
 
