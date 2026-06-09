@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
 from django.core.serializers.json import DjangoJSONEncoder
+from django.utils import timezone
 
 from application.services.agency_connector_readiness import build_connector_readiness
 from application.services.agency_deliverable_catalog import MVP_DELIVERABLE_TYPES
 from application.services.agency_deliverables import ensure_atlas_service_engagement
 from application.services.company_archive import ArchiveService
+from application.services.company_ops import create_company_signal
 from application.services.domain_event_outbox import sanitize_outbox_payload
 from application.services.service_engagements import service_deliverable_payload
 from infrastructure.orm.models import (
@@ -24,6 +27,9 @@ from infrastructure.orm.models import (
 
 READINESS_SCHEMA_VERSION = "atlas_campaign_launch_readiness_v1"
 READINESS_SOURCE = "atlas_launch_readiness"
+LAUNCH_ATTEMPT_SOURCE = "atlas_launch_attempt"
+LAUNCH_CHECKPOINT_SOURCE = "atlas_launch_checkpoint"
+LAUNCH_ATTEMPT_PROJECTION_PREFIX = "atlas_launch_attempt"
 RECEIPT_DELIVERABLE_TYPE = "campaign_launch_receipt"
 RECEIPT_TITLE = "Campaign Launch Readiness Receipt"
 PASSING_STATUSES = {"accepted", "approved", "complete", "completed", "pass", "passed", "ready"}
@@ -100,6 +106,7 @@ class CampaignLaunchReadiness:
                 "side_effect_readiness": side_effect_readiness,
             }
         )
+        receipt: ServiceDeliverable | None = None
         if create_receipt:
             receipt = _upsert_launch_receipt(
                 whiteboard=whiteboard,
@@ -107,6 +114,15 @@ class CampaignLaunchReadiness:
                 readiness=payload,
             )
             payload["receipt_deliverable"] = service_deliverable_payload(receipt)
+        launch_attempt = _record_launch_attempt(
+            whiteboard=whiteboard,
+            user=user,
+            readiness=payload,
+            live_mode=live_mode,
+            idempotency_key=idempotency_key,
+            receipt=receipt,
+        )
+        payload["launch_attempt"] = launch_attempt
         return sanitize_outbox_payload(payload)
 
 
@@ -439,6 +455,179 @@ def _check(
         "passed": passed,
         "severity": severity,
     }
+
+
+def _record_launch_attempt(
+    *,
+    whiteboard: WorkWhiteboard,
+    user: User | None,
+    readiness: dict[str, Any],
+    live_mode: bool,
+    idempotency_key: str,
+    receipt: ServiceDeliverable | None,
+) -> dict[str, Any]:
+    """Persist a backend-owned Atlas launch attempt and its latest checkpoint."""
+
+    attempt_token = _launch_attempt_token(
+        whiteboard=whiteboard,
+        idempotency_key=idempotency_key,
+    )
+    projection_type = f"{LAUNCH_ATTEMPT_PROJECTION_PREFIX}:{whiteboard.id}:{attempt_token}"
+    now = timezone.now()
+    blocker_codes = [str(item.get("code") or "") for item in list(readiness.get("blockers") or [])]
+    warning_codes = [str(item.get("code") or "") for item in list(readiness.get("warnings") or [])]
+    previous_projection = StateProjection.objects.filter(
+        organization=whiteboard.organization,
+        company=whiteboard.company,
+        program=None,
+        projection_type=projection_type,
+    ).first()
+    previous_state = (
+        previous_projection.json_state
+        if previous_projection is not None and isinstance(previous_projection.json_state, dict)
+        else {}
+    )
+    previous_checkpoints = list(previous_state.get("checkpoints") or [])
+    checkpoint_sequence = len(previous_checkpoints) + 1
+    checkpoint = {
+        "sequence": checkpoint_sequence,
+        "status": str(readiness.get("status") or "unknown"),
+        "requested_mode": "live" if live_mode else "dry_run",
+        "recorded_at": now.isoformat(),
+        "readiness_schema_version": str(
+            readiness.get("schema_version") or READINESS_SCHEMA_VERSION
+        ),
+        "blocker_codes": blocker_codes,
+        "warning_codes": warning_codes,
+        "receipt_deliverable_id": str(receipt.id) if receipt is not None else "",
+    }
+    checkpoint_external_key = (
+        f"atlas-launch:{whiteboard.id}:{attempt_token}:checkpoint:{checkpoint_sequence}"
+    )
+    if previous_projection is None:
+        projection = StateProjection.objects.create(
+            organization=whiteboard.organization,
+            company=whiteboard.company,
+            program=None,
+            projection_type=projection_type,
+            display_label="Atlas Launch Attempt",
+            source_refs_json=_launch_attempt_source_refs(
+                whiteboard=whiteboard,
+                readiness=readiness,
+                receipt=receipt,
+            ),
+            json_state={},
+            markdown_summary=_launch_attempt_summary(readiness),
+            generated_by="system",
+        )
+    else:
+        projection = previous_projection
+    all_checkpoints = [*previous_checkpoints, checkpoint]
+    attempt_state = sanitize_outbox_payload(
+        {
+            "attempt_id": str(projection.id),
+            "schema_version": "atlas_launch_attempt_v1",
+            "source": LAUNCH_ATTEMPT_SOURCE,
+            "whiteboard_id": str(whiteboard.id),
+            "company_id": str(whiteboard.company_id),
+            "requested_mode": "live" if live_mode else "dry_run",
+            "status": str(readiness.get("status") or "unknown"),
+            "passed": bool(readiness.get("passed")),
+            "live_execution_enabled": False,
+            "idempotency_key_present": bool(
+                str(idempotency_key or whiteboard.idempotency_key or "").strip()
+            ),
+            "receipt_deliverable_id": str(receipt.id) if receipt is not None else "",
+            "readiness_status": str(readiness.get("status") or ""),
+            "blocker_codes": blocker_codes,
+            "warning_codes": warning_codes,
+            "checkpoint_count": len(all_checkpoints),
+            "checkpoints": all_checkpoints,
+            "latest_checkpoint": checkpoint,
+            "readiness": {
+                "schema_version": readiness.get("schema_version"),
+                "status": readiness.get("status"),
+                "passed": readiness.get("passed"),
+                "required_checks": readiness.get("required_checks"),
+                "blockers": readiness.get("blockers"),
+                "warnings": readiness.get("warnings"),
+            },
+        }
+    )
+    projection.json_state = attempt_state
+    projection.source_refs_json = _launch_attempt_source_refs(
+        whiteboard=whiteboard,
+        readiness=readiness,
+        receipt=receipt,
+    )
+    projection.markdown_summary = _launch_attempt_summary(readiness)
+    projection.save(
+        update_fields=["json_state", "source_refs_json", "markdown_summary", "updated_at"]
+    )
+    signal = create_company_signal(
+        company=whiteboard.company,
+        actor=user,
+        signal_type="manual",
+        signal_kind="milestone" if attempt_state["status"] == "ready" else "risk",
+        domain_context="atlas_launch",
+        source=LAUNCH_CHECKPOINT_SOURCE,
+        external_key=checkpoint_external_key,
+        title="Atlas launch checkpoint recorded",
+        summary=_launch_attempt_summary(readiness),
+        metadata={
+            "attempt_id": str(projection.id),
+            "whiteboard_id": str(whiteboard.id),
+            "checkpoint_sequence": checkpoint_sequence,
+            "status": attempt_state["status"],
+            "requested_mode": attempt_state["requested_mode"],
+            "receipt_deliverable_id": attempt_state["receipt_deliverable_id"],
+            "blocker_codes": blocker_codes,
+            "warning_codes": warning_codes,
+            "live_execution_enabled": False,
+        },
+    )
+    return {
+        "attempt_id": str(projection.id),
+        "projection_id": str(projection.id),
+        "checkpoint_signal_id": str(signal.id),
+        "checkpoint_count": attempt_state["checkpoint_count"],
+        "latest_checkpoint_sequence": checkpoint_sequence,
+        "status": attempt_state["status"],
+        "requested_mode": attempt_state["requested_mode"],
+        "receipt_deliverable_id": attempt_state["receipt_deliverable_id"],
+        "live_execution_enabled": False,
+    }
+
+
+def _launch_attempt_token(*, whiteboard: WorkWhiteboard, idempotency_key: str) -> str:
+    raw = str(idempotency_key or whiteboard.idempotency_key or "evaluation").strip()
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+    return digest
+
+
+def _launch_attempt_source_refs(
+    *,
+    whiteboard: WorkWhiteboard,
+    readiness: dict[str, Any],
+    receipt: ServiceDeliverable | None,
+) -> list[dict[str, str]]:
+    refs = [
+        {"type": "whiteboard", "id": str(whiteboard.id)},
+        {"type": "readiness", "source": str(readiness.get("source") or READINESS_SOURCE)},
+    ]
+    if receipt is not None:
+        refs.append({"type": "service_deliverable", "id": str(receipt.id)})
+    return refs
+
+
+def _launch_attempt_summary(readiness: dict[str, Any]) -> str:
+    status = str(readiness.get("status") or "unknown")
+    mode = str(readiness.get("requested_execution_mode") or "dry_run")
+    if status == "ready":
+        return f"Atlas {mode} launch checkpoint passed. Live execution remains disabled."
+    blockers = list(readiness.get("blockers") or [])
+    warnings = list(readiness.get("warnings") or [])
+    return f"Atlas {mode} launch checkpoint {status}: {len(blockers)} blocker(s), {len(warnings)} warning(s)."
 
 
 def _upsert_launch_receipt(
