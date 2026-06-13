@@ -9,11 +9,16 @@ from zipfile import ZipFile
 
 import pytest
 
+from application.services.company_run_task_routing import (
+    TASK_SNAPSHOT_METADATA_KEY,
+    refresh_whiteboard_task_snapshot,
+)
 from application.services.legacy_weekend_pipeline import run_legacy_weekend_pipeline
 from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     Asset,
     AssetVersion,
+    CompanyProgram,
     DepartmentRegistry,
     Graph,
     Organization,
@@ -23,6 +28,7 @@ from infrastructure.orm.models import (
     ServiceEngagement,
     TaskRoutingRecord,
     User,
+    WorkWhiteboard,
 )
 from scripts.prepare_legacy_handoff_email import (
     LEGACY_HANDOFF_PROFILE_REF,
@@ -304,12 +310,16 @@ def test_legacy_handoff_zip_contains_formatter_report_manifest_and_quality_data(
     assert manifest_payload["profile"]["profile_sha256"]
     assert manifest_payload["deferred_formats"] == ["email_handoff"]
     assert manifest_payload["quality"]["status"] == "passed"
-    assert [source["service_deliverable_id"] for source in manifest_payload["sources"]] == [
-        str(source.id) for source in sources
-    ]
-    assert [source["content_hash"] for source in manifest_payload["sources"]] == [
-        source.artifact.versions.get().content_hash for source in sources
-    ]
+    manifest_sources_by_id = {
+        source["service_deliverable_id"]: source for source in manifest_payload["sources"]
+    }
+    expected_sources_by_id = {
+        str(source.id): source.artifact.versions.get().content_hash for source in sources
+    }
+    assert set(manifest_sources_by_id) == set(expected_sources_by_id)
+    assert {
+        source_id: source["content_hash"] for source_id, source in manifest_sources_by_id.items()
+    } == expected_sources_by_id
     assert manifest_payload["outputs"][0]["format"] == "markdown_report"
     assert manifest_payload["outputs"][0]["asset_version_id"] == result["markdown_asset_version_id"]
     assert any(
@@ -401,7 +411,10 @@ def test_legacy_weekend_pipeline_routes_social_tasks_through_channel_execution(u
         assert lineage["created_via_department_pipeline"] is True
 
 
-def test_legacy_weekend_pipeline_is_idempotent(user, tmp_path):
+def test_legacy_weekend_pipeline_bootstraps_whiteboard_cards_from_product_entrypoint(
+    user,
+    tmp_path,
+):
     _departments(user)
     root = _fixture_root(tmp_path)
 
@@ -410,12 +423,71 @@ def test_legacy_weekend_pipeline_is_idempotent(user, tmp_path):
 
     assert first["service_engagement"]["id"] == second["service_engagement"]["id"]
     engagement = ServiceEngagement.objects.get(id=first["service_engagement"]["id"])
+    company = cast(Graph, engagement.company)
+    program = CompanyProgram.objects.get(
+        company=company,
+        metadata_json__service_engagement_id=str(engagement.id),
+    )
+    whiteboard = WorkWhiteboard.objects.get(service_engagement=engagement)
+
     assert (
         ServiceDeliverable.objects.filter(engagement=engagement).count()
         == first["deliverable_count"]
     )
-    company = cast(Graph, engagement.company)
+    stages = list(ProgramStageState.objects.filter(program=program).order_by("sequence"))
+    assert {stage.stage_id for stage in stages} == set(_STAGE_SLUGS)
+    assert len(stages) == 7
+
+    stage_cards = list(
+        TaskRoutingRecord.objects.filter(
+            company=company,
+            service_engagement=engagement,
+            metadata_json__company_run_task__program_id=str(program.id),
+        ).order_by("metadata_json__company_run_task__sequence")
+    )
+    social_cards = list(
+        TaskRoutingRecord.objects.filter(
+            company=company,
+            service_engagement=engagement,
+            metadata_json__department_pipeline__stage_id="channel_execution",
+        )
+    )
+    assert len(stage_cards) == 7
+    assert len(social_cards) == 2
     assert (
-        TaskRoutingRecord.objects.filter(company=company, service_engagement=engagement).count()
+        TaskRoutingRecord.objects.filter(
+            company=company,
+            service_engagement=engagement,
+        ).count()
         == 9
     )
+    assert {card.metadata_json["company_run_task"]["stage_id"] for card in stage_cards} == set(
+        _STAGE_SLUGS
+    )
+    assert {card.metadata_json["whiteboard_id"] for card in stage_cards} == {str(whiteboard.id)}
+    assert all(card.metadata_json["board_card"] is True for card in stage_cards)
+
+    snapshot = whiteboard.metadata_json[TASK_SNAPSHOT_METADATA_KEY]
+    assert snapshot["snapshot_source"] == "backend_db"
+    assert snapshot["program_id"] == str(program.id)
+    assert snapshot["whiteboard_id"] == str(whiteboard.id)
+    assert {task["stage_id"] for task in snapshot["tasks"]} == set(_STAGE_SLUGS)
+    assert len(snapshot["tasks"]) == 7
+    assert {task["status"] for task in snapshot["tasks"]} == {"completed"}
+    assert {task["routing_record_id"] for task in snapshot["tasks"]} == {
+        str(card.id) for card in stage_cards
+    }
+
+    metadata_without_snapshot = dict(whiteboard.metadata_json)
+    metadata_without_snapshot.pop(TASK_SNAPSHOT_METADATA_KEY)
+    WorkWhiteboard.objects.filter(id=whiteboard.id).update(metadata_json=metadata_without_snapshot)
+    rebuilt_whiteboard = refresh_whiteboard_task_snapshot(
+        WorkWhiteboard.objects.get(id=whiteboard.id),
+        program,
+    )
+    rebuilt_snapshot = rebuilt_whiteboard.metadata_json[TASK_SNAPSHOT_METADATA_KEY]
+    assert rebuilt_snapshot["snapshot_source"] == "backend_db"
+    assert {task["stage_id"] for task in rebuilt_snapshot["tasks"]} == set(_STAGE_SLUGS)
+    assert {task["routing_record_id"] for task in rebuilt_snapshot["tasks"]} == {
+        str(card.id) for card in stage_cards
+    }
