@@ -54,6 +54,8 @@ export FORGEGRAPH_RUNTIME_INTENT_STREAM="${FORGEGRAPH_RUNTIME_INTENT_STREAM:-for
 export FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM="${FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM:-forgegraph:runtime:intents:ci-smoke:dead}"
 export FORGEGRAPH_RUNTIME_INTENT_CONSUMER_GROUP="${FORGEGRAPH_RUNTIME_INTENT_CONSUMER_GROUP:-backend-runtime-writers-ci-smoke}"
 export ENGINE_RUNTIME_INTENT_STREAM="${ENGINE_RUNTIME_INTENT_STREAM:-${FORGEGRAPH_RUNTIME_INTENT_STREAM}}"
+export OPERATING_MODEL_PACKS_DIR="${OPERATING_MODEL_PACKS_DIR:-/operating_model_packs}"
+export REQUIRED_OPERATING_MODEL_PACKS="${REQUIRED_OPERATING_MODEL_PACKS:-digital_marketing_pro}"
 
 containers=(
   forgegraph-ci-backend
@@ -155,6 +157,7 @@ docker build \
 log_section "Run migration contract"
 docker run --rm --network host \
   -v "${ROOT}/docs:/docs:ro" \
+  -v "${ROOT}/operating_model_packs:${OPERATING_MODEL_PACKS_DIR}:ro" \
   -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
   -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
   -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
@@ -164,6 +167,7 @@ docker run --rm --network host \
   -e FRONTEND_URL="http://127.0.0.1:${DOCKER_SMOKE_FRONTEND_PORT}" \
   -e FORGEGRAPH_RUNTIME_INTENT_STREAM -e FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM \
   -e FORGEGRAPH_RUNTIME_INTENT_CONSUMER_GROUP \
+  -e OPERATING_MODEL_PACKS_DIR -e REQUIRED_OPERATING_MODEL_PACKS \
   -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
   -e READINESS_REQUIRE_RUNTIME_TRANSPORT \
   "${BACKEND_IMAGE}" bash -c "python manage.py validate_runtime_env --strict && python manage.py migrate --noinput && python manage.py collectstatic --noinput"
@@ -171,6 +175,7 @@ docker run --rm --network host \
 log_section "Start Dockerized stack"
 docker run -d --name forgegraph-ci-backend --network host \
   -v "${ROOT}/docs:/docs:ro" \
+  -v "${ROOT}/operating_model_packs:${OPERATING_MODEL_PACKS_DIR}:ro" \
   -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
   -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
   -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
@@ -180,6 +185,7 @@ docker run -d --name forgegraph-ci-backend --network host \
   -e FRONTEND_URL="http://127.0.0.1:${DOCKER_SMOKE_FRONTEND_PORT}" \
   -e FORGEGRAPH_RUNTIME_INTENT_STREAM -e FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM \
   -e FORGEGRAPH_RUNTIME_INTENT_CONSUMER_GROUP \
+  -e OPERATING_MODEL_PACKS_DIR -e REQUIRED_OPERATING_MODEL_PACKS \
   -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
   -e READINESS_REQUIRE_RUNTIME_TRANSPORT -e RUN_QUEUE_ENABLED \
   "${BACKEND_IMAGE}" daphne -b 0.0.0.0 -p "${DOCKER_SMOKE_BACKEND_PORT}" config.asgi:application
@@ -194,6 +200,7 @@ docker run -d --name forgegraph-ci-engine --network host \
 
 docker run -d --name forgegraph-ci-run-queue --network host \
   -v "${ROOT}/docs:/docs:ro" \
+  -v "${ROOT}/operating_model_packs:${OPERATING_MODEL_PACKS_DIR}:ro" \
   -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
   -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
   -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
@@ -203,12 +210,14 @@ docker run -d --name forgegraph-ci-run-queue --network host \
   -e FRONTEND_URL="http://127.0.0.1:${DOCKER_SMOKE_FRONTEND_PORT}" \
   -e FORGEGRAPH_RUNTIME_INTENT_STREAM -e FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM \
   -e FORGEGRAPH_RUNTIME_INTENT_CONSUMER_GROUP \
+  -e OPERATING_MODEL_PACKS_DIR -e REQUIRED_OPERATING_MODEL_PACKS \
   -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
   -e READINESS_REQUIRE_RUNTIME_TRANSPORT -e RUN_QUEUE_ENABLED \
   "${BACKEND_IMAGE}" python manage.py process_run_queue --worker-id ci-docker-run-queue
 
 docker run -d --name forgegraph-ci-runtime-intents --network host \
   -v "${ROOT}/docs:/docs:ro" \
+  -v "${ROOT}/operating_model_packs:${OPERATING_MODEL_PACKS_DIR}:ro" \
   -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
   -e REDIS_HOST -e REDIS_PORT -e SECRET_KEY -e DEBUG -e DJANGO_SETTINGS_MODULE \
   -e ALLOWED_HOSTS -e ENCRYPTION_KEY -e SECURE_SSL_REDIRECT \
@@ -218,6 +227,7 @@ docker run -d --name forgegraph-ci-runtime-intents --network host \
   -e FRONTEND_URL="http://127.0.0.1:${DOCKER_SMOKE_FRONTEND_PORT}" \
   -e FORGEGRAPH_RUNTIME_INTENT_STREAM -e FORGEGRAPH_RUNTIME_INTENT_DEAD_LETTER_STREAM \
   -e FORGEGRAPH_RUNTIME_INTENT_CONSUMER_GROUP \
+  -e OPERATING_MODEL_PACKS_DIR -e REQUIRED_OPERATING_MODEL_PACKS \
   -e FORGEGRAPH_STRICT_RUNTIME_ENV -e READINESS_REQUIRE_ENGINE \
   -e READINESS_REQUIRE_RUNTIME_TRANSPORT -e RUN_QUEUE_ENABLED \
   "${BACKEND_IMAGE}" python manage.py process_runtime_write_intents --consumer ci-docker-runtime-intents
