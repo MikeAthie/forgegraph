@@ -3,6 +3,7 @@ from django.test import override_settings
 
 from application.services.backend_watchdog import evaluate_backend_watchdog
 from application.services.metrics import record_api_request
+from infrastructure.orm.models import RunQueueEntry
 
 pytestmark = pytest.mark.django_db
 
@@ -34,3 +35,22 @@ def test_backend_watchdog_can_be_disabled():
     assert snapshot.enabled is False
     assert snapshot.healthy is True
     assert snapshot.triggers == []
+
+
+@override_settings(
+    BACKEND_WATCHDOG_ENABLED=True,
+    BACKEND_WATCHDOG_REQUEST_TIMEOUTS_PER_MINUTE=1000,
+    BACKEND_WATCHDOG_QUEUE_BACKLOG_THRESHOLD=1000,
+)
+def test_backend_watchdog_errors_mark_health_unhealthy(monkeypatch):
+    def fail_count(_self: object) -> int:
+        raise RuntimeError("postgres probe failed")
+
+    probe_type = type("Probe", (), {"count": fail_count})
+    monkeypatch.setattr(RunQueueEntry.objects, "filter", lambda **_kwargs: probe_type())
+
+    snapshot = evaluate_backend_watchdog()
+
+    assert snapshot.healthy is False
+    assert snapshot.triggers == ["watchdog_probe_error"]
+    assert "postgres probe failed" in snapshot.errors
