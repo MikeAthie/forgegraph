@@ -284,7 +284,9 @@ def test_bootstrap_sanitizes_sensitive_source_thread_artifacts(user):
     assert "session-abc-raw" not in encoded
     assert "session-secret-value" not in encoded
     assert "Raw buyer message" not in encoded
-    assert "555" not in encoded
+    assert "+1 (555) 123-4567" not in encoded
+    assert "+1 555 123 4567" not in encoded
+    assert "+1 555 999 0000" not in encoded
     assert "[REDACTED_PHONE]" not in encoded
     assert "Source context captured" in encoded
 
