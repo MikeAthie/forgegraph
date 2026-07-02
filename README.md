@@ -166,6 +166,9 @@ That command expects the Docker stack and a local OpenAI-compatible LLM endpoint
 Start here when changing product, runtime, or release behavior:
 
 - Runtime invariants: [docs/architecture/runtime-invariants.md](docs/architecture/runtime-invariants.md)
+- Project architecture map: [docs/architecture/project-architecture.md](docs/architecture/project-architecture.md)
+- Backend architecture map: [docs/backend/backend-architecture.md](docs/backend/backend-architecture.md)
+- Engine architecture map: [docs/architecture/engine-architecture.md](docs/architecture/engine-architecture.md)
 - Product definition: [docs/product/forgegraph-product-definition.md](docs/product/forgegraph-product-definition.md)
 - Canonical terminology: [docs/product/canonical-ontology.md](docs/product/canonical-ontology.md)
 - Company workspace model: [docs/product/company-workspace-model.md](docs/product/company-workspace-model.md)
