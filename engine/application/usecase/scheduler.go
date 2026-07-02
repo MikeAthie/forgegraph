@@ -2543,60 +2543,6 @@ func parseMemoryConfig(memoryConfigJSON string) *entity.MemoryConfig {
 	return cfg
 }
 
-func parseCheckpointPayload(stateSnapshot map[string]any, completedNodes []string, skippedNodes []string) (map[string]any, []entity.Message, *entity.MemoryConfig, *entity.Summary, []string, []string, map[string]int, map[string]int, int) {
-	if stateSnapshot == nil {
-		return map[string]any{}, nil, nil, nil, completedNodes, skippedNodes, nil, nil, 0
-	}
-
-	payloadVersion := coerceInt(stateSnapshot["checkpoint_version"])
-	rawState, hasState := stateSnapshot["state"].(map[string]any)
-	if !hasState {
-		// Legacy payload format where the raw map is the state snapshot.
-		return stateSnapshot, nil, nil, nil, completedNodes, skippedNodes, nil, nil, 1
-	}
-
-	parsedCompleted := completedNodes
-	if rawCompleted, ok := stateSnapshot["completed"].([]any); ok {
-		parsedCompleted = toStringSlice(rawCompleted)
-	}
-
-	parsedSkipped := skippedNodes
-	if rawSkipped, ok := stateSnapshot["skipped"].([]any); ok {
-		parsedSkipped = toStringSlice(rawSkipped)
-	}
-
-	var bufferSnapshot []entity.Message
-	if rawBuffer, ok := stateSnapshot["message_buffer"]; ok {
-		bufferSnapshot = decodeMessages(rawBuffer)
-	}
-
-	var memoryConfig *entity.MemoryConfig
-	if rawConfig, ok := stateSnapshot["memory_config"]; ok {
-		memoryConfig = decodeMemoryConfig(rawConfig)
-	}
-
-	var summary *entity.Summary
-	if rawSummary, ok := stateSnapshot["current_summary"]; ok {
-		summary = decodeSummary(rawSummary)
-	}
-
-	var pendingSnapshot map[string]int
-	if rawPending, ok := stateSnapshot["pending"]; ok {
-		pendingSnapshot = decodeStringIntMap(rawPending)
-	}
-
-	var visitCounts map[string]int
-	if rawVisitCounts, ok := stateSnapshot["visit_counts"]; ok {
-		visitCounts = decodeStringIntMap(rawVisitCounts)
-	}
-
-	if payloadVersion <= 0 {
-		payloadVersion = 1
-	}
-
-	return rawState, bufferSnapshot, memoryConfig, summary, parsedCompleted, parsedSkipped, pendingSnapshot, visitCounts, payloadVersion
-}
-
 func (s *Scheduler) loadResumeCheckpoint(ctx context.Context, runID string) (*resumeCheckpoint, error) {
 	snapshot, err := s.repository.LoadRunSnapshot(ctx, runID)
 	if err != nil {

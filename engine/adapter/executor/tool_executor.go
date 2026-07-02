@@ -763,17 +763,6 @@ func flattenToolConfigTemplateValues(config map[string]any) map[string]string {
 	return values
 }
 
-func parseIndex(val string) int {
-	if val == "" {
-		return -1
-	}
-	parsed, err := strconv.Atoi(val)
-	if err != nil {
-		return -1
-	}
-	return parsed
-}
-
 func resolveToolTimeoutMs(toolConfig map[string]any, defaultTimeoutSeconds int) int {
 	timeoutMs := readInt(toolConfig, "timeout_ms")
 	if timeoutMs <= 0 && defaultTimeoutSeconds > 0 {

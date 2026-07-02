@@ -424,53 +424,6 @@ func deterministicIntentID(intentType string, runID string, attemptID string, pa
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
 
-func (r *HTTPRunRepository) updateRun(ctx context.Context, runID string, payload map[string]any) error {
-	err := r.do(ctx, http.MethodPatch, r.runPath(runID), payload, nil)
-	if err != nil {
-		var apiErr *controlPlaneError
-		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
-			return domain.ErrRunNotFound
-		}
-		return err
-	}
-	return nil
-}
-
-func (r *HTTPRunRepository) upsertNodeRun(ctx context.Context, nodeRun *entity.NodeRun) (*entity.NodeRun, error) {
-	payload := map[string]any{
-		"id":         nodeRun.ID,
-		"node_type":  nodeRun.NodeType,
-		"status":     nodeRun.Status,
-		"attempt":    nodeRun.Attempt,
-		"started_at": nodeRun.StartedAt.UTC().Format(time.RFC3339Nano),
-		"trace_id":   nodeRun.TraceID,
-		"span_id":    nodeRun.SpanID,
-	}
-	if nodeRun.EndedAt != nil {
-		payload["ended_at"] = nodeRun.EndedAt.UTC().Format(time.RFC3339Nano)
-	}
-	if nodeRun.InputJSON != nil {
-		payload["input_json"] = nodeRun.InputJSON
-	}
-	if nodeRun.OutputJSON != nil {
-		payload["output_json"] = nodeRun.OutputJSON
-	}
-	if nodeRun.ErrorJSON != nil {
-		payload["error_json"] = nodeRun.ErrorJSON
-	}
-
-	var persisted entity.NodeRun
-	err := r.do(ctx, http.MethodPut, r.runNodeRunPath(nodeRun.RunID, nodeRun.NodeID), payload, &persisted)
-	if err != nil {
-		var apiErr *controlPlaneError
-		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
-			return nil, domain.ErrRunNotFound
-		}
-		return nil, err
-	}
-	return &persisted, nil
-}
-
 func (r *HTTPRunRepository) do(ctx context.Context, method, relativePath string, payload any, out any) error {
 	body, err := r.marshalBody(payload)
 	if err != nil {
