@@ -40,15 +40,6 @@ from infrastructure.security import s2s
 
 logger = logging.getLogger(__name__)
 _REFRESH_SKEW = timedelta(minutes=5)
-_RUN_STATUS_TRANSITIONS: dict[str, set[str]] = {
-    "pending": {"pending", "running", "failed", "canceled"},
-    "running": {"running", "paused", "resume_requested", "succeeded", "failed", "canceled"},
-    "paused": {"paused", "resume_requested", "failed", "canceled"},
-    "resume_requested": {"resume_requested", "running", "failed", "canceled"},
-    "succeeded": {"succeeded"},
-    "failed": {"failed"},
-    "canceled": {"canceled"},
-}
 
 
 def _parse_expires_at(token_payload: dict[str, object]) -> datetime | None:
@@ -249,12 +240,6 @@ def _stringify_graph_json(raw_value: object) -> str:
     if isinstance(raw_value, (dict, list)):
         return json.dumps(raw_value)
     return str(raw_value or "")
-
-
-def _validate_run_status_transition(current_status: str, next_status: str) -> None:
-    allowed = _RUN_STATUS_TRANSITIONS.get(current_status, {current_status})
-    if next_status not in allowed:
-        raise ValueError(f"invalid run status transition: {current_status} -> {next_status}")
 
 
 def _parse_memory_identity(

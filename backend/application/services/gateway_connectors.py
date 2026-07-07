@@ -21,7 +21,7 @@ from django.utils import timezone
 from application.services.domain_event_outbox import sanitize_outbox_payload
 from application.services.redaction import redact_text
 from infrastructure.crypto.encryption import decrypt_api_key
-from infrastructure.orm.models import APIKey, GatewayConnection
+from infrastructure.orm.models import APIKey
 
 GATEWAY_MODE_DRY_RUN = "dry_run"
 GATEWAY_MODE_REAL_SEND = "real_send"
@@ -262,14 +262,6 @@ class BaseGatewayAdapter:
 
     def poll(self) -> list[GatewayInboundEvent]:
         return []
-
-    def _record_connection_health(self, request: GatewaySendRequest, *, status: str) -> None:
-        if not request.connection_id:
-            return
-        GatewayConnection.objects.filter(id=request.connection_id).update(
-            last_health_check_at=timezone.now(),
-            status="enabled" if status in {"ready", "accepted"} else "degraded",
-        )
 
 
 class FakeGatewayAdapter(BaseGatewayAdapter):
