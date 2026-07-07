@@ -1,0 +1,59 @@
+{
+  "to": "admin@intlabs.dev",
+  "subject": "Legacy Optical Noir \u2014 ForgeGraph/Codex company run deliverables ready",
+  "engagement_id": "d3dc8dbd-9eb4-4361-a24d-7d1006e57cf9",
+  "program_id": "6f0c1926-c222-40d2-8b54-3c797c16668e",
+  "deliverables": [
+    {
+      "title": "Legacy Codex Strategy Brief",
+      "type": "codex_strategy_brief",
+      "department": "strategy_research",
+      "file": "codex_strategy_brief.md",
+      "id": "61b22b98-5e25-4c4f-95a2-40ed632c5bc9"
+    },
+    {
+      "title": "Legacy Codex Brand Content Pack",
+      "type": "codex_brand_content_pack",
+      "department": "brand_content",
+      "file": "codex_brand_content_pack.md",
+      "id": "33661306-d4ce-4457-a97a-b6a5a121d8c9"
+    },
+    {
+      "title": "Legacy Codex CRM / WhatsApp Scripts",
+      "type": "codex_crm_response_scripts",
+      "department": "crm_lifecycle",
+      "file": "codex_crm_response_scripts.md",
+      "id": "fd0a2640-2ce3-4e13-b75f-61d9d727ac9e"
+    },
+    {
+      "title": "Legacy Codex Measurement Plan",
+      "type": "codex_measurement_plan",
+      "department": "analytics_performance",
+      "file": "codex_measurement_plan.md",
+      "id": "ebf9f9f6-2cc2-4447-b3fc-e7f1cc2e72e7"
+    },
+    {
+      "title": "Legacy Codex Channel Execution Calendar",
+      "type": "codex_channel_execution_calendar",
+      "department": "channel_execution",
+      "file": "codex_channel_execution_calendar.md",
+      "id": "dbaf22ba-2daf-4de5-805e-246797382bd5"
+    },
+    {
+      "title": "Legacy Codex Launch QA Report",
+      "type": "codex_qa_report",
+      "department": "qa_compliance",
+      "file": "codex_qa_report.md",
+      "id": "07b9e2a9-ee2c-4240-9362-4e315d12896e"
+    },
+    {
+      "title": "Legacy Codex Client Approval Packet",
+      "type": "codex_client_approval_packet",
+      "department": "client_approval_ops",
+      "file": "codex_client_approval_packet.md",
+      "id": "795365f8-f031-4091-bb03-ddeebafc0614"
+    }
+  ],
+  "routing_task_count": 7,
+  "whiteboard_snapshot_task_count": 7
+}

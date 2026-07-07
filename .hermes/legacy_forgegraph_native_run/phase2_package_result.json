@@ -1,0 +1,41 @@
+{
+  "phase": "phase2_complete",
+  "zip_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_forgegraph_native_run\\Legacy_Optical_Noir_FG_NATIVE_CLIENT.zip",
+  "zip_sha256": "251451c11cd5cc666df9ddd323bd6a60d7ab4c88e77c7e5a49cf1c9caa77d20e",
+  "zip_bytes": 7409270,
+  "package_asset_id": "8ff4eb7f-5d7c-4714-bedb-9ee75edab4cf",
+  "package_version_id": "c8825176-7dda-4f61-9788-14d291355c12",
+  "package_deliverable_id": "b29adfcf-b3d2-4a52-9539-0746c0c1e98c",
+  "planned_message_id": "6072c21c-4645-4257-87b1-123bb02472b0",
+  "state_projection_id": "26946936-0fe5-499a-87c1-ef689d645687",
+  "pipeline_statuses": [
+    [
+      "strategy_research",
+      "completed"
+    ],
+    [
+      "brand_content",
+      "completed"
+    ],
+    [
+      "crm_lifecycle",
+      "completed"
+    ],
+    [
+      "analytics_performance",
+      "completed"
+    ],
+    [
+      "channel_execution",
+      "completed"
+    ],
+    [
+      "qa_compliance",
+      "completed"
+    ],
+    [
+      "client_approval_ops",
+      "completed"
+    ]
+  ]
+}

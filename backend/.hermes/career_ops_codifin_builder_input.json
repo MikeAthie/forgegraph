@@ -1,0 +1,68 @@
+{
+  "candidate_facts": {
+    "name": "Miguel Athie",
+    "title": "Lead Full-Stack Software Engineer",
+    "email": "miguel.athien@gmail.com",
+    "phone": "+52 55 3900 3599",
+    "location": "Mexico City, MX",
+    "github": "https://github.com/GreyCrossX",
+    "summary": "Backend-leaning full-stack engineer building Go, Python, React, and TypeScript product systems.",
+    "proof_points": [
+      "Built production APIs and service boundaries with Go, Python, Django, FastAPI, PostgreSQL, Redis, and workers.",
+      "Built SaaS-style company workflows, competitive strategy scraping, content analysis, and report generation in ForgeGraph.",
+      "Built full-stack products using React, Next.js, TypeScript, and FastAPI with clear API contracts.",
+      "Built async/event-driven data pipelines, WebSockets ingestion, Redis streams, Celery workers, and operational automation.",
+      "Integrated AI-powered features, RAG workflows, and agentic workflows into source-bounded product systems.",
+      "Collaborated closely with non-technical teams, communicating tradeoffs clearly and driving projects to completion with high ownership.",
+      "Comfortable collaborating in English and Spanish across product, technical, and non-technical teams."
+    ],
+    "projects": [
+      {
+        "name": "ForgeGraph",
+        "url": "https://github.com/MikeAthie/ForgeGraph",
+        "period": "Nov 2025 - Present",
+        "summary": "AI-powered company OS for competitor analysis, strategy automation, and report generation.",
+        "bullets": [
+          "Built backend workflows for competitive strategy scraping, content analysis, and report generation.",
+          "Used Go and backend services to support durable workflow state, automation, and scalable service expansion.",
+          "Integrated LLM-assisted analysis with source-bounded outputs and operational guardrails."
+        ]
+      },
+      {
+        "name": "Lex Toolkit",
+        "url": "https://github.com/MikeAthie/Lex-Toolkit",
+        "period": "Nov 2025 - Present",
+        "summary": "Full-stack legal workflow product using Next.js, React, TypeScript, and FastAPI.",
+        "bullets": [
+          "Built a full-stack app with Next.js/React frontend and FastAPI backend for professional workflows.",
+          "Designed clear API contracts and AI-assisted workflow features for product-quality delivery."
+        ]
+      },
+      {
+        "name": "Automated Trading Bot (Binance)",
+        "url": "https://github.com/MikeAthie/2m2",
+        "period": "Aug 2025 - Present",
+        "summary": "Real-time async data automation using WebSockets, Redis, and Celery workers.",
+        "bullets": [
+          "Consumed market data via WebSockets and persisted streams in Redis for low-latency access.",
+          "Orchestrated background execution with Celery workers and resilient task handling.",
+          "Separated indicator computation into a Redis-backed service to improve throughput and reliability."
+        ]
+      }
+    ],
+    "education": [
+      {"institution": "ITAM", "degree": "Bachelor of Science in Law", "period": "2012 - 2017", "graduation_year": "2017"}
+    ],
+    "certifications": [
+      "Meta Back-End Developer Certification (May 2023)",
+      "IBM RAG and Agentic AI (May 2025)"
+    ]
+  },
+  "posting": {
+    "title": "Lead Golang & React Developer CDMX Bilingüe",
+    "company": "Codifin",
+    "url": "https://mx.indeed.com/viewjob?jk=0ee36499821e9442",
+    "location": "11520, Granada, CDMX / Hybrid remote",
+    "description": "Lead Full-Stack Software Engineer building SaaS platforms and data automation systems. Core stack React, Golang, PostgreSQL. Additional technologies include Python data pipelines, Vue, GraphQL, REST APIs, SQL, Docker, Linux, Git, CI/CD, Power BI dashboards, real-time monitoring, AI-powered features, automated workflows, Product and QA collaboration. Advanced English C1 required. Salary up to 90000 MXN/month."
+  }
+}

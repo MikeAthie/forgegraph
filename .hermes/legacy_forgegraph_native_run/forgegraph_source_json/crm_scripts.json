@@ -1,0 +1,17 @@
+{
+  "whatsapp_dm_scripts": [
+    {
+      "trigger": "Consulta de modelo",
+      "response": "Sí, lo tengo presente. ¿Lo buscas para uso diario o para salida/noche? Te paso color y disponibilidad."
+    },
+    {
+      "trigger": "Pregunta de precio",
+      "response": "Ese modelo va desde $590 MXN según color/disponibilidad. Si quieres, te mando 2 opciones parecidas para elegir rápido."
+    },
+    {
+      "trigger": "Interés tibio",
+      "response": "Te dejo una guía rápida: negro = presencia directa, azul = contraste, oro = luz nocturna, crystal = limpio/editorial."
+    }
+  ],
+  "handoff_policy": "Responder corto por WhatsApp/DM; no pegar documentos largos; enviar package/link cuando se solicite revisión."
+}

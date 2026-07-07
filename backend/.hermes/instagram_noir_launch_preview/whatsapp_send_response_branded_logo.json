@@ -1,0 +1,18 @@
+[
+  {
+    "target": "self",
+    "chatId": "5215539003599@s.whatsapp.net",
+    "response": {
+      "success": true,
+      "messageId": "3EB0A0C70DD6428E8D4FDE"
+    }
+  },
+  {
+    "target": "requested",
+    "chatId": "5215525595619@s.whatsapp.net",
+    "response": {
+      "success": true,
+      "messageId": "3EB0E96986E0E448EAE9AA"
+    }
+  }
+]

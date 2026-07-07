@@ -1,0 +1,48 @@
+{
+  "campaign": "Legacy Optical Noir",
+  "created_at": "2026-06-29T15:27:22.785206-06:00",
+  "timezone": "America/Mexico_City",
+  "day_1_date": "2026-06-29",
+  "package_path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_223301\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+  "package_sha256": "909525e6cf0ca444e35c1635752a84c6c90698dd2a693475200f49f3c6ae39ae",
+  "status": "active",
+  "posts": [
+    {
+      "post": 3,
+      "status": "published",
+      "platform": "instagram",
+      "provider": "meta_graph",
+      "account_id_env": "META_GRAPH_IG_USER_ID_ALLOWLIST",
+      "asset_path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_optical_noir_autopublish\\assets\\legacy_optical_noir_post_03_replacement_authorized.jpg",
+      "asset_filename": "legacy_optical_noir_post_03_replacement_authorized.jpg",
+      "asset_sha256": "c00e35a88e880e8826e0bd8b9096e2fe94adc230d53d31d35ed07033d280dd5a",
+      "caption": "Más intención. Menos ruido.\n\nLegacy Optical Noir destaca lo importante: forma, claridad y presencia, con una paleta sobria de negro, marfil y acentos cálidos.\n\nGuarda este post si este es tu estilo.\n\n#LegacyEffect #OpticalNoir #EyewearStyle #VisionConEstilo",
+      "caption_sha256": "3046eb11aad3186432a919d96d4c9dd4c528d22d0f064d1a0528d745e57f0556",
+      "scheduled_at": "2026-07-02T01:24:27.320864+00:00",
+      "timezone": "America/Mexico_City",
+      "idempotency_key": "legacy-optical-noir-20260629-day-3-replacement-authorized",
+      "backend_publication_draft_id": "c7c0d90d313a4c17830e17db3a1ebf76",
+      "approval_source": "Mike explicitly authorized publishing the replacement Legacy Optical Noir post after unauthorized post 3 was purged.",
+      "published_at": "2026-07-02T01:25:48+0000",
+      "provider_media_id": "18075087737691879",
+      "provider_permalink": "https://www.instagram.com/p/DaRaDjOkcAB/",
+      "replacement_for_media_id": "18086310779431351",
+      "replacement_for_permalink": "https://www.instagram.com/p/DaRU3QNINLs/",
+      "last_error": {},
+      "provider_container_id": "18020342741898086",
+      "public_image_url": "https://0218-189-203-252-96.ngrok-free.app/legacy_optical_noir_post_03_replacement_authorized.jpg"
+    }
+  ],
+  "removed_posts": [],
+  "autopublish_paused_reason": "Manual replacement publish in progress; cron remains paused until verified.",
+  "blocked_asset_sha256": [
+    "1fc938beb75e395c41ae3d7ab3b0b41e21dedf41d3b7c39a0a8c5a25830854e9",
+    "90a7443a60d691b3a97844190f069cabf0d0a42f7fe975c28b756eeed959aac8",
+    "990e7079d8ffba11ddca3a9844f37b71d31e911fa3e6b0cc372c9a6c93933a05",
+    "a2b5f6537a1bd11edbe1a00fa46d2cb24aac37f07f72d6a713b358bb53a56d09",
+    "a7f6e94e8206272c6e856d1decb0c543983a35399c08d7ecbcf23c96bebe1fae",
+    "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8"
+  ],
+  "replacement_candidates": [],
+  "guardrail_version": "backend-approval-hash-v1"
+}

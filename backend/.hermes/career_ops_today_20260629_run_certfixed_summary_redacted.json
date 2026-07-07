@@ -1,0 +1,315 @@
+{
+  "company_id": "95f3e98b-8e14-4511-bdb1-563121c1950e",
+  "counts": {
+    "decisions": 10,
+    "deliverables": 115,
+    "opportunities": 11,
+    "runs": 25,
+    "signals": 11,
+    "state_projections": 1,
+    "tasks": 60
+  },
+  "external_side_effects_allowed": false,
+  "live_send_allowed": false,
+  "packets": [
+    {
+      "ats_resume_html_asset_version_id": "97e3c953-93c6-4188-8b61-9abe3e3f1427",
+      "ats_resume_parseability_report_asset_version_id": "54f4b701-93d4-4f83-8c30-ed32f6a566d1",
+      "ats_resume_pdf_asset_version_id": "89568005-c7ac-49b5-b6dc-c1efa4ecda5b",
+      "ats_resume_text_asset_version_id": "59d604ac-2d42-4f6f-b549-0afc1b3e3f58",
+      "ats_simulation_asset_version_id": "9c859f4d-5147-4d36-b9c5-0c96f5994bf2",
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "a01a91e1-ab6e-4e88-bb9a-678b4fcb5f96",
+      "decision_id": "a00e100e-8da8-4b11-b2ac-fec72886b191",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "08d4b01b-5efa-4819-9f1e-e728b5025675",
+      "packet_asset_version_id": "45e5ec3e-5815-4a58-aeb7-06e460a99a64",
+      "readiness": {
+        "blockers": [
+          "ats_human_review_minimum",
+          "ats_send_minimum",
+          "ats_resume_structure",
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_human_review_minimum": "blocked",
+          "ats_resume_parseability_passed": "pass",
+          "ats_resume_pdf_exact_version_bound": "pass",
+          "ats_resume_pdf_mime_type": "pass",
+          "ats_resume_pdf_present": "pass",
+          "ats_resume_structure": "blocked",
+          "ats_send_minimum": "blocked",
+          "ats_simulation_report_present": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "recruiter_evaluation_asset_version_id": "32f4eb6a-fa6f-4f93-bf28-4e0b03e12a11",
+      "run_id": "1ca4bc98-60c5-4a4c-abb9-848bb9758d81",
+      "tailored_resume_asset_version_id": "d2590ccd-8237-4dae-bcc5-454cf64cef75"
+    },
+    {
+      "ats_resume_html_asset_version_id": "2e7a7c86-fd92-4614-914b-99d322af43ce",
+      "ats_resume_parseability_report_asset_version_id": "129f8952-5da5-4f81-b772-9605b2703ced",
+      "ats_resume_pdf_asset_version_id": "d8c9d5ab-d218-4eb4-8736-6d90334d31e8",
+      "ats_resume_text_asset_version_id": "e0cd0143-628f-48c6-8b35-21e4b569ca22",
+      "ats_simulation_asset_version_id": "6835fea6-3b63-46f1-9183-48568a26579d",
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "e382359f-7189-4ae4-ba61-07e55b9633c5",
+      "decision_id": "c68baf6d-170d-43e6-bd8d-85cc7fdcaadd",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "615aba05-edd4-45a1-ac7f-979b89963451",
+      "packet_asset_version_id": "60be3ee1-f361-40fa-800e-bb03e5787a05",
+      "readiness": {
+        "blockers": [
+          "ats_human_review_minimum",
+          "ats_send_minimum",
+          "ats_resume_structure",
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_human_review_minimum": "blocked",
+          "ats_resume_parseability_passed": "pass",
+          "ats_resume_pdf_exact_version_bound": "pass",
+          "ats_resume_pdf_mime_type": "pass",
+          "ats_resume_pdf_present": "pass",
+          "ats_resume_structure": "blocked",
+          "ats_send_minimum": "blocked",
+          "ats_simulation_report_present": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "recruiter_evaluation_asset_version_id": "fbe13402-0e19-4a7e-a388-586aebd2dfb5",
+      "run_id": "909165ca-1c47-4e5b-a34b-d99e0438b704",
+      "tailored_resume_asset_version_id": "00f1228f-ecd5-4acc-aa6e-3fad946f74fd"
+    },
+    {
+      "ats_resume_html_asset_version_id": "4d1b3eb1-f7c1-483c-a96a-047d5e8d1f11",
+      "ats_resume_parseability_report_asset_version_id": "cdb8b7b5-2ec3-498d-b929-c55a8e190698",
+      "ats_resume_pdf_asset_version_id": "8623fb42-1351-4c04-8d87-9b905956f781",
+      "ats_resume_text_asset_version_id": "148a57d4-3d45-42f5-9386-dd57335a54b7",
+      "ats_simulation_asset_version_id": "67a63de1-ded5-4430-8941-45f2ca77fcf1",
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "1471bb1e-a433-4f62-84ba-beff5391f132",
+      "decision_id": "51928a28-37c4-443a-9528-996cc844ebad",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "5cdf1b92-32b7-4d92-a012-8075b97fb867",
+      "packet_asset_version_id": "a0d84a66-570d-4ee6-bd96-18c65a1a6f97",
+      "readiness": {
+        "blockers": [
+          "ats_human_review_minimum",
+          "ats_send_minimum",
+          "ats_resume_structure",
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_human_review_minimum": "blocked",
+          "ats_resume_parseability_passed": "pass",
+          "ats_resume_pdf_exact_version_bound": "pass",
+          "ats_resume_pdf_mime_type": "pass",
+          "ats_resume_pdf_present": "pass",
+          "ats_resume_structure": "blocked",
+          "ats_send_minimum": "blocked",
+          "ats_simulation_report_present": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "recruiter_evaluation_asset_version_id": "d7de5e52-35d1-4cb1-9ecc-b8b0ada9b86d",
+      "run_id": "640c553e-8adf-41c9-bed0-d292b019e44b",
+      "tailored_resume_asset_version_id": "e5c4d012-afb3-4edb-8d65-d2c7d5eeb6c7"
+    },
+    {
+      "ats_resume_html_asset_version_id": "6de2f820-d660-4a37-87a1-c5001b9968ce",
+      "ats_resume_parseability_report_asset_version_id": "d50386f2-4369-46e4-9398-ab473b9fedd7",
+      "ats_resume_pdf_asset_version_id": "44d3b990-bb31-4d2c-a068-4e956940ac53",
+      "ats_resume_text_asset_version_id": "d99c6ed1-b313-475e-9d53-ad9d46ad00fb",
+      "ats_simulation_asset_version_id": "98a61277-cd18-42c6-809d-550603f0321c",
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "6ba73858-1da2-4108-96df-6c7614178ef8",
+      "decision_id": "246075b7-d07c-43f4-aa0d-b7d7d3ff5668",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "c1041bdb-7c14-4bc8-a1e4-d6b0c555e90f",
+      "packet_asset_version_id": "cd9e0593-4bad-4602-bca4-deec90440ba4",
+      "readiness": {
+        "blockers": [
+          "ats_human_review_minimum",
+          "ats_send_minimum",
+          "ats_resume_structure",
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_human_review_minimum": "blocked",
+          "ats_resume_parseability_passed": "pass",
+          "ats_resume_pdf_exact_version_bound": "pass",
+          "ats_resume_pdf_mime_type": "pass",
+          "ats_resume_pdf_present": "pass",
+          "ats_resume_structure": "blocked",
+          "ats_send_minimum": "blocked",
+          "ats_simulation_report_present": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "recruiter_evaluation_asset_version_id": "4af5fb98-5a21-4912-abdf-187fa13cfec1",
+      "run_id": "da5cab6c-d943-4a75-8226-2dc271ab8203",
+      "tailored_resume_asset_version_id": "241224c2-9d9d-4737-be01-72d5ff9d5031"
+    },
+    {
+      "ats_resume_html_asset_version_id": "2bb53b26-2518-405f-b542-e115ea6723f9",
+      "ats_resume_parseability_report_asset_version_id": "7be57f64-42ee-4ee6-ad67-e3657c692556",
+      "ats_resume_pdf_asset_version_id": "d8a03553-8205-4467-aba7-391c6689eba5",
+      "ats_resume_text_asset_version_id": "955a0da6-6dbc-4d08-a6f4-08a136834224",
+      "ats_simulation_asset_version_id": "43e9f899-e16d-4723-a963-a86511fd6f5a",
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "a0299f3c-8a9a-46ea-9e84-d258c9f9b18f",
+      "decision_id": "554a290f-c56c-444c-ae80-6f3fd247fe38",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "773f6a29-2e97-4ef7-af98-8ac8720c5bb9",
+      "packet_asset_version_id": "d51a383b-09d2-4560-a01e-330ed5a12577",
+      "readiness": {
+        "blockers": [
+          "ats_send_minimum",
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_human_review_minimum": "pass",
+          "ats_resume_parseability_passed": "pass",
+          "ats_resume_pdf_exact_version_bound": "pass",
+          "ats_resume_pdf_mime_type": "pass",
+          "ats_resume_pdf_present": "pass",
+          "ats_resume_structure": "pass",
+          "ats_send_minimum": "blocked",
+          "ats_simulation_report_present": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "recruiter_evaluation_asset_version_id": "43ed694a-94ab-4f41-b514-53d2d031731c",
+      "run_id": "a30cefa1-c9c2-46ab-8b2c-6c713d997c66",
+      "tailored_resume_asset_version_id": "fc357d41-4101-4411-b36f-e5d74e69f8c0"
+    }
+  ],
+  "processed_count": 5,
+  "status": "ok",
+  "whatsapp_delivery": {
+    "bridge_status": "connected",
+    "chat_id": "[REDACTED]",
+    "communication_message_id": "8b2dbb81-0c6d-4c8d-b6f3-fcae37892033",
+    "communication_thread_id": "283f3138-0f9d-480c-afce-0223f7efb145",
+    "cv_count": 5,
+    "files": [
+      {
+        "company": "Remote Talent LATAM / U.S. digital health client",
+        "file_name": "Miguel-Athie-remote-talent-latam-u-s-digital-health-client-senior-full-stack-engineer-backend-focus-CV.pdf",
+        "host_file_path": "[REDACTED]",
+        "job_url": "https://jobs.workable.com/view/4gWYat1uHKDwoJEPY4gh4x/senior-full-stack-engineer-(backend-focus)-%7C-remote-%7C-latam-only-%7C-85157-in-honduras-at-remote-talent-latam",
+        "media_message_id": "3EB075A77691BC00879FA3",
+        "role_title": "Senior Full Stack Engineer (Backend Focus)",
+        "size_bytes": 5156
+      },
+      {
+        "company": "South Geeks",
+        "file_name": "Miguel-Athie-south-geeks-senior-full-stack-engineer-backend-leaning-CV.pdf",
+        "host_file_path": "[REDACTED]",
+        "job_url": "https://jobs.ashbyhq.com/southgeeks/7c137ebe-e525-4533-94a5-0b1da517485d",
+        "media_message_id": "3EB0DB9323DF790BDC4D89",
+        "role_title": "Senior Full-stack Engineer (backend-leaning)",
+        "size_bytes": 5156
+      },
+      {
+        "company": "Clipbook",
+        "file_name": "Miguel-Athie-clipbook-founding-senior-software-engineer-usa-latam-CV.pdf",
+        "host_file_path": "[REDACTED]",
+        "job_url": "https://jobs.ashbyhq.com/clipbook/a83afbff-3d1e-466e-8c1c-302dceb136e8",
+        "media_message_id": "3EB0936C696838A8C88697",
+        "role_title": "Founding Senior Software Engineer (USA + LATAM)",
+        "size_bytes": 5156
+      },
+      {
+        "company": "RYZ Labs",
+        "file_name": "Miguel-Athie-ryz-labs-senior-software-engineer-python-CV.pdf",
+        "host_file_path": "[REDACTED]",
+        "job_url": "https://jobs.lever.co/RyzLabs/a9dc1f82-1cc3-4030-9405-cb566db5a62a",
+        "media_message_id": "3EB09AB66BCB4422B26DD1",
+        "role_title": "Senior Software Engineer (Python)",
+        "size_bytes": 5156
+      },
+      {
+        "company": "Belvo",
+        "file_name": "Miguel-Athie-belvo-software-engineer-applied-ai-CV.pdf",
+        "host_file_path": "[REDACTED]",
+        "job_url": "https://jobs.ashbyhq.com/belvo/5724e5fc-93ed-45e4-9cb8-739bd9425d9d",
+        "media_message_id": "3EB046B97CBD858CA1B629",
+        "role_title": "Software Engineer - Applied AI",
+        "size_bytes": 4990
+      }
+    ],
+    "link_count": 5,
+    "media_message_ids": [
+      "3EB075A77691BC00879FA3",
+      "3EB0DB9323DF790BDC4D89",
+      "3EB0936C696838A8C88697",
+      "3EB09AB66BCB4422B26DD1",
+      "3EB046B97CBD858CA1B629"
+    ],
+    "status": "sent",
+    "text_message_id": "3EB05C4E43A4914DBF9AD6"
+  }
+}

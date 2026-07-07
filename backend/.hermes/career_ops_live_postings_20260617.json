@@ -1,0 +1,47 @@
+[
+  {
+    "title": "Backend Developer (Python and FastAPI)",
+    "company": "Jobgether partner company",
+    "location": "Europe Remote",
+    "url": "https://www.linkedin.com/jobs/view/backend-developer-python-and-fastapi-europe-at-jobgether-4315484548",
+    "description": "Backend Developer using Python and FastAPI in Europe. Source search result says the position is posted by Jobgether on behalf of a partner company and is located in Europe.",
+    "salary_range_usd": [0, 0],
+    "provider": "web_search_live_url"
+  },
+  {
+    "title": "Python Engineer (Remote)",
+    "company": "Jobs Ai",
+    "location": "Latin America / Mexico Remote",
+    "url": "https://www.linkedin.com/jobs/view/python-engineer-remote-at-jobs-ai-4408784826",
+    "description": "Python Engineer remote in Latin America. Search snippet mentions back-end developer data, automation and AI workflows.",
+    "salary_range_usd": [0, 0],
+    "provider": "web_search_live_url"
+  },
+  {
+    "title": "Backend Engineer (Python)",
+    "company": "EnglishJobs Spain listing",
+    "location": "Spain Remote",
+    "url": "https://englishjobs.es/jobs/python",
+    "description": "Backend Engineer Python based in Spain remote. Designing, building, and maintaining backend services in Python.",
+    "salary_range_usd": [0, 0],
+    "provider": "web_search_live_url"
+  },
+  {
+    "title": "Remote AI Engineer Jobs in Mexico",
+    "company": "Remote Rocketship listings",
+    "location": "Mexico Remote",
+    "url": "https://www.remoterocketship.com/country/mexico/jobs/ai-engineer/",
+    "description": "Remote AI Engineer roles in Mexico, including artificial intelligence engineer, AI systems developer, and intelligent systems roles.",
+    "salary_range_usd": [0, 0],
+    "provider": "web_search_live_url"
+  },
+  {
+    "title": "Remote Backend Engineer Jobs in Spain",
+    "company": "DailyRemote listings",
+    "location": "Spain Remote",
+    "url": "https://dailyremote.com/remote-backend-engineer-jobs-in-spain",
+    "description": "Remote backend engineer jobs in Spain. Search snippet mentions scalable backend services using Python and cloud services.",
+    "salary_range_usd": [0, 0],
+    "provider": "web_search_live_url"
+  }
+]

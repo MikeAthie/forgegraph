@@ -509,7 +509,11 @@ SOCIAL_CONNECTOR_MAX_ASSETS_PER_POST = int(
 SOCIAL_CONNECTOR_MAX_CAPTION_CHARS = int(
     os.environ.get("SOCIAL_CONNECTOR_MAX_CAPTION_CHARS", "2200")
 )
-META_GRAPH_ACCESS_TOKEN = os.environ.get("META_GRAPH_ACCESS_TOKEN", "").strip()
+META_GRAPH_ACCESS_TOKEN = (
+    os.environ.get("META_GRAPH_ACCESS_TOKEN")
+    or os.environ.get("INSTAGRAM_GRAPH_API")
+    or ""
+).strip()
 META_GRAPH_APP_ID = os.environ.get("META_GRAPH_APP_ID", "").strip()
 META_GRAPH_APP_SECRET = os.environ.get("META_GRAPH_APP_SECRET", "").strip()
 META_GRAPH_API_BASE_URL = os.environ.get(

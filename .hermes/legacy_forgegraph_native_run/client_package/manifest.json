@@ -1,0 +1,138 @@
+{
+  "package_name": "Legacy_Optical_Noir_FG_NATIVE_CLIENT.zip",
+  "created_at": "2026-06-09T23:16:19.023450+00:00",
+  "client": "Legacy",
+  "campaign": "Optical Noir",
+  "policy": {
+    "no_markdown_files": true,
+    "strategy_before_assets": true,
+    "fresh_ai_assets": true,
+    "no_live_publication_claimed": true
+  },
+  "forgegraph": {
+    "run_id": "legacy_forgegraph_native_v1_20260609_1710",
+    "service_engagement_id": "201201f2-9f69-40c1-ad59-552a041d64c5",
+    "whiteboard_id": "5bdd34c4-3048-479f-96e5-edfa349a4a9d",
+    "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+    "company_id": "7c181ef3-fdd5-4833-be80-ce61c6ad846c"
+  },
+  "deliverables": [
+    {
+      "type": "account_brief_context_pack"
+    },
+    {
+      "type": "strategy_brief"
+    },
+    {
+      "type": "message_house_brand_content_pack"
+    },
+    {
+      "type": "channel_plan_creative_asset_map",
+      "id": "f0cf24ba-8540-4108-973e-73bcd28ee54b"
+    },
+    {
+      "type": "crm_lifecycle_scripts",
+      "id": "2df2636d-db48-445e-90a3-0231d7c0389e"
+    },
+    {
+      "type": "analytics_measurement_plan",
+      "id": "46867f05-7a8d-467a-85d0-6ced2a387f06"
+    },
+    {
+      "type": "qa_compliance_report",
+      "id": "d05a8e1b-fa44-4925-bf83-afb0aee2238a"
+    }
+  ],
+  "image_assets": [
+    {
+      "post_id": "01",
+      "asset_id": "82dea755-69e6-4f6d-b7a2-b68360fbe59a",
+      "asset_version_id": "469ceac8-1671-46a6-9476-64aaa935fb1c",
+      "client_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_forgegraph_native_run\\client_package\\assets\\legacy_optical_noir_post_01.png",
+      "sha256": "4dd29b02b5105c3c36f6ef741058673b762510fd33690b6bcc23009d9d50d0cb",
+      "media_job_id": "276eade2-c1ca-49d4-a463-7a24c2bcf243"
+    },
+    {
+      "post_id": "02",
+      "asset_id": "cad75d89-f66b-43ae-86ca-6743a90450fd",
+      "asset_version_id": "2f462573-546c-4055-99c8-a08abd24c797",
+      "client_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_forgegraph_native_run\\client_package\\assets\\legacy_optical_noir_post_02.png",
+      "sha256": "41e6754334b10a60499789f87e00d712e943dee6aed1fa9ef1279365b0c9254b",
+      "media_job_id": "a757db18-e724-47b2-9a10-47f07ab46c91"
+    },
+    {
+      "post_id": "03",
+      "asset_id": "6f11b527-d083-4896-ba91-9b39e39c60f6",
+      "asset_version_id": "12ff9df8-1fb5-4a92-9393-f684eccf919a",
+      "client_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_forgegraph_native_run\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "b7db77fd4c3c5591bbdb9b58fde9724729ba8808d20dbaf4e8bd5190a0f6fd75",
+      "media_job_id": "1e2bc74e-028e-42d0-bed8-d01c4cf97b58"
+    },
+    {
+      "post_id": "04",
+      "asset_id": "ec924fd5-855d-487b-84fa-12c4b7ee8aef",
+      "asset_version_id": "ac3cdef7-a470-40ba-8f60-02ffafa72bd8",
+      "client_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_forgegraph_native_run\\client_package\\assets\\legacy_optical_noir_post_04.png",
+      "sha256": "e235d7a6d525ef023cdeac522f758dffc5fb021bed792bd47780301f50cb758e",
+      "media_job_id": "21a227bf-4ed2-46f9-9487-f2f097cb8dc7"
+    },
+    {
+      "post_id": "05",
+      "asset_id": "61d1c46e-baa3-4746-866a-05768ecf6834",
+      "asset_version_id": "ea5551c5-5c2d-482e-aaa8-3e7994269f5a",
+      "client_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_forgegraph_native_run\\client_package\\assets\\legacy_optical_noir_post_05.png",
+      "sha256": "fc446697546225ec6798da21b304e1ba7c798f362fbb15d5ebaacf5b7a11c34c",
+      "media_job_id": "e7df5418-f2b7-4655-93fa-75f033019f0e"
+    },
+    {
+      "post_id": "06",
+      "asset_id": "1945fc58-6ef9-4ef2-914a-15dfb486bfee",
+      "asset_version_id": "46bcbb59-4329-4527-8e43-6bfe5c03ca49",
+      "client_path": "C:\\Users\\mathi\\projects\\forgegraph\\.hermes\\legacy_forgegraph_native_run\\client_package\\assets\\legacy_optical_noir_post_06.png",
+      "sha256": "a6d855c7a39c1f85288864821a92ae8c78423ab102e8a1e818472096a1ebc3e8",
+      "media_job_id": "72259519-f9eb-45aa-b812-e291e79027d9"
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/legacy_optical_noir_post_01.png",
+      "sha256": "4dd29b02b5105c3c36f6ef741058673b762510fd33690b6bcc23009d9d50d0cb",
+      "bytes": 839452
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_02.png",
+      "sha256": "41e6754334b10a60499789f87e00d712e943dee6aed1fa9ef1279365b0c9254b",
+      "bytes": 1275946
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_03.png",
+      "sha256": "b7db77fd4c3c5591bbdb9b58fde9724729ba8808d20dbaf4e8bd5190a0f6fd75",
+      "bytes": 1265243
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_04.png",
+      "sha256": "e235d7a6d525ef023cdeac522f758dffc5fb021bed792bd47780301f50cb758e",
+      "bytes": 1455248
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_05.png",
+      "sha256": "fc446697546225ec6798da21b304e1ba7c798f362fbb15d5ebaacf5b7a11c34c",
+      "bytes": 1136786
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_06.png",
+      "sha256": "a6d855c7a39c1f85288864821a92ae8c78423ab102e8a1e818472096a1ebc3e8",
+      "bytes": 1025863
+    },
+    {
+      "path": "deliverables/Legacy_Optical_Noir_Entrega_Inicial.html",
+      "sha256": "a24354a5d9036e0d4abb2f4c7268b44130256d9e25e61ec287fc745446ea48ff",
+      "bytes": 6867
+    },
+    {
+      "path": "deliverables/Legacy_Optical_Noir_Entrega_Inicial.pdf",
+      "sha256": "800fa9dde5f2b1d074b7b8871cd7c0428453856b7db27680a24974fe6d94dab9",
+      "bytes": 585330
+    }
+  ]
+}

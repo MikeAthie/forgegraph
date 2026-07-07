@@ -1,0 +1,206 @@
+{
+  "base_cv_asset_id": "3ffca02b-2a68-48ea-8ce4-e5c07289dd83",
+  "company_id": "f950d3ae-ca93-41a3-9d00-0ca3e12e3f50",
+  "results": [
+    {
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "98b6ad9a-1c6a-44b7-ab19-4414ca7a5b50",
+      "decision_id": "080f248d-e1c0-4e28-b68a-6d3dbe93e741",
+      "deliverable_ids": [
+        "22a14c3c-4867-4621-bfb5-78a3a12b0b78",
+        "55584879-476f-4975-bc38-355ae704722e",
+        "cb6b4ff4-eecc-4757-9e26-494cd3d2d0ee",
+        "9ec7cbb7-e1d6-413c-b4c8-e681dfdbc9ba",
+        "2bab6a50-1106-482d-b154-9efdc048578d"
+      ],
+      "employer_name": "Jobgether partner company",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "e1ac72c9-2418-4d47-8f5d-8589b8057828",
+      "opportunity_title": "Jobgether partner company \u2014 Backend Developer (Python and FastAPI)",
+      "packet_asset_version_id": "99d67680-546b-461d-bca6-35c7ed5bc6a3",
+      "projection_id": "ba9fdb5f-de1f-4f97-bd9e-5a04b4378d0f",
+      "readiness": {
+        "blockers": [
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_resume_structure": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "run_id": "1eb28a8e-f9da-4a25-8924-5664ca59b658",
+      "status": "ok",
+      "tailored_resume_asset_version_id": "3777c455-1f67-431e-bf9d-6b5c5ea0b0ba",
+      "task_ids": [
+        "866ec5db-9c1d-41c5-ad89-f957a0704528",
+        "762b6d22-fca0-4159-9d63-cafd582b096d",
+        "5dc42681-cf45-4f95-802a-299b6ba33821",
+        "19c0611f-2a28-47c2-9095-64000f1616a4",
+        "3664a4db-2eed-4762-bd14-b833edbf1769",
+        "ceae1548-19f4-4897-bef9-4044b864298a"
+      ]
+    },
+    {
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "e5c738ea-ed4e-406e-9ba4-c405ae5711b8",
+      "decision_id": "8c4248d7-9b05-4b77-9326-a0865642ca0e",
+      "deliverable_ids": [
+        "2fb053ec-f726-4f18-a009-775172612f21",
+        "ca5b220d-7dac-456b-9182-09509036bc6b",
+        "010192ae-8120-42d0-92e9-10da1b42da13",
+        "a1cd91c3-33c3-48d5-b23e-8d24e4cad945",
+        "ab41293b-6847-4853-bae4-83bd0a8f50dd"
+      ],
+      "employer_name": "Jobs Ai",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "29cbadbf-3c61-4715-a80f-37bad30a44d2",
+      "opportunity_title": "Jobs Ai \u2014 Python Engineer (Remote)",
+      "packet_asset_version_id": "ea5ec6a1-d211-42c6-8319-8aa29cd3bb8a",
+      "projection_id": "ba9fdb5f-de1f-4f97-bd9e-5a04b4378d0f",
+      "readiness": {
+        "blockers": [
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_resume_structure": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "run_id": "3e906642-1da5-4ab9-a16c-a94d2a4a644f",
+      "status": "ok",
+      "tailored_resume_asset_version_id": "8a3c255a-201b-49b1-ab61-7e43ae95bee9",
+      "task_ids": [
+        "39600a5f-d0f5-4b4d-86da-86ec2d630165",
+        "4d0ed0ab-7cde-4e55-a3b0-196f6d0c60c1",
+        "d042a509-7f80-498c-936f-4342fbf70485",
+        "0d79f17a-84c8-4ac3-804b-07c15fe48dbe",
+        "384549cf-bf00-4444-9593-2157f46cb3aa",
+        "1e374f10-6a32-448f-ab6d-e9b48b46af9d"
+      ]
+    },
+    {
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "478aca41-7993-4d53-a861-8c36e40160ed",
+      "decision_id": "9c2c683a-e627-45b7-9d31-c1b1a2b89f86",
+      "deliverable_ids": [
+        "9c1c1569-de49-417a-8db1-2c8c602b5923",
+        "8a06719b-86d7-4dbe-ba9f-196b64387ded",
+        "70acc689-20a5-44f9-b8be-e664150a27ef",
+        "4f15cd56-b33d-4bab-851f-51517eceed0f",
+        "5e4bddc7-3c69-4dfe-9099-6e3d3bd56f4c"
+      ],
+      "employer_name": "EnglishJobs Spain listing",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "f3aff835-e143-4ecf-918a-47583fedd5eb",
+      "opportunity_title": "EnglishJobs Spain listing \u2014 Backend Engineer (Python)",
+      "packet_asset_version_id": "e474d29a-a0bb-41d1-88a5-e77ccc558248",
+      "projection_id": "ba9fdb5f-de1f-4f97-bd9e-5a04b4378d0f",
+      "readiness": {
+        "blockers": [
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_resume_structure": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "run_id": "3f4821f9-9ade-42ed-b6e6-4fb1403727ae",
+      "status": "ok",
+      "tailored_resume_asset_version_id": "8ba783a0-1099-488f-97e6-aca121d2a9f9",
+      "task_ids": [
+        "02f93487-dc00-46bc-b57f-9e210a1e1357",
+        "e4c98920-e356-4afe-902c-57ae619b216d",
+        "3d0c344c-c2eb-4946-9712-b6cee20400a2",
+        "db8c5be0-e743-4001-8d25-4b8038007590",
+        "6ba9e4f4-a446-4d87-9c33-4a5d5346cea6",
+        "830ff8ca-65b3-4b57-bf53-1504bac3f9a9"
+      ]
+    },
+    {
+      "blocked_reasons": [],
+      "cover_letter_asset_version_id": "a5733863-9c28-416d-b508-733e81ccacb3",
+      "decision_id": "b23aca4a-0c18-4831-a23a-581284e51eaf",
+      "deliverable_ids": [
+        "1950929b-4c7a-4e17-b224-cf202bdab5da",
+        "67759b9e-89de-453c-8699-36f658ea3ab1",
+        "720b5f8b-c99b-4f94-8a1b-f7a1dd7e425f",
+        "54017737-c979-45d6-a29b-18618dc4aedc",
+        "618eebe4-bab1-4203-942b-5b35083093ba"
+      ],
+      "employer_name": "DailyRemote listings",
+      "external_side_effects_allowed": false,
+      "opportunity_id": "46c2b308-f22e-4aa1-89a7-b3dd010d001c",
+      "opportunity_title": "DailyRemote listings \u2014 Remote Backend Engineer Jobs in Spain",
+      "packet_asset_version_id": "f93f6083-5043-4bc1-a76f-625727b11d4d",
+      "projection_id": "ba9fdb5f-de1f-4f97-bd9e-5a04b4378d0f",
+      "readiness": {
+        "blockers": [
+          "exact_version_approval_present"
+        ],
+        "checks": {
+          "ats_resume_structure": "pass",
+          "base_cv_present": "pass",
+          "claim_source_map": "pass",
+          "cover_letter_present": "pass",
+          "employer_identity_matches": "pass",
+          "exact_version_approval_present": "blocked",
+          "no_document_internal_leakage": "pass",
+          "no_internal_leakage": "pass",
+          "packet_belongs_to_company": "pass",
+          "side_effect_guard_disabled": "pass",
+          "source_refs_present": "pass",
+          "tailored_resume_present": "pass"
+        },
+        "live_send_allowed": false,
+        "status": "blocked"
+      },
+      "run_id": "97fd714e-cd24-4979-a1df-265a12ec2b00",
+      "status": "ok",
+      "tailored_resume_asset_version_id": "be0fd975-d0b2-45cf-abb3-f3308ae037a3",
+      "task_ids": [
+        "86e40e81-e99d-4d1d-a787-19272ce0cf49",
+        "c69a45c3-22ca-4263-8b07-172a127a307a",
+        "ea93a4a0-193d-4c57-9037-9455749a6f93",
+        "9b1f03b2-8837-4f8f-90f1-6e077625bf4e",
+        "c1273a0c-65d8-4ffd-9335-3bdf45460916",
+        "3eeb37d3-42bf-42ee-80c2-b54b1eae6b86"
+      ]
+    }
+  ]
+}

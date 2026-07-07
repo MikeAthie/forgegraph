@@ -1,0 +1,478 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2345 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+54 738 Td
+(Legacy Optical Noir ? client handoff) Tj
+T*
+T*
+(Decision requested: approve the Optical Noir direction, draft assets, Spanish-first copy) Tj
+T*
+(tone, and approval-gated launch path.) Tj
+T*
+(No live publishing claim is made; production launch requires approval and connector) Tj
+T*
+(receipts.) Tj
+T*
+T*
+(Run evidence: manifest.json includes archived engagement, whiteboard, asset checksum, source) Tj
+T*
+(deliverable, and media provenance records.) Tj
+T*
+T*
+(Assets included:) Tj
+T*
+(- Post 01: assets/legacy_optical_noir_post_01.png) Tj
+T*
+(- Post 02: assets/legacy_optical_noir_post_02.png) Tj
+T*
+(- Post 03: assets/legacy_optical_noir_post_03.png) Tj
+T*
+(- Post 04: assets/legacy_optical_noir_post_04.png) Tj
+T*
+(- Post 05: assets/legacy_optical_noir_post_05.png) Tj
+T*
+(- Post 06: assets/legacy_optical_noir_post_06.png) Tj
+T*
+T*
+(Department deliverables:) Tj
+T*
+T*
+(Legacy Optical Noir Strategy Brief) Tj
+T*
+(Legacy Optical Noir Weekend Social Launch) Tj
+T*
+(Strategy Research Brief) Tj
+T*
+(Stage: strategyresearch) Tj
+T*
+(Client: Legacy) Tj
+T*
+(Run Owner: ForgeGraph / Atlas agency pipeline) Tj
+T*
+(Launch Window: Weekend social launch) Tj
+T*
+(Primary Output: Client ZIP containing HTML, PDF, PNG, and manifest files only) Tj
+T*
+(Strategic Objective) Tj
+T*
+(Launch Legacy Optical Noir as a sharp, premium weekend social campaign centered on dark,) Tj
+T*
+(cinematic sunglasses imagery. The run must feel polished, fast-moving, and ready for client) Tj
+T*
+(use without exposing production artifacts or internal markdown files.) Tj
+T*
+(ForgeGraph owns the full run end-to-end: strategy, asset direction, media generation,) Tj
+T*
+(channel packaging, CRM handoff, analytics setup, QA, client approval, delivery, and evidence) Tj
+T*
+(capture.) Tj
+T*
+(Core Positioning) Tj
+T*
+(Legacy Optical Noir should present sunglasses as a weekend style signal: confident, refined,) Tj
+T*
+(minimal, and visually memorable.) Tj
+T*
+(The campaign should avoid loud retail language. The tone should be concise, premium, and) Tj
+T*
+(visual-first.) Tj
+T*
+(Strategic cues:) Tj
+T*
+(- Noir-inspired contrast) Tj
+T*
+(- Premium weekend styling) Tj
+T*
+(- Sunglasses as the hero product) Tj
+T*
+(- Clean, modern layouts) Tj
+T*
+(- Minimal copy) Tj
+T*
+(- No people, no logos, no embedded text in generated assets) Tj
+T*
+(Target Audience) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2209 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+54 738 Td
+(Primary audience:) Tj
+T*
+(- Style-conscious adults preparing for weekend outings) Tj
+T*
+(- Buyers drawn to premium accessories, nightlife, travel, and fashion-forward presentation) Tj
+T*
+(- Social-first consumers who respond to strong visual mood rather than detailed product) Tj
+T*
+(explanation) Tj
+T*
+(Audience mindset:) Tj
+T*
+(- Wants to look composed and intentional) Tj
+T*
+(- Responds to sleek product imagery) Tj
+T*
+(- Prefers clarity over hype) Tj
+T*
+(- Needs fast recognition of the product category) Tj
+T*
+(Department Pipeline) Tj
+T*
+(- Strategy) Tj
+T*
+(- Define positioning, offer framing, content purpose, channel roles, and success criteria) Tj
+T*
+(before any assets are produced.) Tj
+T*
+(- Brand) Tj
+T*
+(- Translate the strategy into noir-inspired visual direction, campaign tone, and layout) Tj
+T*
+(rules.) Tj
+T*
+(- Channel) Tj
+T*
+(- Prepare weekend-ready social formats and posting guidance for launch use.) Tj
+T*
+(- CRM) Tj
+T*
+(- Prepare brief, concrete WhatsApp delivery language for Mike only.) Tj
+T*
+(- Analytics) Tj
+T*
+(- Define evidence requirements, manifest structure, asset lineage, and performance tracking) Tj
+T*
+(placeholders.) Tj
+T*
+(- QA) Tj
+T*
+(- Verify every output against format, content, visual, and delivery constraints.) Tj
+T*
+(- Client Approval) Tj
+T*
+(- Package approved files into the final ZIP and preserve receipt/evidence.) Tj
+T*
+(Asset Strategy) Tj
+T*
+(Fresh media assets must be produced through a Codex-backed media worker.) Tj
+T*
+(Asset requirements:) Tj
+T*
+(- Sunglasses must be the clear subject) Tj
+T*
+(- No text inside images) Tj
+T*
+(- No logos inside images) Tj
+T*
+(- No people or body parts) Tj
+T*
+(- No brand marks) Tj
+T*
+(- No accidental signage, labels, or readable background text) Tj
+T*
+(- Premium optical/noir mood) Tj
+T*
+(- Suitable for social launch layouts and client packaging) Tj
+T*
+(Recommended asset set:) Tj
+T*
+(- Hero sunglasses image) Tj
+T*
+(- Square feed image) Tj
+T*
+(- Vertical story image) Tj
+T*
+(- Detail/crop image) Tj
+T*
+(- Dark lifestyle product scene without people) Tj
+T*
+(- Clean product-forward fallback image) Tj
+T*
+(Messaging Direction) Tj
+T*
+(Campaign copy should stay short and concrete.) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 1924 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+54 738 Td
+(Recommended message pillars:) Tj
+T*
+(- Weekend-ready style) Tj
+T*
+(- Noir-inspired confidence) Tj
+T*
+(- Premium sunglasses) Tj
+T*
+(- Clean, modern visual identity) Tj
+T*
+(- Limited launch moment without exaggerated urgency) Tj
+T*
+(Avoid:) Tj
+T*
+(- Overly promotional language) Tj
+T*
+(- Discount-first framing unless provided by client) Tj
+T*
+(- Claims about UV protection, lens technology, or materials unless verified) Tj
+T*
+(- Any unsupported product performance claims) Tj
+T*
+(Channel Direction) Tj
+T*
+(Primary channels:) Tj
+T*
+(- Instagram feed) Tj
+T*
+(- Instagram stories) Tj
+T*
+(- Facebook feed) Tj
+T*
+(- WhatsApp client delivery to Mike only) Tj
+T*
+(Social outputs should prioritize visual impact and quick comprehension. Copy should be) Tj
+T*
+(minimal and paired with strong product imagery.) Tj
+T*
+(WhatsApp Delivery Rule) Tj
+T*
+(WhatsApp delivery must go to Mike only.) Tj
+T*
+(Message must be brief and concrete:) Tj
+T*
+(> Mike, the Legacy Optical Noir weekend launch package is ready. The ZIP includes the) Tj
+T*
+(approved HTML, PDF, PNG assets, and manifest only. No markdown files are included. Receipt) Tj
+T*
+(and evidence have been preserved.) Tj
+T*
+(Client ZIP Requirements) Tj
+T*
+(The final client ZIP may contain only:) Tj
+T*
+(- .html) Tj
+T*
+(- .pdf) Tj
+T*
+(- .png) Tj
+T*
+(- manifest) Tj
+T*
+(Do not include:) Tj
+T*
+(- Markdown files) Tj
+T*
+(- Drafts) Tj
+T*
+(- Source prompts) Tj
+T*
+(- Internal notes) Tj
+T*
+(- Working files) Tj
+T*
+(- Unapproved assets) Tj
+T*
+(- Logs not intended for client delivery) Tj
+T*
+(QA Requirements) Tj
+T*
+(QA must confirm:) Tj
+T*
+(- Strategy completed before asset production) Tj
+T*
+(- Assets contain no text, logos, or people) Tj
+T*
+(- Sunglasses are visually clear) Tj
+T*
+(- HTML/PDF/PNG outputs render correctly) Tj
+T*
+(- Manifest matches included files) Tj
+T*
+(- ZIP contains approved formats only) Tj
+T*
+(- No markdown files are included) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 2552 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+54 738 Td
+(- WhatsApp delivery is addressed to Mike only) Tj
+T*
+(- Durable receipt/evidence is preserved) Tj
+T*
+(Evidence And Receipt) Tj
+T*
+(ForgeGraph must retain durable proof of:) Tj
+T*
+(- Department pipeline completion) Tj
+T*
+(- Asset generation lineage) Tj
+T*
+(- QA pass/fail status) Tj
+T*
+(- Final ZIP contents) Tj
+T*
+(- Client approval status) Tj
+T*
+(- WhatsApp delivery target) Tj
+T*
+(- Delivery timestamp) Tj
+T*
+(- Receipt or confirmation evidence) Tj
+T*
+(Success Criteria) Tj
+T*
+(The run is successful when Legacy receives a polished weekend launch package with approved) Tj
+T*
+(visuals, clear social-ready outputs, strict file hygiene, verified QA, and durable delivery) Tj
+T*
+(evidence. ForgeGraph remains accountable for the full Atlas agency run from strategy through) Tj
+T*
+(client receipt.) Tj
+T*
+T*
+(Legacy Optical Noir Message House) Tj
+T*
+(Legacy Optical Noir Message House) Tj
+T*
+(Source request: Create a client-ready Legacy Optical Noir weekend social launch package.) Tj
+T*
+(ForgeGraph must own the run end-to-end: department pipeline, strategy before assets,) Tj
+T*
+(Codex-backed media worker for fresh no-text/no-logo/no-people sunglasses assets, QA, client) Tj
+T*
+(ZIP with HTML/PDF/PNG/manifest only, WhatsApp delivery to Mike only, and durable) Tj
+T*
+(receipt/evidence. Do not send Markdown files to clients. Keep WhatsApp brief and concrete.) Tj
+T*
+(Positioning: lujo usable para CDMX; editorial, sobrio, accesible-premium.) Tj
+T*
+(Primary CTA: revisar estilos y aprobar piezas antes de publicar.) Tj
+T*
+(Tone: Spanish-first, concrete, low-hype, confident.) Tj
+T*
+T*
+(Legacy WhatsApp / DM Response Scripts) Tj
+T*
+(WhatsApp / DM scripts) Tj
+T*
+(Disponibilidad: Te confirmo modelo/color y te comparto alternativas si ya se movi\363.) Tj
+T*
+(Precio: Son piezas premium; te ayudo a elegir el par que mejor se vea y m\341s uses.) Tj
+T*
+(Cierre: \277Quieres que te aparte este modelo o prefieres ver dos opciones m\341s?) Tj
+T*
+T*
+(Legacy Manual Measurement Plan) Tj
+T*
+(Track post saves, replies, profile visits, link clicks, DMs, holds, sold/blocked status, and) Tj
+T*
+(next action every 24h. Hold live claims until connector evidence exists.) Tj
+T*
+T*
+(Legacy Channel Asset Map) Tj
+T*
+(Channel Asset Map) Tj
+T*
+T*
+(Legacy Launch QA Report) Tj
+T*
+(QA Report) Tj
+T*
+(Media jobs succeeded: 6/6) Tj
+T*
+(Client package formats: HTML, PDF, PNG, JSON manifest, ZIP; no Markdown files.) Tj
+T*
+(Policy: no live publishing claim; approval required before production launch.) Tj
+T*
+(Decision: ready for review) Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 517 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+54 738 Td
+T*
+(Source prompt:) Tj
+T*
+(Create a client-ready Legacy Optical Noir weekend social launch package. ForgeGraph must own) Tj
+T*
+(the run end-to-end: department pipeline, strategy before assets, Codex-backed media worker) Tj
+T*
+(for fresh no-text/no-logo/no-people sunglasses assets, QA, client ZIP with) Tj
+T*
+(HTML/PDF/PNG/manifest only, WhatsApp delivery to Mike only, and durable receipt/evidence. Do) Tj
+T*
+(not send Markdown files to clients. Keep WhatsApp brief and concrete.) Tj
+ET
+endstream
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000141 00000 n 
+0000000211 00000 n 
+0000000337 00000 n 
+0000002733 00000 n 
+0000002859 00000 n 
+0000005119 00000 n 
+0000005245 00000 n 
+0000007220 00000 n 
+0000007348 00000 n 
+0000009952 00000 n 
+0000010080 00000 n 
+trailer
+<< /Size 14 /Root 1 0 R >>
+startxref
+10648
+%%EOF

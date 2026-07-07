@@ -1,0 +1,8 @@
+{
+  "client": "Legacy",
+  "source": "atlas_prompt_delivery.codex_media.v1",
+  "run_id": "atlas_prompt_codex_media_20260615_221430",
+  "started_at": "2026-06-15T22:14:30.405474+00:00",
+  "operator_prompt": "Create a client-ready Legacy Optical Noir weekend social launch package that addresses reviewed PDF feedback: explain the noir rationale, clarify weekend social rollout vs logistics, include visible Legacy brand presence on every post asset, and QA weak images before delivery.",
+  "posts": []
+}

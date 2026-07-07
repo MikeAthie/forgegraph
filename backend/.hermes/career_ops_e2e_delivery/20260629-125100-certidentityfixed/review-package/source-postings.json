@@ -1,0 +1,65 @@
+{
+  "run_date": "2026-06-29",
+  "selection_policy": {
+    "priority": "remote LATAM / Mexico eligible roles using Python, JavaScript/TypeScript, Go, React, APIs, PostgreSQL/data systems, AI workflows",
+    "excluded_primary_stacks": [
+      "Java",
+      "Kotlin",
+      "Scala",
+      "Spring-centered"
+    ],
+    "excluded_languages": [
+      "German",
+      "Mandarin",
+      "Chinese"
+    ],
+    "employer_facing_side_effects_allowed": false
+  },
+  "postings": [
+    {
+      "title": "Senior Full Stack Engineer (Backend Focus)",
+      "company": "Remote Talent LATAM / U.S. digital health client",
+      "url": "https://jobs.workable.com/view/4gWYat1uHKDwoJEPY4gh4x/senior-full-stack-engineer-(backend-focus)-%7C-remote-%7C-latam-only-%7C-85157-in-honduras-at-remote-talent-latam",
+      "location": "Remote LATAM only; English resume required; 9 AM-5 PM schedule",
+      "provider": "web_search_20260629_workable",
+      "salary": "$6,500 USD/month",
+      "description": "Backend-first full stack engineer for U.S.-based digital health company in regulated healthcare environment. Primarily design and ship FastAPI services and REST APIs; APIs for AI consumption and/or EMR/EHR integrations; clinical systems, identity/access, payments, insurance, messaging, patient interaction. TypeScript, React, Next.js collaboration; PostgreSQL RDS/Aurora, SQLAlchemy, Alembic, Redis; Celery, RabbitMQ, background jobs, webhooks, notifications; Datadog, Sentry; pytest, Playwright, GitHub Actions CI/CD; correctness, security, user experience, production ownership. LATAM only."
+    },
+    {
+      "title": "Senior Full-stack Engineer (backend-leaning)",
+      "company": "South Geeks",
+      "url": "https://jobs.ashbyhq.com/southgeeks/7c137ebe-e525-4533-94a5-0b1da517485d",
+      "location": "Remote; LATAM talent network; 100% Eastern Time overlap",
+      "provider": "web_search_20260629_ashby",
+      "salary": "USD payment; amount not listed",
+      "description": "Senior Full-Stack Engineer backend-leaning for health-tech AI platform automating medical device research, documentation, and workflows. 6-10 years experience, strong Python and JavaScript/TypeScript, React frontend, GraphQL, Neo4j knowledge graph, production AI/LLM integration beyond prompting, MCP server experience, FastAPI nice-to-have, regulated domains/medical device/pharma/health-tech nice-to-have, vector databases, RAG, agentic AI patterns, workflow automation. Daily product scoping, end-of-day demos, customer-reported bug fixes, architectural decisions, GitHub-tracked work, strong English communication."
+    },
+    {
+      "title": "Founding Senior Software Engineer (USA + LATAM)",
+      "company": "Clipbook",
+      "url": "https://jobs.ashbyhq.com/clipbook/a83afbff-3d1e-466e-8c1c-302dceb136e8",
+      "location": "Remote; Brazil, Argentina, Colombia, Mexico, San Francisco",
+      "provider": "web_search_20260629_ashby",
+      "salary": "Not listed",
+      "description": "Founding Senior Software Engineer for platform ingesting, comprehending, summarizing, and surfacing insights from traditional news, TV, podcast, social media, and internet data at scale across text, audio, and video in real time. Architect and build core systems, own features end-to-end, integrate AI into real-world workflows including RAG pipelines, embeddings, prompt execution, agentic systems, fine-tuned models, build scalable APIs and services, reliability/security/customer experience. Technical depth: backend Python, TypeScript, PostgreSQL, high-concurrency systems; data engineering Spark/Kafka/Flink/BigQuery/streaming/ETL; distributed systems; cloud infrastructure, Docker/K8s, CI/CD; excellent communication."
+    },
+    {
+      "title": "Senior Software Engineer (Python)",
+      "company": "RYZ Labs",
+      "url": "https://jobs.lever.co/RyzLabs/a9dc1f82-1cc3-4030-9405-cb566db5a62a",
+      "location": "Argentina / Remote; distributed US and LatAm teams",
+      "provider": "web_search_20260629_lever",
+      "salary": "Not listed",
+      "description": "Senior Software Engineer for client team helping developers build software quickly with real-time observability insights. Stack includes Python, TypeScript, Next.js, GraphQL across web applications, APIs, data pipelines, SDKs. Requirements: 6+ years software engineering, 4+ years Python and related frameworks, API and system design, relational databases such as PostgreSQL, AI coding tools like Claude Code, Codex, Cursor, GitHub Copilot, continuous improvement. Standouts: JavaScript/TypeScript with Node.js and React/Next.js/Vue, Kafka or other data pipeline technologies, open source experience, ClickHouse, Elasticsearch, Redis, Memcache, BigQuery, GCP, Kubernetes. Responsibilities: product features, full-stack solutions, codebase/systems improvement, on-call, documentation, technical specs, collaboration with engineers/product/designers."
+    },
+    {
+      "title": "Software Engineer - Applied AI",
+      "company": "Belvo",
+      "url": "https://jobs.ashbyhq.com/belvo/5724e5fc-93ed-45e4-9cb8-739bd9425d9d",
+      "location": "S\u00e3o Paulo / Mexico City / Remote",
+      "provider": "web_search_20260629_ashby",
+      "salary": "Not listed",
+      "description": "Software Engineer - Applied AI in Belvo Intelligence Squad, open finance API platform in Latin America. Build platforms, tools, abstractions, and patterns that let Belvo teams build AI workflows. Hands-on AI product lifecycle: prototype, evaluate, deploy, operate production AI systems, improve shared AI foundations, internal assistants, customer-facing AI experiences, reusable AI infrastructure, agent abstractions, observability, evaluation tooling, guardrails, shared workflows. AI-native daily engineering with agents and copilots. Belvo is remote-friendly with Mexico City/S\u00e3o Paulo offices, cross-functional autonomous teams, continuous delivery, developer-first APIs, pragmatic technical excellence and customer feedback loops."
+    }
+  ]
+}

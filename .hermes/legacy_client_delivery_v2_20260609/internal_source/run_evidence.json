@@ -1,0 +1,30 @@
+{
+  "strategy_created_before_assets": true,
+  "image_urls": [
+    "https://v3b.fal.media/files/b/0a9da764/VSBsV2cx7IS8JcVX6MYDC_bUWfkJk7.png",
+    "https://v3b.fal.media/files/b/0a9da765/Y7LUOpFhjdlBL-19vTPdG_Gx0o3iEM.png",
+    "https://v3b.fal.media/files/b/0a9da766/amzOLiKkY2YNfw14CxWRp_WbcduRa3.png",
+    "https://v3b.fal.media/files/b/0a9da767/Um5XNp9DprMwIwGkGZ2rj_ySzcP5U1.png",
+    "https://v3b.fal.media/files/b/0a9da768/Ol1z71Ay5aKbfWNsVRfHg_mCxw4OtR.png",
+    "https://v3b.fal.media/files/b/0a9da768/wDlDnlx10WQS6gLYDBOrK_cUMiqawj.png"
+  ],
+  "raw_assets": [
+    "legacy_optical_noir_ai_raw_01.png",
+    "legacy_optical_noir_ai_raw_02.png",
+    "legacy_optical_noir_ai_raw_03.png",
+    "legacy_optical_noir_ai_raw_04.png",
+    "legacy_optical_noir_ai_raw_05.png",
+    "legacy_optical_noir_ai_raw_06.png"
+  ],
+  "final_assets": [
+    "legacy_optical_noir_post_01.png",
+    "legacy_optical_noir_post_02.png",
+    "legacy_optical_noir_post_03.png",
+    "legacy_optical_noir_post_04.png",
+    "legacy_optical_noir_post_05.png",
+    "legacy_optical_noir_post_06.png"
+  ],
+  "client_deliverable_html": "Legacy_Optical_Noir_Entrega_Inicial.html",
+  "no_markdown_in_client_zip": true,
+  "created_at": "2026-06-09T21:51:42.536324+00:00"
+}

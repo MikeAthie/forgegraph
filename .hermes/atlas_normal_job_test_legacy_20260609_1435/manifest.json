@@ -1,0 +1,111 @@
+{
+  "schema": "atlas.normal_job_test_package.v1",
+  "client": "Legacy",
+  "campaign": "Optical Noir",
+  "created_at": "2026-06-09T20:49:16.389135+00:00",
+  "scope": [
+    "account_brief_context_pack",
+    "strategy_brief",
+    "message_house_brand_content_pack",
+    "channel_plan",
+    "creative_asset_map",
+    "publication_ready_drafts_assets"
+  ],
+  "excluded_by_request": [
+    "crm_lifecycle_scripts",
+    "measurement_plan",
+    "qa_compliance_report",
+    "client_approval_packet",
+    "deployment_receipts",
+    "performance_report"
+  ],
+  "quality_checks": {
+    "no_placeholder_tokens": true,
+    "no_ai_meta_language": true,
+    "approval_caveat_present": true,
+    "requested_deliverable_count": 6,
+    "publication_asset_count": 7
+  },
+  "files": [
+    {
+      "path": "00_README_ENTREGA.md",
+      "bytes": 857,
+      "sha256": "0e95f87ec7280bd5962f26ec250117e998a1acb966bd940f145ba06b00c71136"
+    },
+    {
+      "path": "01_account_brief_context_pack.md",
+      "bytes": 2949,
+      "sha256": "ed70a4b83b46f3a8ba3967f5e5bd363cd0eb82e1f63b8c52c23133fd72a08eff"
+    },
+    {
+      "path": "02_strategy_brief.md",
+      "bytes": 2733,
+      "sha256": "6cf37c89495c33a13d49a8e821f0a730b02c47062727fe6f5c46dfb596aa1935"
+    },
+    {
+      "path": "03_message_house_brand_content_pack.md",
+      "bytes": 2559,
+      "sha256": "b8f2bce5b25bbed9631cb1f458fb25b33a37617e51805eaae671b8a66c8646cb"
+    },
+    {
+      "path": "04_channel_plan.md",
+      "bytes": 2247,
+      "sha256": "fec27df8a897d6517ad8be85dbc32551528e2cf7c469d63e56d5ce714e0afdcc"
+    },
+    {
+      "path": "05_creative_asset_map.md",
+      "bytes": 2103,
+      "sha256": "967bd25257ace9587a90b43d6adf4d31daaf655568ba4b5c4a594321812bc948"
+    },
+    {
+      "path": "06_publication_ready_drafts_assets.md",
+      "bytes": 3015,
+      "sha256": "06d591dad02dc263784dea9b53e704429be1c508c7cb37dfdf97474d9b2023dd"
+    },
+    {
+      "path": "assets/legacy_ig_01_launch.png",
+      "bytes": 774796,
+      "sha256": "7c7e0ef878b601001717f7b2a8fd99d69115bf95d6f3266f4d0673d07d4df618"
+    },
+    {
+      "path": "assets/legacy_ig_02_monroe.png",
+      "bytes": 132333,
+      "sha256": "53787b310bd9e8cbc2ea3679fc70023d3e4b8265aa070eb7dc50e14ecfc08645"
+    },
+    {
+      "path": "assets/legacy_ig_03_low_stock.png",
+      "bytes": 143273,
+      "sha256": "26850db9042567a124865eb872e18bcb168e68beaa956c50b348620b439f29b9"
+    },
+    {
+      "path": "assets/legacy_ig_04_editorial.png",
+      "bytes": 432437,
+      "sha256": "096220820f1c26bed4eef116a46607b5ea3360a2222e0bcaea914b15ec919419"
+    },
+    {
+      "path": "assets/legacy_ig_05_guide.png",
+      "bytes": 221222,
+      "sha256": "d163903f5b1291b691652af984fcdb251e06123e517ab160a494fa90c974810c"
+    },
+    {
+      "path": "assets/legacy_ig_06_promo.png",
+      "bytes": 145531,
+      "sha256": "51cdff873ceb0f2302a7e64faaf8207973678207234c73836323f1d6cd786274"
+    },
+    {
+      "path": "assets/legacy_reel_01_optical_noir.mp4",
+      "bytes": 221579,
+      "sha256": "c7872a44457d5e7b3ace81374887f8b61b76ad1b6037db8e61300f42cee27798"
+    },
+    {
+      "path": "Legacy_Atlas_Entrega_Inicial.html",
+      "bytes": 24579,
+      "sha256": "c3cc811df983653654e4b801ea016056e1abcd878bf28a7c7996b8563429adcf"
+    },
+    {
+      "path": "whatsapp_message.txt",
+      "bytes": 403,
+      "sha256": "87bf7e6255b434fd85039d8f96127f7f2e2e20761d8898ae84f38e22ede892e2"
+    }
+  ]
+}

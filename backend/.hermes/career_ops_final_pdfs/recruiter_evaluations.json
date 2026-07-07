@@ -1,0 +1,100 @@
+{
+  "reports": [
+    {
+      "asset_version_id": "fd3e7ca2-d2a5-405a-a1ed-721e4c1a1823",
+      "external_side_effects_allowed": false,
+      "index": 1,
+      "opportunity_title": "Jobgether partner company \u2014 Backend Developer (Python and FastAPI)",
+      "overall_score": 95,
+      "recommendation": "approve_for_human_send_review",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 87,
+        "credibility": 100,
+        "presentation": 100,
+        "professional_delivery": 95,
+        "role_fit": 95
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ]
+    },
+    {
+      "asset_version_id": "3cece21a-c87d-4579-86fa-82c6c1ef7df7",
+      "external_side_effects_allowed": false,
+      "index": 2,
+      "opportunity_title": "Jobs Ai \u2014 Python Engineer (Remote)",
+      "overall_score": 94,
+      "recommendation": "approve_for_human_send_review",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 86,
+        "credibility": 100,
+        "presentation": 100,
+        "professional_delivery": 95,
+        "role_fit": 90
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ]
+    },
+    {
+      "asset_version_id": "fc01eaaa-d94f-4120-b8e7-062b4266c028",
+      "external_side_effects_allowed": false,
+      "index": 3,
+      "opportunity_title": "EnglishJobs Spain listing \u2014 Backend Engineer (Python)",
+      "overall_score": 95,
+      "recommendation": "approve_for_human_send_review",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 86,
+        "credibility": 100,
+        "presentation": 100,
+        "professional_delivery": 95,
+        "role_fit": 95
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ]
+    },
+    {
+      "asset_version_id": "67e8816e-649f-43b0-a752-641b2c5aa5b8",
+      "external_side_effects_allowed": false,
+      "index": 4,
+      "opportunity_title": "DailyRemote listings \u2014 Remote Backend Engineer Jobs in Spain",
+      "overall_score": 96,
+      "recommendation": "approve_for_human_send_review",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 86,
+        "credibility": 100,
+        "presentation": 100,
+        "professional_delivery": 95,
+        "role_fit": 100
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ]
+    }
+  ]
+}

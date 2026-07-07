@@ -1,0 +1,67 @@
+{
+  "artifacts": {
+    "html": {
+      "bytes": 7596,
+      "content_type": "text/html; charset=utf-8",
+      "filename": "legacy-atlas-growth-agency-os-strategy-report.html",
+      "path": ".hermes\\forgegraph_strategy_report_smoke\\forgegraph_strategy_report_20260610_160953\\legacy-atlas-growth-agency-os-strategy-report.html",
+      "traceability_sections": [
+        "execution_plan",
+        "executive_summary",
+        "insights",
+        "iteration_story",
+        "key_decisions",
+        "recommendations",
+        "risks_tradeoffs",
+        "strategy_narrative"
+      ]
+    },
+    "md": {
+      "bytes": 6689,
+      "content_type": "text/markdown; charset=utf-8",
+      "filename": "legacy-atlas-growth-agency-os-strategy-report.md",
+      "path": ".hermes\\forgegraph_strategy_report_smoke\\forgegraph_strategy_report_20260610_160953\\legacy-atlas-growth-agency-os-strategy-report.md",
+      "traceability_sections": [
+        "execution_plan",
+        "executive_summary",
+        "insights",
+        "iteration_story",
+        "key_decisions",
+        "recommendations",
+        "risks_tradeoffs",
+        "strategy_narrative"
+      ]
+    },
+    "pdf": {
+      "bytes": 10807,
+      "content_type": "application/pdf",
+      "filename": "legacy-atlas-growth-agency-os-strategy-report.pdf",
+      "path": ".hermes\\forgegraph_strategy_report_smoke\\forgegraph_strategy_report_20260610_160953\\legacy-atlas-growth-agency-os-strategy-report.pdf",
+      "traceability_sections": [
+        "execution_plan",
+        "executive_summary",
+        "insights",
+        "iteration_story",
+        "key_decisions",
+        "recommendations",
+        "risks_tradeoffs",
+        "strategy_narrative"
+      ]
+    }
+  },
+  "asset_id": "a1b4277b-5603-485b-a522-2a9e1bf91c56",
+  "asset_version_id": "175e691a-4669-4312-b3d6-3ecb1af98bd9",
+  "client_zip": ".hermes\\forgegraph_strategy_report_smoke\\forgegraph_strategy_report_20260610_160953\\Legacy_Optical_Noir_Strategy_Report_FORGEGRAPH.zip",
+  "client_zip_bytes": 6779,
+  "company_id": "151bc1bf-1b9a-4954-90a7-ff823f4a59b9",
+  "operation_id": "f829f09c-1a70-47b4-8899-e1f37ae0ae6e",
+  "out_dir": ".hermes\\forgegraph_strategy_report_smoke\\forgegraph_strategy_report_20260610_160953",
+  "quality_checks": {
+    "bad_visible_tokens": [],
+    "client_zip_has_markdown": false,
+    "html_bytes": 7596,
+    "pdf_bytes": 10807,
+    "pdf_starts_with_pdf_header": true
+  },
+  "run_id": "forgegraph_strategy_report_20260610_160953"
+}

@@ -1,0 +1,67 @@
+{
+  "schema": "forgegraph.client_delivery_package.v2",
+  "client": "Legacy",
+  "campaign": "Optical Noir",
+  "created_at": "2026-06-09T21:53:10.047364+00:00",
+  "deliverables": [
+    "Account brief / context pack",
+    "Strategy brief",
+    "Message house / brand-content pack",
+    "Channel plan",
+    "Creative asset map",
+    "Publication-ready drafts/assets"
+  ],
+  "delivery_constraints": {
+    "markdown_files_in_client_package": 0,
+    "strategy_created_before_assets": true,
+    "assets_policy": "fresh AI-generated, campaign-aligned visuals; no recycled prior draft assets",
+    "whatsapp_policy": "brief message plus attachment, no long-form deliverables pasted into chat"
+  },
+  "files": [
+    {
+      "path": "assets/legacy_optical_noir_post_01.png",
+      "bytes": 1375688,
+      "sha256": "75f2316792a0ee06eed1f08cab8cf0d571f25c820cc8472d18eb18b4a56146e9"
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_02.png",
+      "bytes": 1255429,
+      "sha256": "fd021127801f63e831b062a7c1c954e725d0d1157be1023087060d56cf5c2377"
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_03.png",
+      "bytes": 1197309,
+      "sha256": "b5be5a1d0409034dce3f12b8c0d7821a9efd34ec86220347c39d825782ff58a0"
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_04.png",
+      "bytes": 1451093,
+      "sha256": "e046fee5cef8fe3153b389791e68c6d138b91499c3ca68d63b0f3eebc047783f"
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_05.png",
+      "bytes": 1420576,
+      "sha256": "3b0ad4b074fbf974c9e324bbefa0b54c9362f22fc192fe03eb7fb62dab8cbcad"
+    },
+    {
+      "path": "assets/legacy_optical_noir_post_06.png",
+      "bytes": 1009624,
+      "sha256": "f9f4a49e509cf0e63faf14b171526057571fb617e3c0c562c67a43446ced0d0b"
+    },
+    {
+      "path": "deliverables/Legacy_Optical_Noir_Entrega_Inicial.html",
+      "bytes": 10392,
+      "sha256": "fbf5c169942b7523768b0635134d39bca35514ea0a61d9a6a37c1e0589191403"
+    },
+    {
+      "path": "deliverables/Legacy_Optical_Noir_Entrega_Inicial.pdf",
+      "bytes": 10302188,
+      "sha256": "19a2fdc07a8da314ffbd60887363dee9d99d4b0154df1028e20b31aec24ce870"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2202,
+      "sha256": "d7490b04bfd8c3d15484fa5de913feafb2a88068442f9b2ebbe35ffabefa2111"
+    }
+  ]
+}

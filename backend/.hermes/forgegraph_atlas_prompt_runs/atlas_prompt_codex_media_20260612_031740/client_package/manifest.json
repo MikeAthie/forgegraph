@@ -1,0 +1,103 @@
+{
+  "run_id": "atlas_prompt_codex_media_20260612_031740",
+  "source": "atlas_prompt_delivery.codex_media.v1",
+  "engagement_id": "5efcc7ad-7e1d-4a5d-b432-5053efc1e04d",
+  "whiteboard_id": "44b9685d-5d14-4cda-a081-84e2de181a38",
+  "client": "Legacy",
+  "prompt_boundary": "Hermes/operator supplied one prompt; ForgeGraph executed departments, Codex media worker, package, and delivery.",
+  "media": [
+    {
+      "post": 1,
+      "filename": "assets/legacy_optical_noir_post_01.png",
+      "media_generation_job_id": "e59e0c78-cc1b-49c4-9d93-84be22af17b9",
+      "asset_id": "024d7611-e885-4239-bde7-95bcfcc5fb8d",
+      "asset_version_id": "e721fbde-aea1-4a0a-9927-fa4ddf13b4b6",
+      "asset_source": "forgegraph_media_generation_job",
+      "quality_tier": "placeholder_review_asset",
+      "production_quality": false
+    },
+    {
+      "post": 2,
+      "filename": "assets/legacy_optical_noir_post_02.png",
+      "media_generation_job_id": "d9efcffb-cb94-4da6-a54a-812ee89ae872",
+      "asset_id": "ec0b2f62-a9f9-4402-89e2-98864235424e",
+      "asset_version_id": "f1b362fc-6fda-41f1-852d-be57ca62c8e6",
+      "asset_source": "forgegraph_media_generation_job",
+      "quality_tier": "placeholder_review_asset",
+      "production_quality": false
+    },
+    {
+      "post": 3,
+      "filename": "assets/legacy_optical_noir_post_03.png",
+      "media_generation_job_id": "492219f7-f8fc-4a67-8259-1e7b8a6fed6d",
+      "asset_id": "36bbd13a-3e23-49ff-ad3b-c7154c52a0f6",
+      "asset_version_id": "79f55ade-f638-4efc-a43c-2827472bdb52",
+      "asset_source": "forgegraph_media_generation_job",
+      "quality_tier": "placeholder_review_asset",
+      "production_quality": false
+    },
+    {
+      "post": 4,
+      "filename": "assets/legacy_optical_noir_post_04.png",
+      "media_generation_job_id": "348b4b15-97a2-4416-b7fa-b5f32c3ccafc",
+      "asset_id": "491205dd-a08b-4a7c-b613-e44de12a8ef6",
+      "asset_version_id": "1a972deb-2209-4b17-90a4-46e6625219b6",
+      "asset_source": "forgegraph_media_generation_job",
+      "quality_tier": "placeholder_review_asset",
+      "production_quality": false
+    },
+    {
+      "post": 5,
+      "filename": "assets/legacy_optical_noir_post_05.png",
+      "media_generation_job_id": "d8bb09b7-86cf-4e0c-bda7-f8b0e5b6cd1d",
+      "asset_id": "f98d05c2-3294-462c-b76b-4b4d618985c1",
+      "asset_version_id": "1dd937c0-aad0-4bcf-86a1-cadd56e13590",
+      "asset_source": "forgegraph_media_generation_job",
+      "quality_tier": "placeholder_review_asset",
+      "production_quality": false
+    },
+    {
+      "post": 6,
+      "filename": "assets/legacy_optical_noir_post_06.png",
+      "media_generation_job_id": "297f7466-2361-4c6a-86be-62445dc9acaf",
+      "asset_id": "43e8fdfb-e1af-44e6-9254-4ecca4da1330",
+      "asset_version_id": "a3be9049-f7e9-4ec2-ad0a-35606fdcaed6",
+      "asset_source": "forgegraph_media_generation_job",
+      "quality_tier": "placeholder_review_asset",
+      "production_quality": false
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "8ffc0d71-0ca3-4e5b-9276-63debdc64049",
+      "type": "codex_strategy_brief",
+      "title": "Legacy Optical Noir Strategy Brief"
+    },
+    {
+      "id": "d18e9b7f-4c4a-436f-ae8a-ec93b1213bbd",
+      "type": "message_house",
+      "title": "Legacy Optical Noir Message House"
+    },
+    {
+      "id": "c4ce5c3d-05b2-404e-b1f4-f29f25de6ebb",
+      "type": "crm_scripts",
+      "title": "Legacy WhatsApp / DM Response Scripts"
+    },
+    {
+      "id": "432dd8a5-0aa2-4c9b-95e1-57d966178ea6",
+      "type": "measurement_plan",
+      "title": "Legacy Manual Measurement Plan"
+    },
+    {
+      "id": "38b4abf5-abfc-4bc5-aaa0-aebed538d841",
+      "type": "channel_asset_map",
+      "title": "Legacy Channel Asset Map"
+    },
+    {
+      "id": "dead8352-d25d-4b22-a714-0bbccb475587",
+      "type": "qa_report",
+      "title": "Legacy Launch QA Report"
+    }
+  ],
+  "client_files_policy": "No Markdown files included."
+}

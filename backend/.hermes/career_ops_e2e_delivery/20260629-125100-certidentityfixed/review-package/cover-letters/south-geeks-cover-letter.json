@@ -1,0 +1,47 @@
+{
+  "claim_source_map": [
+    {
+      "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+      "source_ref": {
+        "index": 0,
+        "type": "cv_proof_point"
+      }
+    },
+    {
+      "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+      "source_ref": {
+        "index": 1,
+        "type": "cv_proof_point"
+      }
+    }
+  ],
+  "format": "cover_letter_v1",
+  "opportunity": {
+    "employer_name": "South Geeks",
+    "id": "615aba05-edd4-45a1-ac7f-979b89963451",
+    "job_url": "https://jobs.ashbyhq.com/southgeeks/7c137ebe-e525-4533-94a5-0b1da517485d",
+    "role_title": "Senior Full-stack Engineer (backend-leaning)"
+  },
+  "paragraphs": [
+    "I am interested in the Senior Full-stack Engineer (backend-leaning) role at South Geeks because it aligns with my source-backed experience in TypeScript, FastAPI, Python. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+    "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+    "I would welcome a conversation about how this background can support South Geeks's work on Senior Full-stack Engineer (backend-leaning)."
+  ],
+  "quality": {
+    "external_side_effects_allowed": false,
+    "live_ready": false,
+    "no_invented_candidate_facts": true,
+    "source_backed_claims": true
+  },
+  "source_refs": [
+    {
+      "index": 0,
+      "type": "cv_proof_point"
+    },
+    {
+      "index": 1,
+      "type": "cv_proof_point"
+    }
+  ],
+  "status": "draft"
+}

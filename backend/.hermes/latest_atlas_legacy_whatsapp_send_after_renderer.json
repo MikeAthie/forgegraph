@@ -1,0 +1,17 @@
+{
+  "engagement_id": "5efcc7ad-7e1d-4a5d-b432-5053efc1e04d",
+  "media_job_ids": [
+    "e59e0c78-cc1b-49c4-9d93-84be22af17b9",
+    "d9efcffb-cb94-4da6-a54a-812ee89ae872",
+    "492219f7-f8fc-4a67-8259-1e7b8a6fed6d",
+    "348b4b15-97a2-4416-b7fa-b5f32c3ccafc",
+    "d8bb09b7-86cf-4e0c-bda7-f8b0e5b6cd1d",
+    "297f7466-2361-4c6a-86be-62445dc9acaf"
+  ],
+  "media_message_id": "3EB0044130C17DFF77A88A",
+  "package_path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260612_031740\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+  "package_sha256": "d14f5137af2701522f17cd8cd9f82686ea7606e952db04015036a3db3457dead",
+  "receipt_id": "35c4cc45-4eeb-4916-bd41-15f948a3384c",
+  "text_message_id": "3EB0CF96DA822991075E7D",
+  "whiteboard_id": "44b9685d-5d14-4cda-a081-84e2de181a38"
+}

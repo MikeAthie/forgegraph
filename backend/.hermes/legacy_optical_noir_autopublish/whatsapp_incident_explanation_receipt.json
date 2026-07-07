@@ -1,0 +1,13 @@
+{
+  "sent_at": "2026-07-02T01:28:17.952003+00:00",
+  "chatId": "5215525595619@s.whatsapp.net",
+  "status": 200,
+  "response": {
+    "success": true,
+    "messageId": "3EB0AF4109A826E06144E8",
+    "messageIds": [
+      "3EB0AF4109A826E06144E8"
+    ]
+  },
+  "message_preview": "Hola — ya quedó publicada la versión autorizada del post Legacy Optical Noir:\nhttps://www.instagram.com/p/DaRaDjOkcAB/\n\nQué falló: el autopublisher estaba confiando demasiado en el schedule local y en archivos previamente generados. Eso permitió que un asset que ya debía estar rechazado siguiera referenciado en la cola de publicación, aunque no debía seguir disponible.\n\nQué cambiamos para que no vuelva a pasar:\n1. Pausamos el autopublisher y purgamos el asset no autorizado de la cola, DB, storag"
+}

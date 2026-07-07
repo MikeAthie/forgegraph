@@ -1,0 +1,3 @@
+Legacy Optical Noir — handoff listo para revisión
+
+Adjunto paquete remade para revisar formato/estructura contra el output actual de ForgeGraph. Incluye executive handoff HTML/PDF, 7 entregables HTML, hero visual y manifest.

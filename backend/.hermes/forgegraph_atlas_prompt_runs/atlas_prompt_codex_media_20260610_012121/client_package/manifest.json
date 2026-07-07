@@ -1,0 +1,85 @@
+{
+  "run_id": "atlas_prompt_codex_media_20260610_012121",
+  "source": "atlas_prompt_delivery.codex_media.v1",
+  "engagement_id": "d3dc8dbd-9eb4-4361-a24d-7d1006e57cf9",
+  "whiteboard_id": "f4f52d28-502b-449f-b133-f6caba760113",
+  "client": "Legacy",
+  "prompt_boundary": "Hermes/operator supplied one prompt; ForgeGraph executed departments, Codex media worker, package, and delivery.",
+  "media": [
+    {
+      "post": 1,
+      "filename": "assets/legacy_optical_noir_post_01.png",
+      "media_generation_job_id": "9eadc3a3-6bda-424b-b477-a281c1d2b611",
+      "asset_id": "835813ef-076d-4078-879f-900763e670b2",
+      "asset_version_id": "af88d08f-3909-46b7-ae2d-f1d81d6b5732"
+    },
+    {
+      "post": 2,
+      "filename": "assets/legacy_optical_noir_post_02.png",
+      "media_generation_job_id": "6baed141-c0e5-4766-a284-b84fe8a18faf",
+      "asset_id": "d8c930b1-776c-41c4-a73b-e701bd66205b",
+      "asset_version_id": "86c62337-aef7-4927-9122-1c6309d88716"
+    },
+    {
+      "post": 3,
+      "filename": "assets/legacy_optical_noir_post_03.png",
+      "media_generation_job_id": "5730ef67-e174-49fb-a253-4a041601227c",
+      "asset_id": "befdc0c1-6f80-4726-b4d0-69707a562678",
+      "asset_version_id": "25086aca-e37c-4e16-8f41-a4de600c5798"
+    },
+    {
+      "post": 4,
+      "filename": "assets/legacy_optical_noir_post_04.png",
+      "media_generation_job_id": "f382e868-1867-4d19-99d9-8d4bfa5ece3d",
+      "asset_id": "9475dd0d-ea7e-4cd0-9328-fcd27bfe0011",
+      "asset_version_id": "5ae96603-9400-4152-87c0-d455f90c5347"
+    },
+    {
+      "post": 5,
+      "filename": "assets/legacy_optical_noir_post_05.png",
+      "media_generation_job_id": "a67e1f5d-1696-46aa-bad6-db0aaf315f84",
+      "asset_id": "b82f9a5b-1f47-4dd8-9992-5cbe646a1b16",
+      "asset_version_id": "177c3bbd-491e-415e-9e88-07d2c80dcd87"
+    },
+    {
+      "post": 6,
+      "filename": "assets/legacy_optical_noir_post_06.png",
+      "media_generation_job_id": "1e95105c-93a9-48ad-850d-87103202c336",
+      "asset_id": "81afe1ce-5c15-4d76-9d8d-dd5a3aa7f8d6",
+      "asset_version_id": "a39f7848-1fe6-4aa1-b79d-8e6e6f323866"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "61b22b98-5e25-4c4f-95a2-40ed632c5bc9",
+      "type": "codex_strategy_brief",
+      "title": "Legacy Optical Noir Strategy Brief"
+    },
+    {
+      "id": "d447eb86-0e85-483c-80ec-f5d693d8f9ed",
+      "type": "message_house",
+      "title": "Legacy Optical Noir Message House"
+    },
+    {
+      "id": "d336eb5b-a0d2-4047-bb9c-9bebaedc782c",
+      "type": "crm_scripts",
+      "title": "Legacy WhatsApp / DM Response Scripts"
+    },
+    {
+      "id": "a8944e9d-e3de-4186-96cc-d666ce2bd41d",
+      "type": "measurement_plan",
+      "title": "Legacy Manual Measurement Plan"
+    },
+    {
+      "id": "a03132c9-ee01-4bf2-ba3b-32629f8e38c5",
+      "type": "channel_asset_map",
+      "title": "Legacy Channel Asset Map"
+    },
+    {
+      "id": "486caff6-3172-456a-8cbd-4209b3f98aad",
+      "type": "qa_report",
+      "title": "Legacy Launch QA Report"
+    }
+  ],
+  "client_files_policy": "No Markdown files included."
+}

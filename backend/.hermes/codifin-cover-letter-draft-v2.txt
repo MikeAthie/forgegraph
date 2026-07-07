@@ -1,0 +1,14 @@
+Miguel Athie
+Mexico City (CDMX)
+miguel.athien@gmail.com | +52 55 3900 3599 | GitHub: https://github.com/MikeAthie
+
+Codifin
+Re: Lead Golang & React Developer CDMX Bilingüe
+
+I am interested in the Lead Golang & React Developer CDMX Bilingüe role at Codifin because it matches the intersection of work I have been doing across SaaS-style product systems, backend services, React/Next.js interfaces, PostgreSQL-backed workflows, and data automation. I am also comfortable working bilingually in Spanish and English, with a Cambridge English C2 Proficiency certificate.
+
+At Grey Cross Developments, I have owned backend and full-stack product domains from architecture and API contracts through implementation, deployment, and iteration. That work includes REST APIs, service boundaries, async/data-processing pipelines, PostgreSQL and Redis-backed systems, React/TypeScript product surfaces, and AI-powered workflow features designed around grounded and predictable outputs.
+
+My project work maps closely to Codifin's requirements. ForgeGraph shows SaaS-style strategy automation, report generation, durable workflow state, and AI-assisted analysis. Lex Toolkit demonstrates React/Next.js plus FastAPI full-stack delivery for professional workflows. My automated trading/data-ingestion project demonstrates real-time pipelines, WebSockets, Redis, worker execution, and reliability under continuous data flow.
+
+I would welcome a conversation about how this background can support Codifin's work building robust SaaS platforms, data automation systems, AI-enabled workflows, and reliable product releases for local and international clients.

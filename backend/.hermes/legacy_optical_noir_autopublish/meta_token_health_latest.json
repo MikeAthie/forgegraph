@@ -1,0 +1,38 @@
+{
+  "checked_at": "2026-06-30T05:06:38.260060+00:00",
+  "debug_status": 200,
+  "token": {
+    "app_id": "1002335352195130",
+    "type": "USER",
+    "application": "ForgeGraph Publisher",
+    "data_access_expires_at": 1790571817,
+    "expires_at": 0,
+    "is_valid": true,
+    "scopes": [
+      "email",
+      "read_insights",
+      "pages_show_list",
+      "business_management",
+      "instagram_basic",
+      "instagram_manage_comments",
+      "instagram_content_publish",
+      "instagram_manage_messages",
+      "pages_read_engagement",
+      "pages_manage_metadata",
+      "pages_read_user_content",
+      "pages_manage_posts",
+      "pages_manage_engagement",
+      "facebook_creator_marketplace_discovery",
+      "facebook_branded_content_ads_brand",
+      "public_profile"
+    ],
+    "user_id": "10238715773365663"
+  },
+  "ig_status": 200,
+  "instagram": {
+    "id": "17841456942553235",
+    "username": "legacyeffect",
+    "media_count": 29
+  },
+  "secrets_redacted": true
+}

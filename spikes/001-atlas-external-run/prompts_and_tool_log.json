@@ -1,0 +1,58 @@
+{
+  "run_id": "atlas_external_legacy_optical_noir_20260610",
+  "goal": "Run an Atlas-style campaign workflow outside ForgeGraph to compare prompts/tool-calling against ForgeGraph's weak run.",
+  "tools_called": [
+    {
+      "tool": "image_generate",
+      "count": 6,
+      "purpose": "Generate fresh campaign-quality sunglasses assets directly from rich visual prompts instead of JSON spec + deterministic shape renderer.",
+      "provider_note": "Hermes image generation backend; returns actual image artifacts. Exact backend is user-configured/managed, not selected by ForgeGraph."
+    },
+    {
+      "tool": "write_file",
+      "purpose": "Persist prompt/tool log and package builder script."
+    },
+    {
+      "tool": "terminal",
+      "purpose": "Download generated image artifacts, build HTML/PDF/ZIP, and inspect output."
+    },
+    {
+      "tool": "vision_analyze",
+      "purpose": "Manual visual QA of generated assets/contact sheet."
+    }
+  ],
+  "strategy_prompt": "Act as Atlas, a productized premium agency operator. Create a client-facing Legacy Optical Noir weekend social launch package. Keep internal execution separate from the client handoff. The handoff must read like an approval deck: Spanish-first, polished, concise, visual, and decision-oriented. It must not expose raw prompts, markdown syntax, media job IDs, internal department stages, or QA implementation details. The campaign is for sunglasses: premium noir, no people, no text in images, no logos, no live publishing claim, approval required before production launch.",
+  "client_report_prompt": "Write the client-facing handoff in Spanish-first language for Legacy Optical Noir. Structure it as: Resumen ejecutivo, Concepto creativo, Dirección visual, Galería de assets, Copy sugerido, Checklist de lanzamiento, Decisión solicitada. Do not include source prompts, internal stage names, media job IDs, UUIDs, or operational notes. Keep it polished and approval-oriented.",
+  "image_prompts": [
+    {
+      "slot": "Post 01 / Hero noir",
+      "prompt": "Premium editorial product photography for a sunglasses weekend launch campaign, black acetate sunglasses as the only subject on smoked glass and black marble, cinematic noir lighting, controlled reflections, shallow depth of field, high-end optical catalog quality, subtle warm copper rim light, no text, no logos, no people, no hands, no watermark, square social crop.",
+      "result": "https://v3b.fal.media/files/b/0a9db01b/8YhmEf_KJUAjyl3Vn-8_D_X7wTSQfl.png"
+    },
+    {
+      "slot": "Post 02 / Ivory contrast",
+      "prompt": "Luxury still-life campaign image, sunglasses with deep charcoal lenses resting on ivory travertine stone beside a black lacquer plane, refined CDMX evening mood, fashion editorial lighting, crisp realistic materials, premium optical brand feel, clean negative space for later copy overlay, no text, no logos, no people, no watermark, square crop.",
+      "result": "https://v3b.fal.media/files/b/0a9db01c/TGpZy2ctclM0hH_QAF93p_C717HTIV.png"
+    },
+    {
+      "slot": "Post 03 / Detail macro",
+      "prompt": "Cinematic product macro of premium sunglasses, close-up hinge and lens detail, black acetate, aged copper accents, glossy reflections, dark smoke background, sophisticated noir palette, realistic commercial photography, no typography, no logos, no people, no hands, no watermark, square social asset.",
+      "result": "https://v3b.fal.media/files/b/0a9db01d/XuEi7xwvc8N2J8uTkzoik_s93NS5iU.png"
+    },
+    {
+      "slot": "Post 04 / City night reflection",
+      "prompt": "Editorial sunglasses still life for weekend social launch, one pair of black sunglasses on reflective wet glass with out-of-focus city night bokeh behind, elegant noir mood, premium fashion product ad quality, no people, no text, no logos, no watermark, square Instagram feed crop.",
+      "result": "https://v3b.fal.media/files/b/0a9db01d/JFHSlh2gIqLK196Aije_a_46vDOJ27.png"
+    },
+    {
+      "slot": "Post 05 / Assortment flat lay",
+      "prompt": "High-end optical campaign flat lay, three distinct sunglasses silhouettes arranged on dark suede and brushed metal, restrained luxury palette of black, smoke grey, ivory and warm brass, real product photography aesthetic, no labels, no typography, no logos, no people, no watermark, square crop.",
+      "result": "https://v3b.fal.media/files/b/0a9db01e/jDAMvgltwDzvpuSyFThRF_zK6sSlWh.png"
+    },
+    {
+      "slot": "Post 06 / Obsidian green lens",
+      "prompt": "Minimal luxury sunglasses hero shot, translucent dark green lenses and black frame suspended visually on polished obsidian surface, dramatic side light, premium noir editorial styling, sharp realistic reflections, sophisticated and commerce-ready, no text, no logos, no people, no hands, no watermark, square social crop.",
+      "result": "https://v3b.fal.media/files/b/0a9db01e/jdYHrlN2AbuMn7iLAhtJG_NRdFK1Vl.png"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "checks": [
+    {
+      "check": "No Markdown in client ZIP",
+      "status": "passed"
+    },
+    {
+      "check": "Fresh AI assets generated after ForgeGraph Strategy & Research completion",
+      "status": "passed"
+    },
+    {
+      "check": "Strategy before assets",
+      "status": "passed"
+    },
+    {
+      "check": "No obvious people/logos/visible text in second-pass asset contact sheet",
+      "status": "passed",
+      "note": "Post 01 and 02 were regenerated after first QA found visible text/logo risk."
+    },
+    {
+      "check": "WhatsApp copy short/concrete/casual",
+      "status": "passed"
+    }
+  ],
+  "limitations": [
+    "Assets are prepared for client review; no live publication claimed.",
+    "Inventory availability should be confirmed by client before publishing scarcity language."
+  ],
+  "score": 0.93
+}

@@ -1,0 +1,248 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 4505 >>
+stream
+0.35 w
+BT
+/F2 20 Tf
+1 0 0 1 248.40 746.00 Tm
+(MIGUEL ATHIE) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 226.80 722.00 Tm
+(Backend-leaning Software Engineer) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 72.72 708.00 Tm
+(Mexico City, MX | Mexico / Spain | miguel.athien@gmail.com | +52 55 3900 3599 | https://github.com/MikeAthie) Tj
+ET
+45.00 696.00 m 567.00 696.00 l S
+BT
+/F2 11 Tf
+1 0 0 1 45.00 685.00 Tm
+(SUMMARY) Tj
+ET
+45.00 676.00 m 567.00 676.00 l S
+BT
+/F1 9 Tf
+1 0 0 1 52.00 663.00 Tm
+(Backend-leaning Software Engineer with strong end-to-end ownership building production APIs, data) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 650.00 Tm
+(systems, AI-native workflows, and async service architectures. Experienced with Python, FastAPI,) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 637.00 Tm
+(PostgreSQL, Redis, workers, JavaScript/TypeScript, and Go-based backend services.) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 619.00 Tm
+(TECHNICAL SKILLS) Tj
+ET
+45.00 610.00 m 567.00 610.00 l S
+BT
+/F1 9 Tf
+1 0 0 1 52.00 597.00 Tm
+(Backend / APIs: Python, FastAPI, Django, Go, REST APIs, service architecture) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 584.00 Tm
+(Data & async systems: PostgreSQL, Redis, Redis Streams, Celery, workers, event-driven pipelines) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 571.00 Tm
+(AI engineering: RAG, LangGraph, agentic workflows, LLM integration, grounded outputs) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 558.00 Tm
+(Frontend / product: React, Next.js, TypeScript, dashboards, internal tools) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 545.00 Tm
+(Reliability: Prometheus, observability, retries, dry-run workflows, testing, debugging) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 527.00 Tm
+(SELECTED EXPERIENCE) Tj
+ET
+45.00 518.00 m 567.00 518.00 l S
+BT
+/F2 9 Tf
+1 0 0 1 52.00 505.00 Tm
+(Grey Cross Developments - Product Engineer) Tj
+ET
+BT
+/F2 9 Tf
+1 0 0 1 52.00 492.00 Tm
+(Jul 2022 - Present) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 479.00 Tm
+(- Owned backend products end to end, from discovery and architecture through implementation and) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 466.00 Tm
+(deployment.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 453.00 Tm
+(- Designed APIs and service boundaries with maintainable interfaces and production-minded iteration.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 440.00 Tm
+(- Built async and event-driven pipelines using PostgreSQL, Redis, workers, and structured data flows.) Tj
+ET
+BT
+/F2 9 Tf
+1 0 0 1 52.00 423.00 Tm
+(Vittahouse - Automation & Data Consultant) Tj
+ET
+BT
+/F2 9 Tf
+1 0 0 1 52.00 410.00 Tm
+(Oct 2019 - Nov 2025) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 397.00 Tm
+(- Automated accounting and audit workflows, reducing manual effort and improving recurring operational) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 384.00 Tm
+(consistency.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 371.00 Tm
+(- Built discrepancy-detection and normalization workflows to surface data issues earlier.) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 353.00 Tm
+(PROJECTS) Tj
+ET
+45.00 344.00 m 567.00 344.00 l S
+BT
+/F2 9 Tf
+1 0 0 1 52.00 331.00 Tm
+(ForgeGraph - AI-native backend platform for agentic workflows \(Go + Django\)) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 318.00 Tm
+(2026 - Present | https://github.com/MikeAthie/ForgeGraph) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 305.00 Tm
+(- Built backend services for structured project knowledge, memory, summaries, operational workflows,) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 292.00 Tm
+(retries, dry-run execution, and admin-facing endpoints.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 279.00 Tm
+(- Added reliability features including Prometheus counters, retry mechanisms, structured service) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 266.00 Tm
+(boundaries, and tests around critical workflows.) Tj
+ET
+BT
+/F2 9 Tf
+1 0 0 1 52.00 249.00 Tm
+(Lex Toolkit - AI agents for legal workflows \(Next.js + FastAPI\)) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 236.00 Tm
+(Nov 2025 - Present | https://github.com/MikeAthie/Lex-Toolkit) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 223.00 Tm
+(- Built a full-stack application with Next.js and FastAPI for professional law-practice workflows.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 210.00 Tm
+(- Developed AI agent use cases for law practice operations with product-quality delivery and clear API) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 197.00 Tm
+(contracts.) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 179.00 Tm
+(EDUCATION) Tj
+ET
+45.00 170.00 m 567.00 170.00 l S
+BT
+/F1 9 Tf
+1 0 0 1 58.00 157.00 Tm
+(- Instituto Tecnologico Autonomo de Mexico \(ITAM\) - BSc in Law - 2017) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 139.00 Tm
+(CERTIFICATIONS) Tj
+ET
+45.00 130.00 m 567.00 130.00 l S
+BT
+/F1 9 Tf
+1 0 0 1 58.00 117.00 Tm
+(- Not provided in source CV.) Tj
+ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000260 00000 n 
+0000000396 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+4952
+%%EOF

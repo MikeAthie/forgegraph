@@ -1,0 +1,296 @@
+{
+  "created_at": "2026-07-02T01:12:04.197216+00:00",
+  "post": 3,
+  "idempotency_key": "legacy-optical-noir-20260629-day-3",
+  "deleted_files": [
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_optical_noir_review_assets_ai\\legacy_optical_noir_post_03.png",
+      "sha256": "a7f6e94e8206272c6e856d1decb0c543983a35399c08d7ecbcf23c96bebe1fae",
+      "size": 1435396
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_optical_noir_review_assets_ai_branded\\legacy_optical_noir_post_03.png",
+      "sha256": "90a7443a60d691b3a97844190f069cabf0d0a42f7fe975c28b756eeed959aac8",
+      "size": 1356149
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_optical_noir_review_assets_ai_official_logo\\legacy_optical_noir_post_03.png",
+      "sha256": "a2b5f6537a1bd11edbe1a00fa46d2cb24aac37f07f72d6a713b358bb53a56d09",
+      "size": 1431593
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\review_ready_legacy_assets_20260611_0225\\legacy_optical_noir_post_03.png",
+      "sha256": "1fc938beb75e395c41ae3d7ab3b0b41e21dedf41d3b7c39a0a8c5a25830854e9",
+      "size": 1065107
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_011209\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_011647\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_012121\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_033151\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_033707\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_034054\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_034350\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260611_011953\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260611_023657\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "1fc938beb75e395c41ae3d7ab3b0b41e21dedf41d3b7c39a0a8c5a25830854e9",
+      "size": 1065107
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260611_024202\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "1fc938beb75e395c41ae3d7ab3b0b41e21dedf41d3b7c39a0a8c5a25830854e9",
+      "size": 1065107
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260612_031740\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260612_032452\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260612_033052\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "a7f6e94e8206272c6e856d1decb0c543983a35399c08d7ecbcf23c96bebe1fae",
+      "size": 1435396
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_204752\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "a7f6e94e8206272c6e856d1decb0c543983a35399c08d7ecbcf23c96bebe1fae",
+      "size": 1435396
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_205607\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "a7f6e94e8206272c6e856d1decb0c543983a35399c08d7ecbcf23c96bebe1fae",
+      "size": 1435396
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_221001\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "90a7443a60d691b3a97844190f069cabf0d0a42f7fe975c28b756eeed959aac8",
+      "size": 1356149
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_221430\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "90a7443a60d691b3a97844190f069cabf0d0a42f7fe975c28b756eeed959aac8",
+      "size": 1356149
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_222839\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "a2b5f6537a1bd11edbe1a00fa46d2cb24aac37f07f72d6a713b358bb53a56d09",
+      "size": 1431593
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_223301\\client_package\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "a2b5f6537a1bd11edbe1a00fa46d2cb24aac37f07f72d6a713b358bb53a56d09",
+      "size": 1431593
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_campaign_report_first_run\\assets\\legacy_noir_post_03_branded.jpg",
+      "sha256": "c00e35a88e880e8826e0bd8b9096e2fe94adc230d53d31d35ed07033d280dd5a",
+      "size": 195962
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_optical_noir_autopublish\\assets\\legacy_optical_noir_post_03.jpg",
+      "sha256": "990e7079d8ffba11ddca3a9844f37b71d31e911fa3e6b0cc372c9a6c93933a05",
+      "size": 234149
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\package_inspect_after_renderer\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\package_inspect_corrected\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "ac047c808d4cd2b9df62b40a5d557b0c62658bc59532ec77043a5568aeae83f8",
+      "size": 64840
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\package_inspect_final_ai\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "a7f6e94e8206272c6e856d1decb0c543983a35399c08d7ecbcf23c96bebe1fae",
+      "size": 1435396
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\pdf_renderer_smoke_20260611\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "1fc938beb75e395c41ae3d7ab3b0b41e21dedf41d3b7c39a0a8c5a25830854e9",
+      "size": 1065107
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\pdf_renderer_smoke_20260611_final\\assets\\legacy_optical_noir_post_03.png",
+      "sha256": "1fc938beb75e395c41ae3d7ab3b0b41e21dedf41d3b7c39a0a8c5a25830854e9",
+      "size": 1065107
+    }
+  ],
+  "deleted_zip_packages": [
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_011209\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "75e1da4d4e720d9531b00c1ab93e53c9e8def0b9bae885c5bb04f4cf6cbff0a5",
+      "size": 518942
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_011647\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "2fe0c815116daccc20ad6e762f8c3a4b3039074738b3c589ea54d3b093ebefd1",
+      "size": 363170
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_012121\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "03f16ee834c95c6f60282baa416d6f3695c4c92f409618a3263e054e5e52584c",
+      "size": 677785
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_033151\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "a93e08183c5aa6a876228786501cfa4d0b8f4bb04325566a884d4daa8cbc44d5",
+      "size": 689980
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_033707\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "4b644596391ec065ed0fac41ee3ac8403adbc5b21d1c1f52d967c36a2e1d5047",
+      "size": 371489
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_034054\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "3a0ad7a21482ab41676d8d9ce949923861eb2a58cf5a13eeacc80945b837edae",
+      "size": 530012
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260610_034350\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "2706813e2a177d589e596f1224d9fc1cdff781dc99e8b40f2b00f8f8cc56fee0",
+      "size": 528499
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260611_011953\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "b3be71de83aef2f499942bc04cfe3b7958bfb52b6e8d3586a42b695a79204e4b",
+      "size": 370122
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260611_023657\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "0f9caa9331b96febc90bf4a2767bd20fc01e35284854723300d68463d5f32e9d",
+      "size": 7529067
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260611_024202\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "53df26c5e809a8202e28b93f6562be7d9715204eb6a005a4f6a20677d0ab18b3",
+      "size": 7529532
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260612_031740\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "d14f5137af2701522f17cd8cd9f82686ea7606e952db04015036a3db3457dead",
+      "size": 928273
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260612_032452\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "4488571aed5af434d8ed1c81178f9aa197ce4a4213b7cd1c4800ce9e263ffa78",
+      "size": 1227168
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260612_033052\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "68998b01ed4f1b344c8a74518ad5d328504fe91f4663d9289d574306d64d6583",
+      "size": 16555022
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_204752\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "1c72b1b7966c588bdfb1de8efa58c44b97b358158add8e7349c6a29b06f69d0b",
+      "size": 16562019
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_205607\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "9103cd280792dd21ac8ccfb5e58baac4fc58010d48b055d74b23f4fc878bced0",
+      "size": 16564283
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_221001\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "66fb69a05b643b03aa39f68210d105dc7219c2110de415ae1831e11d65b039ff",
+      "size": 16241203
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_221430\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "a92ec9df52765bc748aa0c19213d3085a6be5648880b296aa25e3c630c595fe6",
+      "size": 16241269
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_222839\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "6f10c9fe0e2ad3d33d47ab7bf28e6cd1fc31ee250b6adf20cfc0abdb1e91ec6d",
+      "size": 16412692
+    },
+    {
+      "path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\forgegraph_atlas_prompt_runs\\atlas_prompt_codex_media_20260615_223301\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "909525e6cf0ca444e35c1635752a84c6c90698dd2a693475200f49f3c6ae39ae",
+      "size": 16412569
+    },
+    {
+      "path": "C:\\Users\\mathi\\Downloads\\Legacy_Optical_Noir_FORGEGRAPH_CLIENT.zip",
+      "sha256": "53df26c5e809a8202e28b93f6562be7d9715204eb6a005a4f6a20677d0ab18b3",
+      "size": 7529532
+    }
+  ],
+  "db_deleted": {
+    "publication_draft": {
+      "id": "45a4e8a5-e3bc-494d-96b5-02a7c060d69b",
+      "status": "published",
+      "asset_id": "7d0a8b7a-3afa-43c6-acaf-2f9a6288eea3",
+      "asset_version_id": "b3002309-0561-46a6-8109-eb7c51ffad4c",
+      "media_job_id": "ad0f1028-7fce-4731-a53b-3a6186fb17a6"
+    },
+    "asset_version_deleted_count": 1,
+    "asset_deleted_count": 1,
+    "media_job_deleted_count": 1
+  },
+  "schedule_update": {
+    "status": "paused_unauthorized_asset_purged",
+    "remaining_posts": [
+      1,
+      2,
+      4,
+      5,
+      6
+    ],
+    "blocked_asset_sha256_count": 7,
+    "replacement_candidates": [
+      {
+        "post": 3,
+        "asset_path": "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_campaign_report_first_run\\replacement_assets\\legacy_optical_noir_post_03_replacement_branded.jpg",
+        "status": "pending_explicit_reapproval_before_publish",
+        "note": "Existing replacement candidate; visually distinct single-product slate image. Not scheduled while cron paused."
+      }
+    ]
+  },
+  "replacement_candidates_preserved": [
+    "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_campaign_report_first_run\\replacement_assets\\legacy_optical_noir_post_03_replacement_branded.jpg",
+    "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_campaign_report_first_run\\replacement_assets\\legacy_optical_noir_post_03_replacement_raw.png",
+    "C:\\Users\\mathi\\projects\\forgegraph\\backend\\.hermes\\legacy_campaign_report_first_run\\replacement_assets\\post_03_replacement_manifest.json"
+  ],
+  "contains_no_image_bytes": true
+}

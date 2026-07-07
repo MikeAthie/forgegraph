@@ -1,0 +1,18 @@
+[
+  {
+    "target": "mike",
+    "chatId": "5215539003599@s.whatsapp.net",
+    "response": {
+      "success": true,
+      "messageId": "3EB0C309A63EE62546AB6E"
+    }
+  },
+  {
+    "target": "toy",
+    "chatId": "5215525595619@s.whatsapp.net",
+    "response": {
+      "success": true,
+      "messageId": "3EB0DF20F893A38D785231"
+    }
+  }
+]

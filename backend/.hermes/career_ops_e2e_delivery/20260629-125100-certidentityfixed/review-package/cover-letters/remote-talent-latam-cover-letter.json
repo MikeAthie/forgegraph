@@ -1,0 +1,47 @@
+{
+  "claim_source_map": [
+    {
+      "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+      "source_ref": {
+        "index": 0,
+        "type": "cv_proof_point"
+      }
+    },
+    {
+      "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+      "source_ref": {
+        "index": 1,
+        "type": "cv_proof_point"
+      }
+    }
+  ],
+  "format": "cover_letter_v1",
+  "opportunity": {
+    "employer_name": "Remote Talent LATAM / U.S. digital health client",
+    "id": "08d4b01b-5efa-4819-9f1e-e728b5025675",
+    "job_url": "https://jobs.workable.com/view/4gWYat1uHKDwoJEPY4gh4x/senior-full-stack-engineer-(backend-focus)-%7C-remote-%7C-latam-only-%7C-85157-in-honduras-at-remote-talent-latam",
+    "role_title": "Senior Full Stack Engineer (Backend Focus)"
+  },
+  "paragraphs": [
+    "I am interested in the Senior Full Stack Engineer (Backend Focus) role at Remote Talent LATAM / U.S. digital health client because it aligns with my source-backed experience in PostgreSQL, TypeScript, FastAPI. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+    "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+    "I would welcome a conversation about how this background can support Remote Talent LATAM / U.S. digital health client's work on Senior Full Stack Engineer (Backend Focus)."
+  ],
+  "quality": {
+    "external_side_effects_allowed": false,
+    "live_ready": false,
+    "no_invented_candidate_facts": true,
+    "source_backed_claims": true
+  },
+  "source_refs": [
+    {
+      "index": 0,
+      "type": "cv_proof_point"
+    },
+    {
+      "index": 1,
+      "type": "cv_proof_point"
+    }
+  ],
+  "status": "draft"
+}

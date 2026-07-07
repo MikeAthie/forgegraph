@@ -1,0 +1,37 @@
+{
+  "run_id": "legacy_forgegraph_native_v1_20260609_1710",
+  "images": [
+    {
+      "post_id": "01",
+      "job_id": "276eade2-c1ca-49d4-a463-7a24c2bcf243",
+      "url": "https://v3b.fal.media/files/b/0a9da958/81KOGaBbSP8Ot_MRkg-BQ_TGMALHN6.png",
+      "regenerated_reason": "first QA pass found visible text/logo risk; regenerated with strict no-text/no-logo prompt"
+    },
+    {
+      "post_id": "02",
+      "job_id": "a757db18-e724-47b2-9a10-47f07ab46c91",
+      "url": "https://v3b.fal.media/files/b/0a9da958/QabsmO9LDUbIrSzywRs45_bdkSAxSo.png",
+      "regenerated_reason": "first QA pass found visible text/logo risk; regenerated with strict no-text/no-logo prompt"
+    },
+    {
+      "post_id": "03",
+      "job_id": "1e2bc74e-028e-42d0-bed8-d01c4cf97b58",
+      "url": "https://v3b.fal.media/files/b/0a9da950/QFG1M2HjL0nueB8UvTvTg_mComc7oF.png"
+    },
+    {
+      "post_id": "04",
+      "job_id": "21a227bf-4ed2-46f9-9487-f2f097cb8dc7",
+      "url": "https://v3b.fal.media/files/b/0a9da952/Hn7ASMH-q8SXzTqMZKV9__aRFVa3X4.png"
+    },
+    {
+      "post_id": "05",
+      "job_id": "e7df5418-f2b7-4655-93fa-75f033019f0e",
+      "url": "https://v3b.fal.media/files/b/0a9da952/i-L1dvOYhXNuIf3f_jrLl_4IneAhz4.png"
+    },
+    {
+      "post_id": "06",
+      "job_id": "72259519-f9eb-45aa-b812-e291e79027d9",
+      "url": "https://v3b.fal.media/files/b/0a9da953/A4tyz9oSQpli6T7HlqKQP_91tRt0QC.png"
+    }
+  ]
+}

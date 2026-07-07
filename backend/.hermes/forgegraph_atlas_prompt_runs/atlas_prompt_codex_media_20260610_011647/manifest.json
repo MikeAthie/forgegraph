@@ -1,0 +1,8 @@
+{
+  "client": "Legacy",
+  "source": "atlas_prompt_delivery.codex_media.v1",
+  "run_id": "atlas_prompt_codex_media_20260610_011647",
+  "started_at": "2026-06-10T01:16:47.447610+00:00",
+  "operator_prompt": "Create a client-ready Legacy Optical Noir weekend social launch package. ForgeGraph must own the run end-to-end: department pipeline, strategy before assets, Codex-backed media worker for fresh no-text/no-logo/no-people sunglasses assets, QA, client ZIP with HTML/PDF/PNG/manifest only, WhatsApp delivery to Mike only, and durable receipt/evidence. Do not send Markdown files to clients. Keep WhatsApp brief and concrete.",
+  "posts": []
+}

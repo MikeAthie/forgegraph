@@ -1,0 +1,266 @@
+{
+  "decision": "forgegraph_v2 wins because it preserves the benchmark's named-role structure while adding Cambridge C2, Codifin stack coverage, ForgeGraph evidence with no dead repo link, and stronger source-bounded SaaS/AI/data automation framing.",
+  "ranking": [
+    {
+      "buckets": {
+        "ats_sections": {
+          "hits": [
+            "summary",
+            "experience",
+            "projects",
+            "education",
+            "skills",
+            "certifications"
+          ],
+          "max": 6,
+          "missing": [],
+          "points": 6
+        },
+        "codifin_role": {
+          "hits": [
+            "saas",
+            "data automation",
+            "clean",
+            "product",
+            "qa",
+            "reliable releases",
+            "ai",
+            "workflow",
+            "linux",
+            "git",
+            "docker",
+            "ci/cd",
+            "graphql"
+          ],
+          "max": 13,
+          "missing": [],
+          "points": 13
+        },
+        "core_stack": {
+          "hits": [
+            "golang",
+            "react",
+            "postgresql",
+            "python",
+            "typescript"
+          ],
+          "max": 5,
+          "missing": [],
+          "points": 5
+        },
+        "credibility": {
+          "hits": [
+            "cambridge",
+            "c2",
+            "itam",
+            "bachelor of science in law",
+            "meta back-end",
+            "ibm rag"
+          ],
+          "max": 6,
+          "missing": [],
+          "points": 6
+        },
+        "evidence": {
+          "hits": [
+            "grey cross",
+            "vittahouse",
+            "forgegraph",
+            "lex toolkit",
+            "automated trading",
+            "websockets",
+            "redis",
+            "postgresql",
+            "rest api",
+            "stakeholders"
+          ],
+          "max": 10,
+          "missing": [],
+          "points": 10
+        }
+      },
+      "name": "forgegraph_v2",
+      "penalties": [],
+      "score": 40,
+      "word_count": 697
+    },
+    {
+      "buckets": {
+        "ats_sections": {
+          "hits": [
+            "summary",
+            "experience",
+            "projects",
+            "education",
+            "skills",
+            "certifications"
+          ],
+          "max": 6,
+          "missing": [],
+          "points": 6
+        },
+        "codifin_role": {
+          "hits": [
+            "saas",
+            "data automation",
+            "clean",
+            "product",
+            "qa",
+            "ai",
+            "workflow",
+            "linux",
+            "git",
+            "docker",
+            "ci/cd",
+            "graphql"
+          ],
+          "max": 13,
+          "missing": [
+            "reliable releases"
+          ],
+          "points": 12
+        },
+        "core_stack": {
+          "hits": [
+            "golang",
+            "react",
+            "postgresql",
+            "python",
+            "typescript"
+          ],
+          "max": 5,
+          "missing": [],
+          "points": 5
+        },
+        "credibility": {
+          "hits": [
+            "itam",
+            "bachelor of science in law",
+            "meta back-end",
+            "ibm rag"
+          ],
+          "max": 6,
+          "missing": [
+            "cambridge",
+            "c2"
+          ],
+          "points": 4
+        },
+        "evidence": {
+          "hits": [
+            "forgegraph",
+            "lex toolkit",
+            "automated trading",
+            "websockets",
+            "redis",
+            "postgresql",
+            "rest api",
+            "stakeholders"
+          ],
+          "max": 10,
+          "missing": [
+            "grey cross",
+            "vittahouse"
+          ],
+          "points": 8
+        }
+      },
+      "name": "forgegraph_v1",
+      "penalties": [
+        "dead_or_unpreferred_link:github: https://github.com/greycrossx"
+      ],
+      "score": 33,
+      "word_count": 457
+    },
+    {
+      "buckets": {
+        "ats_sections": {
+          "hits": [
+            "summary",
+            "experience",
+            "projects",
+            "education",
+            "skills",
+            "certifications"
+          ],
+          "max": 6,
+          "missing": [],
+          "points": 6
+        },
+        "codifin_role": {
+          "hits": [
+            "saas",
+            "data automation",
+            "product",
+            "reliable releases",
+            "ai",
+            "workflow",
+            "linux",
+            "git"
+          ],
+          "max": 13,
+          "missing": [
+            "clean",
+            "qa",
+            "docker",
+            "ci/cd",
+            "graphql"
+          ],
+          "points": 8
+        },
+        "core_stack": {
+          "hits": [
+            "react",
+            "postgresql"
+          ],
+          "max": 5,
+          "missing": [
+            "golang",
+            "python",
+            "typescript"
+          ],
+          "points": 2
+        },
+        "credibility": {
+          "hits": [
+            "itam",
+            "bachelor of science in law",
+            "meta back-end",
+            "ibm rag"
+          ],
+          "max": 6,
+          "missing": [
+            "cambridge",
+            "c2"
+          ],
+          "points": 4
+        },
+        "evidence": {
+          "hits": [
+            "grey cross",
+            "vittahouse",
+            "lex toolkit",
+            "automated trading",
+            "websockets",
+            "redis",
+            "postgresql",
+            "rest api",
+            "stakeholders"
+          ],
+          "max": 10,
+          "missing": [
+            "forgegraph"
+          ],
+          "points": 9
+        }
+      },
+      "name": "user_benchmark",
+      "penalties": [
+        "underclaimed_language:english advanced"
+      ],
+      "score": 27,
+      "word_count": 514
+    }
+  ],
+  "winner": "forgegraph_v2"
+}

@@ -1,0 +1,60 @@
+MIGUEL ATHIE
+Lead Full-Stack / Back-End Engineer
+Mexico City (CDMX) • miguel.athien@gmail.com • +52 55 3900 3599 • GitHub: https://github.com/MikeAthie
+========================================================================
+
+SUMMARY
+Lead-capable full-stack/back-end engineer building SaaS-style products, data automation systems, and scalable backend services across Golang, React/Next.js, PostgreSQL, Python, and TypeScript. Experienced designing REST APIs, clean service boundaries, async/event-driven pipelines, and data handling with PostgreSQL and Redis. Hands-on integrating AI features (RAG/agent workflows) into real applications with grounding, orchestration, and reliability guardrails. Comfortable working in Linux/Git-based environments, collaborating with Product/QA and non-technical stakeholders, and owning delivery from requirements and architecture through reliable releases. Bilingual Spanish/English with Cambridge English C2 Proficiency certification.
+
+TECHNICAL SKILLS
+Full-Stack: React/Next.js, TypeScript, FastAPI, backend-first product delivery, API-driven workflows
+Backend & APIs: Golang, Python, REST API design, GraphQL-ready service boundaries, backend architecture, production reliability
+Data & Automation: PostgreSQL/SQL, Redis, data ingestion, async/event-driven pipelines, workflow automation, discrepancy detection
+SaaS & AI Integration: SaaS workflow design, RAG/agentic workflows, AI feature integration, grounding/reliability practices
+Tooling/Workflow: Docker, Linux-based development, Git, CI/CD practices, service-oriented patterns, iterative releases
+Collaboration: Product/QA collaboration, stakeholder requirements, bilingual Spanish/English communication, technical tradeoff explanation
+
+SELECTED EXPERIENCE
+Grey Cross Developments — Product Engineer
+Jul 2022 - Present | CDMX
+- Owned end-to-end backend and full-stack product domains for SMB products and consulting clients, from architecture and API contracts through production deployment and iteration.
+- Designed and implemented REST APIs and service boundaries for SaaS workflows, internal automation, and stakeholder-facing product features, prioritizing maintainability, clear contracts, and reliability.
+- Built async/event-driven and data-processing pipelines for real-time and batch workloads, improving responsiveness and operational robustness for data-heavy systems.
+- Implemented structured data handling with PostgreSQL and Redis patterns, supporting reporting, automation, and downstream operational decision-making.
+- Built React/Next.js and TypeScript product surfaces where frontend clarity, backend correctness, and API-driven workflows all mattered.
+- Integrated AI-powered features, RAG/agent workflows, and automated analysis into production-style systems with source-bounded behavior and predictable outputs.
+- Collaborated with Product, QA-style review, and non-technical stakeholders to translate requirements into deliverables and ship iterative improvements with production ownership.
+
+Vittahouse — Automation & Data Consultant
+Oct 2019 - Nov 2025 | CDMX
+- Automated accounting and audit workflows, reducing manual steps and improving consistency across recurring operational processes.
+- Built discrepancy detection tooling across structured datasets to surface anomalies early and support audit readiness through traceable outputs.
+- Developed internal data/reporting foundations that improved decision-making speed, data quality, and operational visibility for finance/audit stakeholders.
+- Partnered with business users to gather requirements, define acceptance criteria, communicate tradeoffs, and deliver reliable workflow improvements.
+
+PROJECTS
+ForgeGraph — AI-powered SaaS/company OS for strategy automation
+Nov 2025 - Present | https://github.com/MikeAthie/ForgeGraph
+- Built an AI-powered company OS platform that analyzes competitor activity across social channels and turns it into actionable strategy insights.
+- Designed backend workflows for competitive strategy scraping, content analysis, report generation, durable workflow state, and scalable service expansion.
+- Integrated LLM-assisted analysis with source-bounded outputs, automation guardrails, and operator-review gates for reliable business intelligence workflows.
+
+Lex Toolkit — AI agents for legal workflows (Next.js + FastAPI)
+Nov 2025 - Present | https://github.com/MikeAthie/Lex-Toolkit
+- Built a full-stack application with React/Next.js frontend and FastAPI backend, designed around API-driven professional workflows.
+- Developed AI agent capabilities for law-practice use cases, combining product UX, backend services, and grounded AI workflow design.
+- Designed clear API contracts and maintainable service boundaries to support real-world workflow expansion.
+
+Automated Trading Bot — Real-time data automation (Redis + workers)
+Aug 2025 - Present | https://github.com/MikeAthie/2m2
+- Engineered a real-time pipeline consuming market data via WebSockets, persisting state in Redis, and processing indicators in a separate service.
+- Executed automated actions through worker-based architecture, emphasizing reliability and efficiency under continuous data flow.
+- Separated data ingestion, indicator computation, and execution concerns to improve throughput, maintainability, and operational resilience.
+
+EDUCATION
+- ITAM - Bachelor of Science in Law | 2012 - 2017 | CDMX | Focus on integrating technology, data systems, and professional practice.
+
+CERTIFICATIONS
+- Cambridge English C2 Proficiency certificate
+- Meta Back-End Developer (May 2023)
+- IBM RAG and Agentic AI (May 2025)

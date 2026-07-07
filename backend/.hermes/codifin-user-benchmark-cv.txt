@@ -1,0 +1,51 @@
+Miguel Athie
+Mexico City (CDMX) | miguel.athien@gmail.com | +52 55 3900 3599 | GitHub: https://github.com/MikeAthie
+
+Summary
+Lead-capable full-stack/back-end engineer with strong ownership of SaaS-style products, data automation, and scalable backend systems. Experienced designing REST APIs, building async/event-driven pipelines, and optimizing data handling with PostgreSQL and Redis. Hands-on integrating AI features (RAG/agent workflows) into real applications and collaborating end-to-end with stakeholders from requirements through reliable releases. Comfortable in Linux/Git-based workflows and building production-grade services with performance and maintainability in mind. Bilingual (English advanced).
+
+Experience
+Grey Cross Developments — Product Engineer
+Jul 2022 – Present | CDMX
+
+Owned end-to-end backend products and data systems for SMBs and consulting clients, from architecture and API design through production deployment.
+Designed and implemented REST APIs to support SaaS workflows and internal automation, prioritizing clear contracts, maintainability, and reliability.
+Built async/event-driven pipelines for real-time and batch processing, improving throughput and operational robustness for data-heavy workloads.
+Implemented data ingestion and structured data handling using PostgreSQL and Redis (including stream-based patterns) to support high-volume processing.
+Integrated AI-powered features into production systems, applying grounding and orchestration patterns to improve output reliability and usefulness.
+Collaborated closely with stakeholders to translate requirements into deliverables and ship iterative improvements with production ownership.
+Vittahouse — Automation & Data Consultant
+Oct 2019 – Nov 2025 | CDMX
+
+Automated accounting and audit workflows, reducing manual work and improving consistency across recurring operational processes.
+Built discrepancy detection tooling to surface anomalies and support audit readiness through data-driven checks and traceable outputs.
+Developed internal tools and reporting foundations that improved decision-making speed and data quality for finance/audit stakeholders.
+Partnered with business users to gather requirements, define acceptance criteria, and deliver reliable releases aligned with operational needs.
+Projects (Selected)
+Lex Toolkit — AI agents for legal workflows (Next.js + FastAPI)
+Nov 2025 – Present | https://github.com/GreyCrossX/Lex-Toolkit
+
+Built a full-stack application with React/Next.js frontend and FastAPI backend, designed to scale for real-world workflows.
+Developed AI agent capabilities for law-practice use cases; project has attracted attention from local law firms.
+Automated Trading Bot — Real-time data automation (Redis + workers)
+Aug 2025 – Present | https://github.com/MikeAthie/2m2
+
+Engineered a real-time pipeline consuming market data via websockets, persisting state in Redis, and processing indicators in a separate service.
+Executed automated actions via worker-based architecture, emphasizing efficiency and reliability under continuous data flow.
+Education
+ITAM — Bachelor of Science in Law
+
+2012 – 2017 | CDMX
+
+Focus on integrating technology and data systems into professional practice.
+
+Skills
+Full-Stack: React/Next.js (project), FastAPI (project), backend-first product delivery
+Backend & APIs: REST API design, backend architecture, production reliability, maintainable codebases
+Data & Automation: data ingestion, async/event-driven pipelines, workflow automation, discrepancy detection
+Databases/Stores: PostgreSQL/SQL, Redis (streams/patterns for high-throughput workloads)
+AI Integration: RAG/agentic workflows, AI feature integration with reliability/grounding practices
+Tooling/Workflow: Git, Linux-based development, service-oriented patterns
+Certifications
+Meta Back-End Developer (May 2023)
+IBM RAG and Agentic AI (May 2025)

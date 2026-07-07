@@ -1,0 +1,594 @@
+{
+  "alignment": {
+    "ats": {
+      "pass": true,
+      "required_sections": [
+        "SUMMARY",
+        "TECHNICAL SKILLS",
+        "SELECTED EXPERIENCE",
+        "PROJECTS",
+        "EDUCATION"
+      ],
+      "warnings": []
+    },
+    "keyword_alignment": {
+      "coverage_score": 1.0,
+      "matched_keywords": [
+        {
+          "cv_source_ref": {
+            "index": 0,
+            "type": "cv_proof_point"
+          },
+          "evidence": "Built production APIs and service boundaries with Go, Python, Django, FastAPI, PostgreSQL, Redis, and workers.",
+          "job_source": "job_description",
+          "keyword": "PostgreSQL"
+        },
+        {
+          "cv_source_ref": {
+            "type": "cv_summary"
+          },
+          "evidence": "Backend-leaning full-stack engineer building Go, Python, React, and TypeScript product systems.",
+          "job_source": "job_description",
+          "keyword": "Python"
+        },
+        {
+          "cv_source_ref": {
+            "type": "cv_summary"
+          },
+          "evidence": "Backend-leaning full-stack engineer building Go, Python, React, and TypeScript product systems.",
+          "job_source": "job_description",
+          "keyword": "React"
+        },
+        {
+          "cv_source_ref": {
+            "index": 0,
+            "type": "cv_proof_point"
+          },
+          "evidence": "Built production APIs and service boundaries with Go, Python, Django, FastAPI, PostgreSQL, Redis, and workers.",
+          "job_source": "job_description",
+          "keyword": "API"
+        },
+        {
+          "cv_source_ref": {
+            "index": 4,
+            "type": "cv_proof_point"
+          },
+          "evidence": "Integrated AI-powered features, RAG workflows, and agentic workflows into source-bounded product systems.",
+          "job_source": "job_description",
+          "keyword": "AI"
+        }
+      ],
+      "missing_keywords": []
+    },
+    "opportunity": {
+      "employer_name": "Codifin",
+      "id": "",
+      "job_url": "https://mx.indeed.com/viewjob?jk=0ee36499821e9442",
+      "role_title": "Lead Golang & React Developer CDMX Biling\u00fce"
+    },
+    "positioning": {
+      "emphasis_order": [
+        "PostgreSQL",
+        "Python",
+        "React",
+        "API",
+        "AI"
+      ],
+      "headline": "Lead Golang & React Developer CDMX Biling\u00fce - PostgreSQL / Python",
+      "summary_bullets": [
+        "Backend-leaning full-stack engineer building Go, Python, React, and TypeScript product systems.",
+        "Built production APIs and service boundaries with Go, Python, Django, FastAPI, PostgreSQL, Redis, and workers."
+      ]
+    },
+    "quality": {
+      "external_side_effects_allowed": false,
+      "live_ready": false,
+      "no_invented_candidate_facts": true,
+      "source_backed_claims": true
+    },
+    "source_refs": [
+      {
+        "type": "job_url",
+        "url": "https://mx.indeed.com/viewjob?jk=0ee36499821e9442"
+      },
+      {
+        "index": 0,
+        "type": "cv_proof_point"
+      },
+      {
+        "type": "cv_summary"
+      },
+      {
+        "index": 4,
+        "type": "cv_proof_point"
+      }
+    ],
+    "status": "aligned"
+  },
+  "cover_letter": {
+    "claim_source_map": [
+      {
+        "claim": "Owned full-stack/backend domains end-to-end, from architecture and API contracts through implementation, deployment, and iteration.",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_proof_point"
+        }
+      },
+      {
+        "claim": "Designed product-facing and internal service boundaries with Go/Python backends, PostgreSQL data models, and maintainable interfaces.",
+        "source_ref": {
+          "index": 1,
+          "type": "cv_proof_point"
+        }
+      },
+      {
+        "claim": "ForgeGraph | Nov 2025 - Present | https://github.com/MikeAthie/ForgeGraph | AI-powered company OS for competitor analysis, strategy automation, and report generation. \u2014 Built backend workflows for competitive strategy scraping, content analysis, and report generation. Used Go and backend services to support durable workflow state, automation, and scalable service expansion. Integrated LLM-assisted analysis with source-bounded outputs and operational guardrails.",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_project"
+        }
+      },
+      {
+        "claim": "Lex Toolkit | Nov 2025 - Present | https://github.com/MikeAthie/Lex-Toolkit | Full-stack legal workflow product using Next.js, React, TypeScript, and FastAPI. \u2014 Built a full-stack app with Next.js/React frontend and FastAPI backend for professional workflows. Designed clear API contracts and AI-assisted workflow features for product-quality delivery.",
+        "source_ref": {
+          "index": 1,
+          "type": "cv_project"
+        }
+      }
+    ],
+    "format": "cover_letter_v2.optimized_lead_fullstack_go_react",
+    "guardrails": {
+      "do_not_claim_unsourced_c1": true,
+      "employer_submit_side_effects_allowed": false
+    },
+    "opportunity": {
+      "employer_name": "Codifin",
+      "id": "",
+      "job_url": "https://mx.indeed.com/viewjob?jk=0ee36499821e9442",
+      "role_title": "Lead Golang & React Developer CDMX Biling\u00fce"
+    },
+    "paragraphs": [
+      "I am interested in the Lead Golang & React Developer CDMX Biling\u00fce role at Codifin because it aligns closely with my experience building SaaS-style product systems, backend services, React/TypeScript interfaces, PostgreSQL-backed workflows, and data automation.",
+      "In recent work, I have owned software domains from architecture and API contracts through implementation and iteration, including Go/Python backend services, React/Next.js product surfaces, workflow automation, and AI-assisted features with source-bounded behavior.",
+      "Projects such as ForgeGraph, Lex Toolkit, and an automated trading/data-ingestion system give me relevant evidence for this role's mix of SaaS architecture, React interfaces, data pipelines, automation, and reliable backend execution.",
+      "I would welcome a conversation about how this background can support Codifin's work on SaaS platforms, data automation, and AI-enabled workflows."
+    ],
+    "quality": {
+      "cv_builder_profile": "lead_fullstack_go_react_saas_automation",
+      "external_side_effects_allowed": false,
+      "live_ready": false,
+      "no_invented_candidate_facts": true,
+      "source_backed_claims": true
+    },
+    "source_refs": [
+      {
+        "index": 0,
+        "type": "cv_proof_point"
+      },
+      {
+        "index": 1,
+        "type": "cv_proof_point"
+      },
+      {
+        "index": 0,
+        "type": "cv_project"
+      },
+      {
+        "index": 1,
+        "type": "cv_project"
+      }
+    ],
+    "status": "draft"
+  },
+  "resume": {
+    "ats": {
+      "pass": false,
+      "warnings": []
+    },
+    "claim_source_map": [
+      {
+        "claim": "Lead Full-Stack Software Engineer building SaaS platforms and data automation systems across Golang, React, PostgreSQL, Python, and TypeScript. Experienced designing clean backend service boundaries, REST APIs, data pipelines, AI-powered workflow features, and maintainable product interfaces. Comfortable translating business needs into reliable software, collaborating across product/QA/non-technical stakeholders, and owning delivery from architecture through iteration in bilingual English/Spanish environments.",
+        "source_ref": {
+          "type": "cv_summary"
+        }
+      },
+      {
+        "claim": "GitHub: https://github.com/GreyCrossX",
+        "source_ref": {
+          "field": "github",
+          "type": "cv_identity"
+        }
+      },
+      {
+        "claim": "Owned full-stack/backend domains end-to-end, from architecture and API contracts through implementation, deployment, and iteration.",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_proof_point"
+        }
+      },
+      {
+        "claim": "Designed product-facing and internal service boundaries with Go/Python backends, PostgreSQL data models, and maintainable interfaces.",
+        "source_ref": {
+          "index": 1,
+          "type": "cv_proof_point"
+        }
+      },
+      {
+        "claim": "Built React/TypeScript product surfaces and API-driven workflows where frontend clarity and backend reliability both mattered.",
+        "source_ref": {
+          "index": 2,
+          "type": "cv_proof_point"
+        }
+      },
+      {
+        "claim": "Built SaaS-style automation workflows, data collection/processing pipelines, and report generation systems for operational decision-making.",
+        "source_ref": {
+          "index": 3,
+          "type": "cv_proof_point"
+        }
+      },
+      {
+        "claim": "Integrated AI-powered features and automated workflows with source-bounded behavior, reliability guardrails, and practical business impact.",
+        "source_ref": {
+          "index": 4,
+          "type": "cv_proof_point"
+        }
+      },
+      {
+        "claim": "Collaborated with technical and non-technical stakeholders in English and Spanish, communicating tradeoffs clearly and driving work to completion.",
+        "source_ref": {
+          "index": 5,
+          "type": "cv_proof_point"
+        }
+      },
+      {
+        "claim": "ForgeGraph | Nov 2025 - Present | https://github.com/MikeAthie/ForgeGraph | AI-powered company OS for competitor analysis, strategy automation, and report generation. \u2014 Built backend workflows for competitive strategy scraping, content analysis, and report generation. Used Go and backend services to support durable workflow state, automation, and scalable service expansion. Integrated LLM-assisted analysis with source-bounded outputs and operational guardrails.",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_project"
+        }
+      },
+      {
+        "claim": "Lex Toolkit | Nov 2025 - Present | https://github.com/MikeAthie/Lex-Toolkit | Full-stack legal workflow product using Next.js, React, TypeScript, and FastAPI. \u2014 Built a full-stack app with Next.js/React frontend and FastAPI backend for professional workflows. Designed clear API contracts and AI-assisted workflow features for product-quality delivery.",
+        "source_ref": {
+          "index": 1,
+          "type": "cv_project"
+        }
+      },
+      {
+        "claim": "Automated Trading Bot (Binance) | Aug 2025 - Present | https://github.com/MikeAthie/2m2 | Real-time async data automation using WebSockets, Redis, and Celery workers. \u2014 Consumed market data via WebSockets and persisted streams in Redis for low-latency access. Orchestrated background execution with Celery workers and resilient task handling. Separated indicator computation into a Redis-backed service to improve throughput and reliability.",
+        "source_ref": {
+          "index": 2,
+          "type": "cv_project"
+        }
+      },
+      {
+        "claim": "ITAM | Bachelor of Science in Law | 2012 - 2017",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_education"
+        }
+      },
+      {
+        "claim": "Full-Stack / Frontend: React, Next.js, TypeScript, product interfaces, API-driven workflows",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      },
+      {
+        "claim": "Backend / APIs: Golang, Python, REST APIs, GraphQL, service architecture, clean interfaces",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      },
+      {
+        "claim": "Data & Automation: PostgreSQL, SQL, Python pipelines, Redis, data processing, report generation",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      },
+      {
+        "claim": "DevOps / Delivery: Docker, Linux, Git, CI/CD practices, testing, release discipline",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      },
+      {
+        "claim": "AI in Production: RAG/agent workflows, AI feature integration, grounded outputs, automation guardrails",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      },
+      {
+        "claim": "Ways of Working: product/QA collaboration, clear communication, structured problem-solving, English/Spanish collaboration",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      },
+      {
+        "claim": "Meta Back-End Developer Certification (May 2023)",
+        "source_ref": {
+          "index": 0,
+          "type": "cv_certification"
+        }
+      },
+      {
+        "claim": "IBM RAG and Agentic AI (May 2025)",
+        "source_ref": {
+          "index": 1,
+          "type": "cv_certification"
+        }
+      }
+    ],
+    "format": "ats_resume_v2.optimized_lead_fullstack_go_react",
+    "guardrails": {
+      "do_not_claim_software_engineering_degree": true,
+      "do_not_claim_unsourced_c1": true,
+      "employer_submit_side_effects_allowed": false,
+      "profile": "lead_fullstack_go_react_saas_automation",
+      "project_selection": [
+        "ForgeGraph",
+        "Lex Toolkit",
+        "Automated Trading Bot (Binance)"
+      ],
+      "skill_grouping": "fullstack_go_react_data_automation_grouped_lines",
+      "summary_style": "lead_fullstack_go_react_saas_data_automation"
+    },
+    "opportunity": {
+      "employer_name": "Codifin",
+      "id": "",
+      "job_url": "https://mx.indeed.com/viewjob?jk=0ee36499821e9442",
+      "role_title": "Lead Golang & React Developer CDMX Biling\u00fce"
+    },
+    "plain_text": "SUMMARY - Lead Full-Stack Software Engineer building SaaS platforms and data automation systems across Golang, React, PostgreSQL, Python, and TypeScript. Experienced designing clean backend service boundaries, REST APIs, data pipelines, AI-powered workflow features, and maintainable product interfaces. Comfortable translating business needs into reliable software, collaborating across product/QA/non-technical stakeholders, and owning delivery from architecture through iteration in bilingual English/Spanish environments. - GitHub: https://github.com/GreyCrossX SELECTED EXPERIENCE - Owned full-stack/backend domains end-to-end, from architecture and API contracts through implementation, deployment, and iteration. - Designed product-facing and internal service boundaries with Go/Python backends, PostgreSQL data models, and maintainable interfaces. - Built React/TypeScript product surfaces and API-driven workflows where frontend clarity and backend reliability both mattered. - Built SaaS-style automation workflows, data collection/processing pipelines, and report generation systems for operational decision-making. - Integrated AI-powered features and automated workflows with source-bounded behavior, reliability guardrails, and practical business impact. - Collaborated with technical and non-technical stakeholders in English and Spanish, communicating tradeoffs clearly and driving work to completion. PROJECTS - ForgeGraph | Nov 2025 - Present | https://github.com/MikeAthie/ForgeGraph | AI-powered company OS for competitor analysis, strategy automation, and report generation. \u2014 Built backend workflows for competitive strategy scraping, content analysis, and report generation. Used Go and backend services to support durable workflow state, automation, and scalable service expansion. Integrated LLM-assisted analysis with source-bounded outputs and operational guardrails. - Lex Toolkit | Nov 2025 - Present | https://github.com/MikeAthie/Lex-Toolkit | Full-stack legal workflow product using Next.js, React, TypeScript, and FastAPI. \u2014 Built a full-stack app with Next.js/React frontend and FastAPI backend for professional workflows. Designed clear API contracts and AI-assisted workflow features for product-quality delivery. - Automated Trading Bot (Binance) | Aug 2025 - Present | https://github.com/MikeAthie/2m2 | Real-time async data automation using WebSockets, Redis, and Celery workers. \u2014 Consumed market data via WebSockets and persisted streams in Redis for low-latency access. Orchestrated background execution with Celery workers and resilient task handling. Separated indicator computation into a Redis-backed service to improve throughput and reliability. EDUCATION - ITAM | Bachelor of Science in Law | 2012 - 2017 TECHNICAL SKILLS - Full-Stack / Frontend: React, Next.js, TypeScript, product interfaces, API-driven workflows - Backend / APIs: Golang, Python, REST APIs, GraphQL, service architecture, clean interfaces - Data & Automation: PostgreSQL, SQL, Python pipelines, Redis, data processing, report generation - DevOps / Delivery: Docker, Linux, Git, CI/CD practices, testing, release discipline - AI in Production: RAG/agent workflows, AI feature integration, grounded outputs, automation guardrails - Ways of Working: product/QA collaboration, clear communication, structured problem-solving, English/Spanish collaboration CERTIFICATIONS - Meta Back-End Developer Certification (May 2023) - IBM RAG and Agentic AI (May 2025)",
+    "quality": {
+      "cv_builder_profile": "lead_fullstack_go_react_saas_automation",
+      "external_side_effects_allowed": false,
+      "generic_prose_avoided": true,
+      "live_ready": false,
+      "no_invented_candidate_facts": true,
+      "optimized_project_selection": true,
+      "role_specific_language": true,
+      "source_backed_claims": true
+    },
+    "sections": [
+      {
+        "heading": "SUMMARY",
+        "items": [
+          {
+            "source_ref": {
+              "type": "cv_summary"
+            },
+            "text": "Lead Full-Stack Software Engineer building SaaS platforms and data automation systems across Golang, React, PostgreSQL, Python, and TypeScript. Experienced designing clean backend service boundaries, REST APIs, data pipelines, AI-powered workflow features, and maintainable product interfaces. Comfortable translating business needs into reliable software, collaborating across product/QA/non-technical stakeholders, and owning delivery from architecture through iteration in bilingual English/Spanish environments."
+          },
+          {
+            "source_ref": {
+              "field": "github",
+              "type": "cv_identity"
+            },
+            "text": "GitHub: https://github.com/GreyCrossX"
+          }
+        ]
+      },
+      {
+        "heading": "SELECTED EXPERIENCE",
+        "items": [
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_proof_point"
+            },
+            "text": "Owned full-stack/backend domains end-to-end, from architecture and API contracts through implementation, deployment, and iteration."
+          },
+          {
+            "source_ref": {
+              "index": 1,
+              "type": "cv_proof_point"
+            },
+            "text": "Designed product-facing and internal service boundaries with Go/Python backends, PostgreSQL data models, and maintainable interfaces."
+          },
+          {
+            "source_ref": {
+              "index": 2,
+              "type": "cv_proof_point"
+            },
+            "text": "Built React/TypeScript product surfaces and API-driven workflows where frontend clarity and backend reliability both mattered."
+          },
+          {
+            "source_ref": {
+              "index": 3,
+              "type": "cv_proof_point"
+            },
+            "text": "Built SaaS-style automation workflows, data collection/processing pipelines, and report generation systems for operational decision-making."
+          },
+          {
+            "source_ref": {
+              "index": 4,
+              "type": "cv_proof_point"
+            },
+            "text": "Integrated AI-powered features and automated workflows with source-bounded behavior, reliability guardrails, and practical business impact."
+          },
+          {
+            "source_ref": {
+              "index": 5,
+              "type": "cv_proof_point"
+            },
+            "text": "Collaborated with technical and non-technical stakeholders in English and Spanish, communicating tradeoffs clearly and driving work to completion."
+          }
+        ]
+      },
+      {
+        "heading": "PROJECTS",
+        "items": [
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_project"
+            },
+            "text": "ForgeGraph | Nov 2025 - Present | https://github.com/MikeAthie/ForgeGraph | AI-powered company OS for competitor analysis, strategy automation, and report generation. \u2014 Built backend workflows for competitive strategy scraping, content analysis, and report generation. Used Go and backend services to support durable workflow state, automation, and scalable service expansion. Integrated LLM-assisted analysis with source-bounded outputs and operational guardrails."
+          },
+          {
+            "source_ref": {
+              "index": 1,
+              "type": "cv_project"
+            },
+            "text": "Lex Toolkit | Nov 2025 - Present | https://github.com/MikeAthie/Lex-Toolkit | Full-stack legal workflow product using Next.js, React, TypeScript, and FastAPI. \u2014 Built a full-stack app with Next.js/React frontend and FastAPI backend for professional workflows. Designed clear API contracts and AI-assisted workflow features for product-quality delivery."
+          },
+          {
+            "source_ref": {
+              "index": 2,
+              "type": "cv_project"
+            },
+            "text": "Automated Trading Bot (Binance) | Aug 2025 - Present | https://github.com/MikeAthie/2m2 | Real-time async data automation using WebSockets, Redis, and Celery workers. \u2014 Consumed market data via WebSockets and persisted streams in Redis for low-latency access. Orchestrated background execution with Celery workers and resilient task handling. Separated indicator computation into a Redis-backed service to improve throughput and reliability."
+          }
+        ]
+      },
+      {
+        "heading": "EDUCATION",
+        "items": [
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_education"
+            },
+            "text": "ITAM | Bachelor of Science in Law | 2012 - 2017"
+          }
+        ]
+      },
+      {
+        "heading": "TECHNICAL SKILLS",
+        "items": [
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_skill"
+            },
+            "text": "Full-Stack / Frontend: React, Next.js, TypeScript, product interfaces, API-driven workflows"
+          },
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_skill"
+            },
+            "text": "Backend / APIs: Golang, Python, REST APIs, GraphQL, service architecture, clean interfaces"
+          },
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_skill"
+            },
+            "text": "Data & Automation: PostgreSQL, SQL, Python pipelines, Redis, data processing, report generation"
+          },
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_skill"
+            },
+            "text": "DevOps / Delivery: Docker, Linux, Git, CI/CD practices, testing, release discipline"
+          },
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_skill"
+            },
+            "text": "AI in Production: RAG/agent workflows, AI feature integration, grounded outputs, automation guardrails"
+          },
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_skill"
+            },
+            "text": "Ways of Working: product/QA collaboration, clear communication, structured problem-solving, English/Spanish collaboration"
+          }
+        ]
+      },
+      {
+        "heading": "CERTIFICATIONS",
+        "items": [
+          {
+            "source_ref": {
+              "index": 0,
+              "type": "cv_certification"
+            },
+            "text": "Meta Back-End Developer Certification (May 2023)"
+          },
+          {
+            "source_ref": {
+              "index": 1,
+              "type": "cv_certification"
+            },
+            "text": "IBM RAG and Agentic AI (May 2025)"
+          }
+        ]
+      }
+    ],
+    "source_refs": [
+      {
+        "type": "cv_summary"
+      },
+      {
+        "field": "github",
+        "type": "cv_identity"
+      },
+      {
+        "index": 0,
+        "type": "cv_proof_point"
+      },
+      {
+        "index": 1,
+        "type": "cv_proof_point"
+      },
+      {
+        "index": 2,
+        "type": "cv_proof_point"
+      },
+      {
+        "index": 3,
+        "type": "cv_proof_point"
+      },
+      {
+        "index": 4,
+        "type": "cv_proof_point"
+      },
+      {
+        "index": 5,
+        "type": "cv_proof_point"
+      },
+      {
+        "index": 0,
+        "type": "cv_project"
+      },
+      {
+        "index": 1,
+        "type": "cv_project"
+      },
+      {
+        "index": 2,
+        "type": "cv_project"
+      },
+      {
+        "index": 0,
+        "type": "cv_education"
+      },
+      {
+        "index": 0,
+        "type": "cv_skill"
+      },
+      {
+        "index": 0,
+        "type": "cv_certification"
+      },
+      {
+        "index": 1,
+        "type": "cv_certification"
+      }
+    ],
+    "status": "draft"
+  }
+}

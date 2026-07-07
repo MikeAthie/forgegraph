@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "created_at": "2026-06-30T05:04:19.381709+00:00",
+  "graph_version": "v24.0",
+  "long_lived_user_token": {
+    "stored_in": "META_GRAPH_ACCESS_TOKEN",
+    "length": 214,
+    "expires_in_seconds": 5184000
+  },
+  "matched_page": {
+    "id": "100400506440821",
+    "name": "My Legacy Effect",
+    "instagram_business_account_id": "17841456942553235",
+    "page_token_stored": true,
+    "tasks": [
+      "ADVERTISE",
+      "ANALYZE",
+      "CREATE_CONTENT",
+      "MESSAGING",
+      "MODERATE",
+      "MANAGE",
+      "VIEW_MONETIZATION_INSIGHTS"
+    ]
+  },
+  "env_updated": [
+    "META_GRAPH_ACCESS_TOKEN",
+    "SOCIAL_CONNECTOR_PROVIDER",
+    "SOCIAL_CONNECTOR_ALLOW_PROVIDER_PUBLISH",
+    "META_GRAPH_PAGE_ACCESS_TOKEN"
+  ],
+  "secrets_redacted": true
+}

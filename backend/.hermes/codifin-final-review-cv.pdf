@@ -1,0 +1,474 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 5688 >>
+stream
+0.35 w
+BT
+/F2 20 Tf
+1 0 0 1 248.40 746.00 Tm
+(MIGUEL ATHIE) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 222.00 722.00 Tm
+(Lead Full-Stack / Back-End Engineer) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 85.68 708.00 Tm
+(Mexico City \(CDMX\) | miguel.athien@gmail.com | +52 55 3900 3599 | GitHub: https://github.com/MikeAthie) Tj
+ET
+45.00 696.00 m 567.00 696.00 l S
+BT
+/F2 11 Tf
+1 0 0 1 45.00 685.00 Tm
+(SUMMARY) Tj
+ET
+45.00 676.00 m 567.00 676.00 l S
+BT
+/F1 9 Tf
+1 0 0 1 52.00 663.00 Tm
+(Lead-capable full-stack/back-end engineer building SaaS-style products, data automation systems,) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 650.00 Tm
+(and scalable backend services across Golang, React/Next.js, PostgreSQL, Python, and TypeScript.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 637.00 Tm
+(Experienced designing REST APIs, clean service boundaries, async/event-driven pipelines, and data) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 624.00 Tm
+(handling with PostgreSQL and Redis. Hands-on integrating AI features \(RAG/agent workflows\) into) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 611.00 Tm
+(real applications with grounding, orchestration, and reliability guardrails. Comfortable working) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 598.00 Tm
+(in Linux/Git-based environments, collaborating with Product/QA and non-technical stakeholders, and) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 585.00 Tm
+(owning delivery from requirements and architecture through reliable releases. Bilingual) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 572.00 Tm
+(Spanish/English with Cambridge English C2 Proficiency certification.) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 554.00 Tm
+(TECHNICAL SKILLS) Tj
+ET
+45.00 545.00 m 567.00 545.00 l S
+BT
+/F1 9 Tf
+1 0 0 1 52.00 532.00 Tm
+(Full-Stack: React/Next.js, TypeScript, FastAPI, backend-first product delivery, API-driven) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 519.00 Tm
+(workflows) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 506.00 Tm
+(Backend & APIs: Golang, Python, REST API design, GraphQL-ready service boundaries, backend) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 493.00 Tm
+(architecture, production reliability) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 480.00 Tm
+(Data & Automation: PostgreSQL/SQL, Redis, data ingestion, async/event-driven pipelines, workflow) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 467.00 Tm
+(automation, discrepancy detection) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 454.00 Tm
+(SaaS & AI Integration: SaaS workflow design, RAG/agentic workflows, AI feature integration,) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 441.00 Tm
+(grounding/reliability practices) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 428.00 Tm
+(Tooling/Workflow: Docker, Linux-based development, Git, CI/CD practices, service-oriented) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 415.00 Tm
+(patterns, iterative releases) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 402.00 Tm
+(Collaboration: Product/QA collaboration, stakeholder requirements, bilingual Spanish/English) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 62.00 389.00 Tm
+(communication, technical tradeoff explanation) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 371.00 Tm
+(SELECTED EXPERIENCE) Tj
+ET
+45.00 362.00 m 567.00 362.00 l S
+BT
+/F2 9 Tf
+1 0 0 1 52.00 349.00 Tm
+(Grey Cross Developments - Product Engineer) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 336.00 Tm
+(Jul 2022 - Present | CDMX) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 323.00 Tm
+(- Owned end-to-end backend and full-stack product domains for SMB products and consulting clients, from) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 310.00 Tm
+(architecture and API contracts through production deployment and iteration.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 297.00 Tm
+(- Designed and implemented REST APIs and service boundaries for SaaS workflows, internal automation, and) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 284.00 Tm
+(stakeholder-facing product features, prioritizing maintainability, clear contracts, and reliability.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 271.00 Tm
+(- Built async/event-driven and data-processing pipelines for real-time and batch workloads, improving) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 258.00 Tm
+(responsiveness and operational robustness for data-heavy systems.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 245.00 Tm
+(- Implemented structured data handling with PostgreSQL and Redis patterns, supporting reporting,) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 232.00 Tm
+(automation, and downstream operational decision-making.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 219.00 Tm
+(- Built React/Next.js and TypeScript product surfaces where frontend clarity, backend correctness, and) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 206.00 Tm
+(API-driven workflows all mattered.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 193.00 Tm
+(- Integrated AI-powered features, RAG/agent workflows, and automated analysis into production-style) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 180.00 Tm
+(systems with source-bounded behavior and predictable outputs.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 167.00 Tm
+(- Collaborated with Product, QA-style review, and non-technical stakeholders to translate requirements) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 154.00 Tm
+(into deliverables and ship iterative improvements with production ownership.) Tj
+ET
+BT
+/F2 9 Tf
+1 0 0 1 52.00 137.00 Tm
+(Vittahouse - Automation & Data Consultant) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 124.00 Tm
+(Oct 2019 - Nov 2025 | CDMX) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 111.00 Tm
+(- Automated accounting and audit workflows, reducing manual steps and improving consistency across) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 98.00 Tm
+(recurring operational processes.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 85.00 Tm
+(- Built discrepancy detection tooling across structured datasets to surface anomalies early and support) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 72.00 Tm
+(audit readiness through traceable outputs.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 59.00 Tm
+(- Developed internal data/reporting foundations that improved decision-making speed, data quality, and) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 3784 >>
+stream
+0.35 w
+BT
+/F1 9 Tf
+1 0 0 1 68.00 746.00 Tm
+(operational visibility for finance/audit stakeholders.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 733.00 Tm
+(- Partnered with business users to gather requirements, define acceptance criteria, communicate) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 720.00 Tm
+(tradeoffs, and deliver reliable workflow improvements.) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 702.00 Tm
+(PROJECTS) Tj
+ET
+45.00 693.00 m 567.00 693.00 l S
+BT
+/F2 9 Tf
+1 0 0 1 52.00 680.00 Tm
+(ForgeGraph - AI-powered SaaS/company OS for strategy automation) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 667.00 Tm
+(Nov 2025 - Present | https://github.com/MikeAthie/ForgeGraph) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 654.00 Tm
+(- Built an AI-powered company OS platform that analyzes competitor activity across social channels and) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 641.00 Tm
+(turns it into actionable strategy insights.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 628.00 Tm
+(- Designed backend workflows for competitive strategy scraping, content analysis, report generation,) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 615.00 Tm
+(durable workflow state, and scalable service expansion.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 602.00 Tm
+(- Integrated LLM-assisted analysis with source-bounded outputs, automation guardrails, and) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 589.00 Tm
+(operator-review gates for reliable business intelligence workflows.) Tj
+ET
+BT
+/F2 9 Tf
+1 0 0 1 52.00 572.00 Tm
+(Lex Toolkit - AI agents for legal workflows \(Next.js + FastAPI\)) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 559.00 Tm
+(Nov 2025 - Present | https://github.com/MikeAthie/Lex-Toolkit) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 546.00 Tm
+(- Built a full-stack application with React/Next.js frontend and FastAPI backend, designed around) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 533.00 Tm
+(API-driven professional workflows.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 520.00 Tm
+(- Developed AI agent capabilities for law-practice use cases, combining product UX, backend services,) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 507.00 Tm
+(and grounded AI workflow design.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 494.00 Tm
+(- Designed clear API contracts and maintainable service boundaries to support real-world workflow) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 481.00 Tm
+(expansion.) Tj
+ET
+BT
+/F2 9 Tf
+1 0 0 1 52.00 464.00 Tm
+(Automated Trading Bot - Real-time data automation \(Redis + workers\)) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 52.00 451.00 Tm
+(Aug 2025 - Present | https://github.com/MikeAthie/2m2) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 438.00 Tm
+(- Engineered a real-time pipeline consuming market data via WebSockets, persisting state in Redis, and) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 425.00 Tm
+(processing indicators in a separate service.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 412.00 Tm
+(- Executed automated actions through worker-based architecture, emphasizing reliability and efficiency) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 399.00 Tm
+(under continuous data flow.) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 386.00 Tm
+(- Separated data ingestion, indicator computation, and execution concerns to improve throughput,) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 373.00 Tm
+(maintainability, and operational resilience.) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 355.00 Tm
+(EDUCATION) Tj
+ET
+45.00 346.00 m 567.00 346.00 l S
+BT
+/F1 9 Tf
+1 0 0 1 58.00 333.00 Tm
+(- ITAM - Bachelor of Science in Law | 2012 - 2017 | CDMX | Focus on integrating technology, data) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 68.00 320.00 Tm
+(systems, and professional practice.) Tj
+ET
+BT
+/F2 11 Tf
+1 0 0 1 45.00 302.00 Tm
+(CERTIFICATIONS) Tj
+ET
+45.00 293.00 m 567.00 293.00 l S
+BT
+/F1 9 Tf
+1 0 0 1 58.00 280.00 Tm
+(- Cambridge English C2 Proficiency certificate) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 267.00 Tm
+(- Meta Back-End Developer \(May 2023\)) Tj
+ET
+BT
+/F1 9 Tf
+1 0 0 1 58.00 254.00 Tm
+(- IBM RAG and Agentic AI \(May 2025\)) Tj
+ET
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000266 00000 n 
+0000000402 00000 n 
+0000006141 00000 n 
+0000006277 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+10112
+%%EOF

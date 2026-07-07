@@ -1,0 +1,47 @@
+{
+  "claim_source_map": [
+    {
+      "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+      "source_ref": {
+        "index": 0,
+        "type": "cv_proof_point"
+      }
+    },
+    {
+      "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+      "source_ref": {
+        "index": 1,
+        "type": "cv_proof_point"
+      }
+    }
+  ],
+  "format": "cover_letter_v1",
+  "opportunity": {
+    "employer_name": "Belvo",
+    "id": "773f6a29-2e97-4ef7-af98-8ac8720c5bb9",
+    "job_url": "https://jobs.ashbyhq.com/belvo/5724e5fc-93ed-45e4-9cb8-739bd9425d9d",
+    "role_title": "Software Engineer - Applied AI"
+  },
+  "paragraphs": [
+    "I am interested in the Software Engineer - Applied AI role at Belvo because it aligns with my source-backed experience in observability, API, AI. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+    "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+    "I would welcome a conversation about how this background can support Belvo's work on Software Engineer - Applied AI."
+  ],
+  "quality": {
+    "external_side_effects_allowed": false,
+    "live_ready": false,
+    "no_invented_candidate_facts": true,
+    "source_backed_claims": true
+  },
+  "source_refs": [
+    {
+      "index": 0,
+      "type": "cv_proof_point"
+    },
+    {
+      "index": 1,
+      "type": "cv_proof_point"
+    }
+  ],
+  "status": "draft"
+}

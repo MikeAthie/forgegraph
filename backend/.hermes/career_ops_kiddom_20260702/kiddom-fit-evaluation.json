@@ -1,0 +1,31 @@
+{
+  "target": {
+    "source_url": "https://mx.thebigjobsite.com/details/395F52E66FD1C65572E43F694028C382/senior-backend-engineer--python-go",
+    "source": "TheBigJobsite Mexico",
+    "recruiter": "TurnKey Tech Staffing",
+    "end_client": "Kiddom",
+    "role_title": "Senior Backend Engineer (Python/Go)",
+    "location": "Mexico",
+    "language_required": "English CV/application",
+    "salary_mxn": 1717328
+  },
+  "fit_evaluation": {
+    "recommendation": "strong_review_candidate_manual_apply_after_approval",
+    "ats_fit_score_estimate": 97,
+    "recruiter_score_estimate": 88,
+    "strengths": [
+      "Strong Python/backend alignment with REST APIs, PostgreSQL, Redis, async pipelines, production debugging, and data-heavy services.",
+      "Go is represented honestly without overstating Kubernetes/cloud-platform claims.",
+      "Kiddom-specific emphasis added: scalable services, customer-aware troubleshooting, onboarding/support, product empathy for education users.",
+      "Cambridge English C2 exceeds B2-C1 English requirement.",
+      "ForgeGraph and trading bot projects provide relevant proof for service boundaries, Redis, background workers, and data-intensive workflows."
+    ],
+    "known_gaps_not_faked": [
+      "No CS degree claim; CV keeps ITAM Bachelor of Science in Law.",
+      "No AWS/GCP/Azure/Kubernetes/Terraform claim because not source-backed here.",
+      "No explicit junior-engineer mentorship claim because not source-backed here."
+    ],
+    "approval_status": "review_required_before_external_submission",
+    "external_side_effects_allowed": false
+  }
+}

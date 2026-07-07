@@ -1,0 +1,78 @@
+{
+  "launch_readiness_metrics": [
+    "asset approval rate",
+    "DM inquiries by post",
+    "model availability questions",
+    "CTA click/reply intent",
+    "blocked launch reasons"
+  ],
+  "manual_tracking_template": [
+    {
+      "post_id": "01",
+      "metric_fields": [
+        "published_at",
+        "reach",
+        "saves",
+        "DMs",
+        "availability_questions",
+        "client_notes"
+      ]
+    },
+    {
+      "post_id": "02",
+      "metric_fields": [
+        "published_at",
+        "reach",
+        "saves",
+        "DMs",
+        "availability_questions",
+        "client_notes"
+      ]
+    },
+    {
+      "post_id": "03",
+      "metric_fields": [
+        "published_at",
+        "reach",
+        "saves",
+        "DMs",
+        "availability_questions",
+        "client_notes"
+      ]
+    },
+    {
+      "post_id": "04",
+      "metric_fields": [
+        "published_at",
+        "reach",
+        "saves",
+        "DMs",
+        "availability_questions",
+        "client_notes"
+      ]
+    },
+    {
+      "post_id": "05",
+      "metric_fields": [
+        "published_at",
+        "reach",
+        "saves",
+        "DMs",
+        "availability_questions",
+        "client_notes"
+      ]
+    },
+    {
+      "post_id": "06",
+      "metric_fields": [
+        "published_at",
+        "reach",
+        "saves",
+        "DMs",
+        "availability_questions",
+        "client_notes"
+      ]
+    }
+  ],
+  "post_launch_policy": "Do not claim live launch performance until client approval and publishing evidence exist."
+}

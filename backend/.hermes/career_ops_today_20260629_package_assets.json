@@ -1,0 +1,1663 @@
+162 objects imported automatically (use -v 2 for details).
+
+{
+  "Belvo": {
+    "ats": {
+      "atsScore": 86,
+      "format": "career_ops_ats_simulation_v1",
+      "keywordAnalysis": {
+        "coverage": 1.0,
+        "evidenceConfidence": {
+          "generic_keyword_count": 2,
+          "keyword_count": 3,
+          "level": "sparse",
+          "specific_keyword_count": 1,
+          "specificity": "mixed"
+        },
+        "matched": [
+          {
+            "job_count": 1,
+            "keyword": "observability",
+            "resume_count": 2,
+            "source_refs": [
+              {
+                "keyword": "observability",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "API",
+            "resume_count": 4,
+            "source_refs": [
+              {
+                "keyword": "API",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "AI",
+            "resume_count": 4,
+            "source_refs": [
+              {
+                "keyword": "AI",
+                "type": "cv_keyword"
+              }
+            ]
+          }
+        ],
+        "missing": [],
+        "overused": []
+      },
+      "opportunity": {
+        "ats_provider_hint": "ashby",
+        "employer_name": "Belvo",
+        "id": "773f6a29-2e97-4ef7-af98-8ac8720c5bb9",
+        "job_url": "https://jobs.ashbyhq.com/belvo/5724e5fc-93ed-45e4-9cb8-739bd9425d9d",
+        "role_title": "Software Engineer - Applied AI"
+      },
+      "parseability": {
+        "flags": [],
+        "present_sections": [
+          "SUMMARY",
+          "TECHNICAL SKILLS",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION"
+        ],
+        "required_sections": [
+          "SUMMARY",
+          "TECHNICAL SKILLS",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION"
+        ]
+      },
+      "quality": {
+        "external_side_effects_allowed": false,
+        "human_review_minimum_passed": true,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "send_minimum_passed": false,
+        "source_backed_claims": true
+      },
+      "roast": [
+        "Good enough for human review, but it still needs tightening before the 90+ send bar."
+      ],
+      "scoreBand": "human_review",
+      "scoreBreakdown": {
+        "formatting": {
+          "feedback": "Standard ATS sections and plain text are present.",
+          "max": 20,
+          "score": 17
+        },
+        "keywords": {
+          "feedback": "Job keywords are represented with source-backed resume evidence.",
+          "max": 35,
+          "score": 27
+        },
+        "readability": {
+          "feedback": "Resume text is concise and parseable.",
+          "max": 15,
+          "score": 12
+        },
+        "risk": {
+          "feedback": "No high-risk ATS or side-effect issues detected.",
+          "max": 10,
+          "score": 10
+        },
+        "structure": {
+          "feedback": "Required ATS section order is present.",
+          "max": 20,
+          "score": 20
+        }
+      },
+      "source_refs": [
+        {
+          "id": "773f6a29-2e97-4ef7-af98-8ac8720c5bb9",
+          "type": "opportunity"
+        },
+        {
+          "type": "job_url",
+          "url": "https://jobs.ashbyhq.com/belvo/5724e5fc-93ed-45e4-9cb8-739bd9425d9d"
+        },
+        {
+          "requirement": "workflow",
+          "type": "cv_source"
+        },
+        {
+          "requirement": "production",
+          "type": "cv_source"
+        },
+        {
+          "index": 4,
+          "type": "cv_skill"
+        },
+        {
+          "type": "cv_summary"
+        },
+        {
+          "index": 2,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 2,
+          "type": "cv_skill"
+        },
+        {
+          "index": 3,
+          "type": "cv_skill"
+        },
+        {
+          "index": 1,
+          "type": "cv_skill"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 0,
+          "type": "cv_project"
+        },
+        {
+          "index": 1,
+          "type": "cv_project"
+        },
+        {
+          "index": 0,
+          "type": "cv_education"
+        }
+      ],
+      "status": "simulated",
+      "strengths": [
+        "Standard ATS section order is present.",
+        "Most job keywords are represented with source-backed evidence.",
+        "No internal leakage or side-effect risk detected."
+      ],
+      "suggestions": [
+        {
+          "category": "Threshold",
+          "issue": "Packet is human-review-ready but below the 90 send/apply threshold.",
+          "priority": "medium",
+          "recommendation": "Improve source-backed keyword coverage or structure before send/apply approval.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        }
+      ],
+      "summary": "ATS simulator score is 86/100 (human_review). Matched 3 keyword(s); 0 keyword gap(s) require source-backed review.",
+      "thresholds": {
+        "human_review": 85,
+        "improvement_review": 70,
+        "send_ready": 90
+      }
+    },
+    "cover_letter": {
+      "claim_source_map": [
+        {
+          "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+          "source_ref": {
+            "index": 0,
+            "type": "cv_proof_point"
+          }
+        },
+        {
+          "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+          "source_ref": {
+            "index": 1,
+            "type": "cv_proof_point"
+          }
+        }
+      ],
+      "format": "cover_letter_v1",
+      "opportunity": {
+        "employer_name": "Belvo",
+        "id": "773f6a29-2e97-4ef7-af98-8ac8720c5bb9",
+        "job_url": "https://jobs.ashbyhq.com/belvo/5724e5fc-93ed-45e4-9cb8-739bd9425d9d",
+        "role_title": "Software Engineer - Applied AI"
+      },
+      "paragraphs": [
+        "I am interested in the Software Engineer - Applied AI role at Belvo because it aligns with my source-backed experience in observability, API, AI. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+        "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+        "I would welcome a conversation about how this background can support Belvo's work on Software Engineer - Applied AI."
+      ],
+      "quality": {
+        "external_side_effects_allowed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "source_backed_claims": true
+      },
+      "source_refs": [
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        }
+      ],
+      "status": "draft"
+    },
+    "recruiter": {
+      "external_side_effects_allowed": false,
+      "format": "career_ops_recruiter_evaluation_v1",
+      "opportunity": {
+        "employer_name": "Belvo",
+        "role_title": "Software Engineer - Applied AI"
+      },
+      "overall_score": 92,
+      "recommendation": "approve_for_human_send_review",
+      "review_prompt": "top_tier_recruiter: You are a top-tier recruiter reviewing this CV for presentation, role fit, credibility, professional delivery, and ATS readability. Score the CV like an experienced hiring operator, not a keyword counter. Flag anything that would make the candidate look unprofessional even if ATS keywords are present.",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 86,
+        "credibility": 100,
+        "presentation": 90,
+        "professional_delivery": 90,
+        "role_fit": 95
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ],
+      "version": "1"
+    }
+  },
+  "Clipbook": {
+    "ats": {
+      "atsScore": 82,
+      "format": "career_ops_ats_simulation_v1",
+      "keywordAnalysis": {
+        "coverage": 0.86,
+        "evidenceConfidence": {
+          "generic_keyword_count": 4,
+          "keyword_count": 7,
+          "level": "rich",
+          "specific_keyword_count": 3,
+          "specificity": "mixed"
+        },
+        "matched": [
+          {
+            "job_count": 1,
+            "keyword": "PostgreSQL",
+            "resume_count": 2,
+            "source_refs": [
+              {
+                "keyword": "PostgreSQL",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "Python",
+            "resume_count": 3,
+            "source_refs": [
+              {
+                "keyword": "Python",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "RAG",
+            "resume_count": 1,
+            "source_refs": [
+              {
+                "keyword": "RAG",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "API",
+            "resume_count": 5,
+            "source_refs": [
+              {
+                "keyword": "API",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "AI",
+            "resume_count": 4,
+            "source_refs": [
+              {
+                "keyword": "AI",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "backend",
+            "resume_count": 5,
+            "source_refs": [
+              {
+                "keyword": "backend",
+                "type": "cv_keyword"
+              }
+            ]
+          }
+        ],
+        "missing": [
+          {
+            "keyword": "TypeScript",
+            "recommendation": "Do not add TypeScript unless CV source supports it.",
+            "requires_source_fact": true,
+            "severity": "medium"
+          }
+        ],
+        "overused": []
+      },
+      "opportunity": {
+        "ats_provider_hint": "ashby",
+        "employer_name": "Clipbook",
+        "id": "5cdf1b92-32b7-4d92-a012-8075b97fb867",
+        "job_url": "https://jobs.ashbyhq.com/clipbook/a83afbff-3d1e-466e-8c1c-302dceb136e8",
+        "role_title": "Founding Senior Software Engineer (USA + LATAM)"
+      },
+      "parseability": {
+        "flags": [
+          {
+            "code": "section_order",
+            "message": "ATS sections are missing or not in the required order."
+          }
+        ],
+        "present_sections": [
+          "SUMMARY",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION",
+          "TECHNICAL SKILLS",
+          "CERTIFICATIONS"
+        ],
+        "required_sections": [
+          "SUMMARY",
+          "TECHNICAL SKILLS",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION"
+        ]
+      },
+      "quality": {
+        "external_side_effects_allowed": false,
+        "human_review_minimum_passed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "send_minimum_passed": false,
+        "source_backed_claims": true
+      },
+      "roast": [
+        "The resume has fixable ATS structure or safety issues before it should reach review."
+      ],
+      "scoreBand": "improvement_review",
+      "scoreBreakdown": {
+        "formatting": {
+          "feedback": "Formatting flags: section_order",
+          "max": 20,
+          "score": 12
+        },
+        "keywords": {
+          "feedback": "Missing 1 job keyword(s) that need source-backed evidence.",
+          "max": 35,
+          "score": 30
+        },
+        "readability": {
+          "feedback": "Resume text is concise and parseable.",
+          "max": 15,
+          "score": 12
+        },
+        "risk": {
+          "feedback": "No high-risk ATS or side-effect issues detected.",
+          "max": 10,
+          "score": 10
+        },
+        "structure": {
+          "feedback": "Resume should use the required ATS section order.",
+          "max": 20,
+          "score": 18
+        }
+      },
+      "source_refs": [
+        {
+          "id": "5cdf1b92-32b7-4d92-a012-8075b97fb867",
+          "type": "opportunity"
+        },
+        {
+          "type": "job_url",
+          "url": "https://jobs.ashbyhq.com/clipbook/a83afbff-3d1e-466e-8c1c-302dceb136e8"
+        },
+        {
+          "requirement": "workflow",
+          "type": "cv_source"
+        },
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 3,
+          "type": "cv_skill"
+        },
+        {
+          "type": "cv_summary"
+        },
+        {
+          "index": 2,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 3,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 4,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 5,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 0,
+          "type": "cv_project"
+        },
+        {
+          "index": 1,
+          "type": "cv_project"
+        },
+        {
+          "index": 0,
+          "type": "cv_education"
+        },
+        {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      ],
+      "status": "simulated",
+      "strengths": [
+        "Most job keywords are represented with source-backed evidence.",
+        "No internal leakage or side-effect risk detected."
+      ],
+      "suggestions": [
+        {
+          "category": "Structure",
+          "issue": "ATS sections are missing or not in the required order.",
+          "priority": "high",
+          "recommendation": "Fix this before human review.",
+          "requires_source_fact": false,
+          "safe_to_apply_automatically": false
+        },
+        {
+          "category": "Keywords",
+          "issue": "Job keyword not source-backed in resume: TypeScript",
+          "priority": "medium",
+          "recommendation": "Do not add TypeScript unless CV source supports it.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        }
+      ],
+      "summary": "ATS simulator score is 82/100 (improvement_review). Matched 6 keyword(s); 1 keyword gap(s) require source-backed review.",
+      "thresholds": {
+        "human_review": 85,
+        "improvement_review": 70,
+        "send_ready": 90
+      }
+    },
+    "cover_letter": {
+      "claim_source_map": [
+        {
+          "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+          "source_ref": {
+            "index": 0,
+            "type": "cv_proof_point"
+          }
+        },
+        {
+          "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+          "source_ref": {
+            "index": 1,
+            "type": "cv_proof_point"
+          }
+        }
+      ],
+      "format": "cover_letter_v1",
+      "opportunity": {
+        "employer_name": "Clipbook",
+        "id": "5cdf1b92-32b7-4d92-a012-8075b97fb867",
+        "job_url": "https://jobs.ashbyhq.com/clipbook/a83afbff-3d1e-466e-8c1c-302dceb136e8",
+        "role_title": "Founding Senior Software Engineer (USA + LATAM)"
+      },
+      "paragraphs": [
+        "I am interested in the Founding Senior Software Engineer (USA + LATAM) role at Clipbook because it aligns with my source-backed experience in PostgreSQL, TypeScript, Python. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+        "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+        "I would welcome a conversation about how this background can support Clipbook's work on Founding Senior Software Engineer (USA + LATAM)."
+      ],
+      "quality": {
+        "external_side_effects_allowed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "source_backed_claims": true
+      },
+      "source_refs": [
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        }
+      ],
+      "status": "draft"
+    },
+    "recruiter": {
+      "external_side_effects_allowed": false,
+      "format": "career_ops_recruiter_evaluation_v1",
+      "opportunity": {
+        "employer_name": "Clipbook",
+        "role_title": "Founding Senior Software Engineer (USA + LATAM)"
+      },
+      "overall_score": 91,
+      "recommendation": "approve_for_human_send_review",
+      "review_prompt": "top_tier_recruiter: You are a top-tier recruiter reviewing this CV for presentation, role fit, credibility, professional delivery, and ATS readability. Score the CV like an experienced hiring operator, not a keyword counter. Flag anything that would make the candidate look unprofessional even if ATS keywords are present.",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 84,
+        "credibility": 100,
+        "presentation": 90,
+        "professional_delivery": 90,
+        "role_fit": 90
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ],
+      "version": "1"
+    }
+  },
+  "RYZ Labs": {
+    "ats": {
+      "atsScore": 75,
+      "format": "career_ops_ats_simulation_v1",
+      "keywordAnalysis": {
+        "coverage": 0.67,
+        "evidenceConfidence": {
+          "generic_keyword_count": 3,
+          "keyword_count": 9,
+          "level": "rich",
+          "specific_keyword_count": 6,
+          "specificity": "mixed"
+        },
+        "matched": [
+          {
+            "job_count": 1,
+            "keyword": "PostgreSQL",
+            "resume_count": 2,
+            "source_refs": [
+              {
+                "keyword": "PostgreSQL",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "Next.js",
+            "resume_count": 1,
+            "source_refs": [
+              {
+                "keyword": "Next.js",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "Python",
+            "resume_count": 3,
+            "source_refs": [
+              {
+                "keyword": "Python",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "Redis",
+            "resume_count": 3,
+            "source_refs": [
+              {
+                "keyword": "Redis",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "API",
+            "resume_count": 5,
+            "source_refs": [
+              {
+                "keyword": "API",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "AI",
+            "resume_count": 4,
+            "source_refs": [
+              {
+                "keyword": "AI",
+                "type": "cv_keyword"
+              }
+            ]
+          }
+        ],
+        "missing": [
+          {
+            "keyword": "observability",
+            "recommendation": "Do not add observability unless CV source supports it.",
+            "requires_source_fact": true,
+            "severity": "medium"
+          },
+          {
+            "keyword": "TypeScript",
+            "recommendation": "Do not add TypeScript unless CV source supports it.",
+            "requires_source_fact": true,
+            "severity": "medium"
+          },
+          {
+            "keyword": "React",
+            "recommendation": "Do not add React unless CV source supports it.",
+            "requires_source_fact": true,
+            "severity": "medium"
+          }
+        ],
+        "overused": []
+      },
+      "opportunity": {
+        "ats_provider_hint": "lever",
+        "employer_name": "RYZ Labs",
+        "id": "c1041bdb-7c14-4bc8-a1e4-d6b0c555e90f",
+        "job_url": "https://jobs.lever.co/RyzLabs/a9dc1f82-1cc3-4030-9405-cb566db5a62a",
+        "role_title": "Senior Software Engineer (Python)"
+      },
+      "parseability": {
+        "flags": [
+          {
+            "code": "section_order",
+            "message": "ATS sections are missing or not in the required order."
+          }
+        ],
+        "present_sections": [
+          "SUMMARY",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION",
+          "TECHNICAL SKILLS",
+          "CERTIFICATIONS"
+        ],
+        "required_sections": [
+          "SUMMARY",
+          "TECHNICAL SKILLS",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION"
+        ]
+      },
+      "quality": {
+        "external_side_effects_allowed": false,
+        "human_review_minimum_passed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "send_minimum_passed": false,
+        "source_backed_claims": true
+      },
+      "roast": [
+        "The resume has fixable ATS structure or safety issues before it should reach review."
+      ],
+      "scoreBand": "improvement_review",
+      "scoreBreakdown": {
+        "formatting": {
+          "feedback": "Formatting flags: section_order",
+          "max": 20,
+          "score": 12
+        },
+        "keywords": {
+          "feedback": "Missing 3 job keyword(s) that need source-backed evidence.",
+          "max": 35,
+          "score": 23
+        },
+        "readability": {
+          "feedback": "Resume text is concise and parseable.",
+          "max": 15,
+          "score": 12
+        },
+        "risk": {
+          "feedback": "No high-risk ATS or side-effect issues detected.",
+          "max": 10,
+          "score": 10
+        },
+        "structure": {
+          "feedback": "Resume should use the required ATS section order.",
+          "max": 20,
+          "score": 18
+        }
+      },
+      "source_refs": [
+        {
+          "id": "c1041bdb-7c14-4bc8-a1e4-d6b0c555e90f",
+          "type": "opportunity"
+        },
+        {
+          "type": "job_url",
+          "url": "https://jobs.lever.co/RyzLabs/a9dc1f82-1cc3-4030-9405-cb566db5a62a"
+        },
+        {
+          "index": 4,
+          "type": "cv_skill"
+        },
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 3,
+          "type": "cv_skill"
+        },
+        {
+          "type": "cv_summary"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 2,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 3,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 4,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 5,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 0,
+          "type": "cv_project"
+        },
+        {
+          "index": 1,
+          "type": "cv_project"
+        },
+        {
+          "index": 0,
+          "type": "cv_education"
+        },
+        {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      ],
+      "status": "simulated",
+      "strengths": [
+        "No internal leakage or side-effect risk detected."
+      ],
+      "suggestions": [
+        {
+          "category": "Structure",
+          "issue": "ATS sections are missing or not in the required order.",
+          "priority": "high",
+          "recommendation": "Fix this before human review.",
+          "requires_source_fact": false,
+          "safe_to_apply_automatically": false
+        },
+        {
+          "category": "Keywords",
+          "issue": "Job keyword not source-backed in resume: observability",
+          "priority": "medium",
+          "recommendation": "Do not add observability unless CV source supports it.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        },
+        {
+          "category": "Keywords",
+          "issue": "Job keyword not source-backed in resume: TypeScript",
+          "priority": "medium",
+          "recommendation": "Do not add TypeScript unless CV source supports it.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        },
+        {
+          "category": "Keywords",
+          "issue": "Job keyword not source-backed in resume: React",
+          "priority": "medium",
+          "recommendation": "Do not add React unless CV source supports it.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        }
+      ],
+      "summary": "ATS simulator score is 75/100 (improvement_review). Matched 6 keyword(s); 3 keyword gap(s) require source-backed review.",
+      "thresholds": {
+        "human_review": 85,
+        "improvement_review": 70,
+        "send_ready": 90
+      }
+    },
+    "cover_letter": {
+      "claim_source_map": [
+        {
+          "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+          "source_ref": {
+            "index": 0,
+            "type": "cv_proof_point"
+          }
+        },
+        {
+          "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+          "source_ref": {
+            "index": 1,
+            "type": "cv_proof_point"
+          }
+        }
+      ],
+      "format": "cover_letter_v1",
+      "opportunity": {
+        "employer_name": "RYZ Labs",
+        "id": "c1041bdb-7c14-4bc8-a1e4-d6b0c555e90f",
+        "job_url": "https://jobs.lever.co/RyzLabs/a9dc1f82-1cc3-4030-9405-cb566db5a62a",
+        "role_title": "Senior Software Engineer (Python)"
+      },
+      "paragraphs": [
+        "I am interested in the Senior Software Engineer (Python) role at RYZ Labs because it aligns with my source-backed experience in observability, PostgreSQL, TypeScript. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+        "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+        "I would welcome a conversation about how this background can support RYZ Labs's work on Senior Software Engineer (Python)."
+      ],
+      "quality": {
+        "external_side_effects_allowed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "source_backed_claims": true
+      },
+      "source_refs": [
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        }
+      ],
+      "status": "draft"
+    },
+    "recruiter": {
+      "external_side_effects_allowed": false,
+      "format": "career_ops_recruiter_evaluation_v1",
+      "opportunity": {
+        "employer_name": "RYZ Labs",
+        "role_title": "Senior Software Engineer (Python)"
+      },
+      "overall_score": 90,
+      "recommendation": "approve_for_human_send_review",
+      "review_prompt": "top_tier_recruiter: You are a top-tier recruiter reviewing this CV for presentation, role fit, credibility, professional delivery, and ATS readability. Score the CV like an experienced hiring operator, not a keyword counter. Flag anything that would make the candidate look unprofessional even if ATS keywords are present.",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 80,
+        "credibility": 100,
+        "presentation": 90,
+        "professional_delivery": 90,
+        "role_fit": 90
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ],
+      "version": "1"
+    }
+  },
+  "Remote Talent LATAM": {
+    "ats": {
+      "atsScore": 80,
+      "format": "career_ops_ats_simulation_v1",
+      "keywordAnalysis": {
+        "coverage": 0.8,
+        "evidenceConfidence": {
+          "generic_keyword_count": 3,
+          "keyword_count": 10,
+          "level": "rich",
+          "specific_keyword_count": 7,
+          "specificity": "mixed"
+        },
+        "matched": [
+          {
+            "job_count": 1,
+            "keyword": "PostgreSQL",
+            "resume_count": 2,
+            "source_refs": [
+              {
+                "keyword": "PostgreSQL",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "FastAPI",
+            "resume_count": 2,
+            "source_refs": [
+              {
+                "keyword": "FastAPI",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "Next.js",
+            "resume_count": 1,
+            "source_refs": [
+              {
+                "keyword": "Next.js",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "Redis",
+            "resume_count": 3,
+            "source_refs": [
+              {
+                "keyword": "Redis",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "Celery",
+            "resume_count": 1,
+            "source_refs": [
+              {
+                "keyword": "Celery",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "API",
+            "resume_count": 5,
+            "source_refs": [
+              {
+                "keyword": "API",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "AI",
+            "resume_count": 4,
+            "source_refs": [
+              {
+                "keyword": "AI",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "backend",
+            "resume_count": 6,
+            "source_refs": [
+              {
+                "keyword": "backend",
+                "type": "cv_keyword"
+              }
+            ]
+          }
+        ],
+        "missing": [
+          {
+            "keyword": "TypeScript",
+            "recommendation": "Do not add TypeScript unless CV source supports it.",
+            "requires_source_fact": true,
+            "severity": "medium"
+          },
+          {
+            "keyword": "React",
+            "recommendation": "Do not add React unless CV source supports it.",
+            "requires_source_fact": true,
+            "severity": "medium"
+          }
+        ],
+        "overused": []
+      },
+      "opportunity": {
+        "ats_provider_hint": "unknown",
+        "employer_name": "Remote Talent LATAM / U.S. digital health client",
+        "id": "08d4b01b-5efa-4819-9f1e-e728b5025675",
+        "job_url": "https://jobs.workable.com/view/4gWYat1uHKDwoJEPY4gh4x/senior-full-stack-engineer-(backend-focus)-%7C-remote-%7C-latam-only-%7C-85157-in-honduras-at-remote-talent-latam",
+        "role_title": "Senior Full Stack Engineer (Backend Focus)"
+      },
+      "parseability": {
+        "flags": [
+          {
+            "code": "section_order",
+            "message": "ATS sections are missing or not in the required order."
+          }
+        ],
+        "present_sections": [
+          "SUMMARY",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION",
+          "TECHNICAL SKILLS",
+          "CERTIFICATIONS"
+        ],
+        "required_sections": [
+          "SUMMARY",
+          "TECHNICAL SKILLS",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION"
+        ]
+      },
+      "quality": {
+        "external_side_effects_allowed": false,
+        "human_review_minimum_passed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "send_minimum_passed": false,
+        "source_backed_claims": true
+      },
+      "roast": [
+        "The resume has fixable ATS structure or safety issues before it should reach review."
+      ],
+      "scoreBand": "improvement_review",
+      "scoreBreakdown": {
+        "formatting": {
+          "feedback": "Formatting flags: section_order",
+          "max": 20,
+          "score": 12
+        },
+        "keywords": {
+          "feedback": "Missing 2 job keyword(s) that need source-backed evidence.",
+          "max": 35,
+          "score": 28
+        },
+        "readability": {
+          "feedback": "Resume text is concise and parseable.",
+          "max": 15,
+          "score": 12
+        },
+        "risk": {
+          "feedback": "No high-risk ATS or side-effect issues detected.",
+          "max": 10,
+          "score": 10
+        },
+        "structure": {
+          "feedback": "Resume should use the required ATS section order.",
+          "max": 20,
+          "score": 18
+        }
+      },
+      "source_refs": [
+        {
+          "id": "08d4b01b-5efa-4819-9f1e-e728b5025675",
+          "type": "opportunity"
+        },
+        {
+          "type": "job_url",
+          "url": "https://jobs.workable.com/view/4gWYat1uHKDwoJEPY4gh4x/senior-full-stack-engineer-(backend-focus)-%7C-remote-%7C-latam-only-%7C-85157-in-honduras-at-remote-talent-latam"
+        },
+        {
+          "requirement": "production",
+          "type": "cv_source"
+        },
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 3,
+          "type": "cv_skill"
+        },
+        {
+          "index": 1,
+          "type": "cv_skill"
+        },
+        {
+          "type": "cv_summary"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 2,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 3,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 4,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 5,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 0,
+          "type": "cv_project"
+        },
+        {
+          "index": 1,
+          "type": "cv_project"
+        },
+        {
+          "index": 0,
+          "type": "cv_education"
+        },
+        {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      ],
+      "status": "simulated",
+      "strengths": [
+        "Most job keywords are represented with source-backed evidence.",
+        "No internal leakage or side-effect risk detected."
+      ],
+      "suggestions": [
+        {
+          "category": "Structure",
+          "issue": "ATS sections are missing or not in the required order.",
+          "priority": "high",
+          "recommendation": "Fix this before human review.",
+          "requires_source_fact": false,
+          "safe_to_apply_automatically": false
+        },
+        {
+          "category": "Keywords",
+          "issue": "Job keyword not source-backed in resume: TypeScript",
+          "priority": "medium",
+          "recommendation": "Do not add TypeScript unless CV source supports it.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        },
+        {
+          "category": "Keywords",
+          "issue": "Job keyword not source-backed in resume: React",
+          "priority": "medium",
+          "recommendation": "Do not add React unless CV source supports it.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        }
+      ],
+      "summary": "ATS simulator score is 80/100 (improvement_review). Matched 8 keyword(s); 2 keyword gap(s) require source-backed review.",
+      "thresholds": {
+        "human_review": 85,
+        "improvement_review": 70,
+        "send_ready": 90
+      }
+    },
+    "cover_letter": {
+      "claim_source_map": [
+        {
+          "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+          "source_ref": {
+            "index": 0,
+            "type": "cv_proof_point"
+          }
+        },
+        {
+          "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+          "source_ref": {
+            "index": 1,
+            "type": "cv_proof_point"
+          }
+        }
+      ],
+      "format": "cover_letter_v1",
+      "opportunity": {
+        "employer_name": "Remote Talent LATAM / U.S. digital health client",
+        "id": "08d4b01b-5efa-4819-9f1e-e728b5025675",
+        "job_url": "https://jobs.workable.com/view/4gWYat1uHKDwoJEPY4gh4x/senior-full-stack-engineer-(backend-focus)-%7C-remote-%7C-latam-only-%7C-85157-in-honduras-at-remote-talent-latam",
+        "role_title": "Senior Full Stack Engineer (Backend Focus)"
+      },
+      "paragraphs": [
+        "I am interested in the Senior Full Stack Engineer (Backend Focus) role at Remote Talent LATAM / U.S. digital health client because it aligns with my source-backed experience in PostgreSQL, TypeScript, FastAPI. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+        "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+        "I would welcome a conversation about how this background can support Remote Talent LATAM / U.S. digital health client's work on Senior Full Stack Engineer (Backend Focus)."
+      ],
+      "quality": {
+        "external_side_effects_allowed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "source_backed_claims": true
+      },
+      "source_refs": [
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        }
+      ],
+      "status": "draft"
+    },
+    "recruiter": {
+      "external_side_effects_allowed": false,
+      "format": "career_ops_recruiter_evaluation_v1",
+      "opportunity": {
+        "employer_name": "Remote Talent LATAM / U.S. digital health client",
+        "role_title": "Senior Full Stack Engineer (Backend Focus)"
+      },
+      "overall_score": 91,
+      "recommendation": "approve_for_human_send_review",
+      "review_prompt": "top_tier_recruiter: You are a top-tier recruiter reviewing this CV for presentation, role fit, credibility, professional delivery, and ATS readability. Score the CV like an experienced hiring operator, not a keyword counter. Flag anything that would make the candidate look unprofessional even if ATS keywords are present.",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 82,
+        "credibility": 100,
+        "presentation": 90,
+        "professional_delivery": 90,
+        "role_fit": 95
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ],
+      "version": "1"
+    }
+  },
+  "South Geeks": {
+    "ats": {
+      "atsScore": 77,
+      "format": "career_ops_ats_simulation_v1",
+      "keywordAnalysis": {
+        "coverage": 0.71,
+        "evidenceConfidence": {
+          "generic_keyword_count": 3,
+          "keyword_count": 7,
+          "level": "rich",
+          "specific_keyword_count": 4,
+          "specificity": "mixed"
+        },
+        "matched": [
+          {
+            "job_count": 1,
+            "keyword": "FastAPI",
+            "resume_count": 2,
+            "source_refs": [
+              {
+                "keyword": "FastAPI",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "Python",
+            "resume_count": 3,
+            "source_refs": [
+              {
+                "keyword": "Python",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "RAG",
+            "resume_count": 1,
+            "source_refs": [
+              {
+                "keyword": "RAG",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "AI",
+            "resume_count": 4,
+            "source_refs": [
+              {
+                "keyword": "AI",
+                "type": "cv_keyword"
+              }
+            ]
+          },
+          {
+            "job_count": 1,
+            "keyword": "backend",
+            "resume_count": 6,
+            "source_refs": [
+              {
+                "keyword": "backend",
+                "type": "cv_keyword"
+              }
+            ]
+          }
+        ],
+        "missing": [
+          {
+            "keyword": "TypeScript",
+            "recommendation": "Do not add TypeScript unless CV source supports it.",
+            "requires_source_fact": true,
+            "severity": "medium"
+          },
+          {
+            "keyword": "React",
+            "recommendation": "Do not add React unless CV source supports it.",
+            "requires_source_fact": true,
+            "severity": "medium"
+          }
+        ],
+        "overused": []
+      },
+      "opportunity": {
+        "ats_provider_hint": "ashby",
+        "employer_name": "South Geeks",
+        "id": "615aba05-edd4-45a1-ac7f-979b89963451",
+        "job_url": "https://jobs.ashbyhq.com/southgeeks/7c137ebe-e525-4533-94a5-0b1da517485d",
+        "role_title": "Senior Full-stack Engineer (backend-leaning)"
+      },
+      "parseability": {
+        "flags": [
+          {
+            "code": "section_order",
+            "message": "ATS sections are missing or not in the required order."
+          }
+        ],
+        "present_sections": [
+          "SUMMARY",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION",
+          "TECHNICAL SKILLS",
+          "CERTIFICATIONS"
+        ],
+        "required_sections": [
+          "SUMMARY",
+          "TECHNICAL SKILLS",
+          "SELECTED EXPERIENCE",
+          "PROJECTS",
+          "EDUCATION"
+        ]
+      },
+      "quality": {
+        "external_side_effects_allowed": false,
+        "human_review_minimum_passed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "send_minimum_passed": false,
+        "source_backed_claims": true
+      },
+      "roast": [
+        "The resume has fixable ATS structure or safety issues before it should reach review."
+      ],
+      "scoreBand": "improvement_review",
+      "scoreBreakdown": {
+        "formatting": {
+          "feedback": "Formatting flags: section_order",
+          "max": 20,
+          "score": 12
+        },
+        "keywords": {
+          "feedback": "Missing 2 job keyword(s) that need source-backed evidence.",
+          "max": 35,
+          "score": 25
+        },
+        "readability": {
+          "feedback": "Resume text is concise and parseable.",
+          "max": 15,
+          "score": 12
+        },
+        "risk": {
+          "feedback": "No high-risk ATS or side-effect issues detected.",
+          "max": 10,
+          "score": 10
+        },
+        "structure": {
+          "feedback": "Resume should use the required ATS section order.",
+          "max": 20,
+          "score": 18
+        }
+      },
+      "source_refs": [
+        {
+          "id": "615aba05-edd4-45a1-ac7f-979b89963451",
+          "type": "opportunity"
+        },
+        {
+          "type": "job_url",
+          "url": "https://jobs.ashbyhq.com/southgeeks/7c137ebe-e525-4533-94a5-0b1da517485d"
+        },
+        {
+          "requirement": "workflow",
+          "type": "cv_source"
+        },
+        {
+          "requirement": "automation",
+          "type": "cv_source"
+        },
+        {
+          "requirement": "production",
+          "type": "cv_source"
+        },
+        {
+          "index": 3,
+          "type": "cv_skill"
+        },
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "type": "cv_summary"
+        },
+        {
+          "index": 2,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 3,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 4,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 5,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 0,
+          "type": "cv_project"
+        },
+        {
+          "index": 1,
+          "type": "cv_project"
+        },
+        {
+          "index": 0,
+          "type": "cv_education"
+        },
+        {
+          "index": 0,
+          "type": "cv_skill"
+        }
+      ],
+      "status": "simulated",
+      "strengths": [
+        "No internal leakage or side-effect risk detected."
+      ],
+      "suggestions": [
+        {
+          "category": "Structure",
+          "issue": "ATS sections are missing or not in the required order.",
+          "priority": "high",
+          "recommendation": "Fix this before human review.",
+          "requires_source_fact": false,
+          "safe_to_apply_automatically": false
+        },
+        {
+          "category": "Keywords",
+          "issue": "Job keyword not source-backed in resume: TypeScript",
+          "priority": "medium",
+          "recommendation": "Do not add TypeScript unless CV source supports it.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        },
+        {
+          "category": "Keywords",
+          "issue": "Job keyword not source-backed in resume: React",
+          "priority": "medium",
+          "recommendation": "Do not add React unless CV source supports it.",
+          "requires_source_fact": true,
+          "safe_to_apply_automatically": false
+        }
+      ],
+      "summary": "ATS simulator score is 77/100 (improvement_review). Matched 5 keyword(s); 2 keyword gap(s) require source-backed review.",
+      "thresholds": {
+        "human_review": 85,
+        "improvement_review": 70,
+        "send_ready": 90
+      }
+    },
+    "cover_letter": {
+      "claim_source_map": [
+        {
+          "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+          "source_ref": {
+            "index": 0,
+            "type": "cv_proof_point"
+          }
+        },
+        {
+          "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+          "source_ref": {
+            "index": 1,
+            "type": "cv_proof_point"
+          }
+        }
+      ],
+      "format": "cover_letter_v1",
+      "opportunity": {
+        "employer_name": "South Geeks",
+        "id": "615aba05-edd4-45a1-ac7f-979b89963451",
+        "job_url": "https://jobs.ashbyhq.com/southgeeks/7c137ebe-e525-4533-94a5-0b1da517485d",
+        "role_title": "Senior Full-stack Engineer (backend-leaning)"
+      },
+      "paragraphs": [
+        "I am interested in the Senior Full-stack Engineer (backend-leaning) role at South Geeks because it aligns with my source-backed experience in TypeScript, FastAPI, Python. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+        "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+        "I would welcome a conversation about how this background can support South Geeks's work on Senior Full-stack Engineer (backend-leaning)."
+      ],
+      "quality": {
+        "external_side_effects_allowed": false,
+        "live_ready": false,
+        "no_invented_candidate_facts": true,
+        "source_backed_claims": true
+      },
+      "source_refs": [
+        {
+          "index": 0,
+          "type": "cv_proof_point"
+        },
+        {
+          "index": 1,
+          "type": "cv_proof_point"
+        }
+      ],
+      "status": "draft"
+    },
+    "recruiter": {
+      "external_side_effects_allowed": false,
+      "format": "career_ops_recruiter_evaluation_v1",
+      "opportunity": {
+        "employer_name": "South Geeks",
+        "role_title": "Senior Full-stack Engineer (backend-leaning)"
+      },
+      "overall_score": 91,
+      "recommendation": "approve_for_human_send_review",
+      "review_prompt": "top_tier_recruiter: You are a top-tier recruiter reviewing this CV for presentation, role fit, credibility, professional delivery, and ATS readability. Score the CV like an experienced hiring operator, not a keyword counter. Flag anything that would make the candidate look unprofessional even if ATS keywords are present.",
+      "risks": [
+        "No major professional-delivery risks detected for human review."
+      ],
+      "scores": {
+        "ats_readability": 81,
+        "credibility": 100,
+        "presentation": 90,
+        "professional_delivery": 90,
+        "role_fit": 95
+      },
+      "strengths": [
+        "Clean one-column presentation with efficient section hierarchy.",
+        "Strong backend/API and AI-workflow alignment for the target role.",
+        "Experience is anchored in named roles rather than generic capability bullets.",
+        "Project section includes public proof links for technical credibility."
+      ],
+      "version": "1"
+    }
+  }
+}

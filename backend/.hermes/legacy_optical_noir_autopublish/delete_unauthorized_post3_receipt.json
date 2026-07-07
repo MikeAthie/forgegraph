@@ -1,0 +1,19 @@
+{
+  "created_at": "2026-07-02T01:09:52.096685+00:00",
+  "post": 3,
+  "media_id": "18086310779431351",
+  "permalink": "https://www.instagram.com/p/DaRU3QNINLs/",
+  "secrets_redacted": true,
+  "before_status": 200,
+  "before_exists": true,
+  "delete_status": 400,
+  "delete_response": {
+    "type": "OAuthException",
+    "code": "10",
+    "error_subcode": "",
+    "message": "(#10) Insufficient permissions to access this data"
+  },
+  "after_status": 200,
+  "after_error": null,
+  "ok": false
+}

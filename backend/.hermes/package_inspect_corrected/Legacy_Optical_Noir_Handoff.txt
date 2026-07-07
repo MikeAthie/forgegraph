@@ -1,0 +1,101 @@
+FORGEGRAPH CLIENT HANDOFF
+Legacy Optical Noir -- entrega para revisión
+Paquete armado desde el prompt operativo, con estrategia, contenido, assets, medición, QA y evidencia de linaje listos para aprobación. No se afirma publicación en vivo: el lanzamiento queda condicionado a aprobación y conectores reales.
+
+APPROVAL CHECKPOINT
+Decisión solicitada
+Dirección visual Optical Noir Uso de los assets incluidos como borradores de campaña Tono Spanish-first, concreto y de baja exageración Launch posterior sólo con aprobación y recibos de canal
+
+ARTIFACT INDEX
+ForgeGraph archived run
+Engagement, whiteboard, asset checksums, source deliverables, and media provenance are archived in manifest.json. The visible handoff keeps internal IDs out of client copy.
+No Markdown files included.
+
+ASSETS
+Posts incluidos
+
+Post 01
+
+Post 02
+
+Post 03
+
+Post 04
+
+Post 05
+
+Post 06
+
+CODEX STRATEGY BRIEF
+Legacy Optical Noir Strategy Brief
+Legacy Optical Noir Weekend Social Launch: Strategy Brief
+Run Summary
+Legacy will launch a weekend social package for Legacy Optical Noir, positioned as a sharp, premium, evening-ready sunglasses campaign built around confidence, contrast, and editorial restraint.
+ForgeGraph owns the run end-to-end through the Atlas agency pipeline: strategy first, then brand direction, channel planning, CRM alignment, analytics setup, QA, packaging, client approval, and delivery.
+No Markdown files will be sent to the client. Client delivery must be a ZIP containing only:
+HTML PDF PNG Manifest
+Delivery will be made by WhatsApp to Mike only, with durable receipt and evidence captured.
+Strategic Objective
+Create a client-ready weekend launch package that gives Legacy a polished social campaign ready for approval and distribution, without exposing internal working files or production lineage.
+Primary goals:
+Present Legacy Optical Noir as refined, modern, and premium. Produce fresh visual assets specifically for this launch. Keep the campaign focused on sunglasses, mood, and product desirability. Package the final output in client-safe formats only. Maintain proof of delivery, approval, and evidence for auditability.
+Creative Direction
+Campaign tone:
+Noir Editorial Confident Minimal
+
+Premium Weekend-ready
+Visual direction:
+High-contrast studio lighting Black, smoke, chrome, glass, and deep neutral environments Sunglasses as the hero object No people No visible logos No embedded text No typography inside generated imagery
+The campaign should feel like a luxury optical drop, not a generic retail sale.
+Asset Strategy
+All primary sunglasses visuals must be produced through a Codex-backed media worker using fresh generated assets.
+Asset requirements:
+Sunglasses-focused imagery only No text in image No logo in image No people or human body parts No reused stock photography No client-confusing mock brand marks Suitable for social crops and launch packaging
+Recommended asset set:
+Hero noir sunglasses image Close-up product detail image Flat-lay editorial image Dark reflective surface image Weekend story-format crop Square feed-format crop
+Department Pipeline
+Define objective, audience, positioning, campaign constraints, packaging rules, and approval path.
+Strategy Research
+
+Translate strategy into visual language, tone, composition rules, color treatment, and campaign copy direction.
+Brand
+Prepare social-ready placements for weekend launch use, including feed, story, and optional shortform social packaging.
+Channel
+Align supporting message for owned audience follow-up, if needed, while keeping the weekend launch concise.
+CRM
+Define trackable campaign fields, launch naming, asset manifest metadata, and evidence capture.
+Analytics
+Verify all assets and packaged files meet client-safe requirements.
+QA
+Package final approved materials into the ZIP and route to Mike only.
+Client Approval
+QA Requirements
+Before delivery, QA must confirm:
+No Markdown files are included. ZIP contains only HTML, PDF, PNG, and manifest files. All generated images contain no text, no logos, and no people. Assets are fresh and campaign-specific. Campaign naming is consistent. HTML and PDF render correctly. PNG exports are clean and properly cropped. Manifest matches the delivered files. WhatsApp delivery is addressed only to Mike. Receipt and evidence are stored durably.
+Client Delivery Rules
+Delivery method:
+WhatsApp only
+
+Recipient: Mike only Message must be brief and concrete Attach one ZIP only Do not attach Markdown files Do not send internal notes or working files
+Suggested WhatsApp message:
+> Mike, attached is the Legacy Optical Noir weekend social launch package. The ZIP includes the client-ready HTML, PDF, PNG assets, and manifest for review.
+Evidence And Receipt
+ForgeGraph must retain durable evidence of:
+Final ZIP contents Manifest Delivery timestamp WhatsApp recipient Sent message copy Attachment filename Client receipt or visible delivery confirmation Approval response, if provided
+Success Criteria
+The run is successful when Legacy receives a clean, client-ready launch ZIP through WhatsApp to Mike only, with all assets passing QA and durable evidence retained for the full delivery trail.
+MESSAGE HOUSE
+Legacy Optical Noir Message House
+Legacy Optical Noir Message House Source request: Create a client-ready Legacy Optical Noir weekend social launch package. ForgeGraph must own the run end-to-end: department pipeline, strategy before assets, Codex-backed media worker for fresh no-text/no-logo/no-people sunglasses assets, QA, client ZIP with HTML/PDF/PNG/manifest only, WhatsApp delivery to Mike only, and durable receipt/evidence. Do not send Markdown files to clients. Keep WhatsApp brief and concrete. Positioning: lujo usable para CDMX; editorial, sobrio, accesible-premium. Primary CTA: revisar estilos y aprobar piezas antes de publicar. Tone: Spanish-first, concrete, low-hype, confident.
+
+CRM SCRIPTS
+Legacy WhatsApp / DM Response Scripts WhatsApp / DM scripts Disponibilidad: Te confirmo modelo/color y te comparto alternativas si ya se movió. Precio: Son piezas premium; te ayudo a elegir el par que mejor se vea y más uses. Cierre: ¿Quieres que te aparte este modelo o prefieres ver dos opciones más?
+MEASUREMENT PLAN
+Legacy Manual Measurement Plan Track post saves, replies, profile visits, link clicks, DMs, holds, sold/blocked status, and next action every 24h. Hold live claims until connector evidence exists.
+CHANNEL ASSET MAP
+Legacy Channel Asset Map Channel Asset Map
+QA REPORT
+Legacy Launch QA Report QA Report Media jobs succeeded: 6/6 Client package formats: HTML, PDF, PNG, JSON manifest, ZIP; no Markdown files. Policy: no live publishing claim; approval required before production launch. Decision: ready for review
+Paquete generado por ForgeGraph para revisión interna/client-facing. Requiere aprobación antes de producción. La solicitud operacional completa queda archivada en manifest.json.
+
+

@@ -1,0 +1,309 @@
+{
+  "run_id": "legacy_forgegraph_native_v1_20260609_1710",
+  "engagement_id": "201201f2-9f69-40c1-ad59-552a041d64c5",
+  "whiteboard_id": "5bdd34c4-3048-479f-96e5-edfa349a4a9d",
+  "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+  "strategy_completed_at": null,
+  "brand_completed_at": null,
+  "prompts": [
+    {
+      "job_id": "276eade2-c1ca-49d4-a463-7a24c2bcf243",
+      "post_id": "01",
+      "role": "Brand launch / editorial",
+      "prompt": "Premium editorial product photography for a luxury-accessible sunglasses brand named Legacy, campaign concept Optical Noir. Deep black, warm ivory, aged copper, subtle green lens reflections, cinematic low-key lighting, CDMX after-dark mood, mobile-first square crop, no visible text, no logos, no people, no stock-photo feel. Hero sunglasses on dark smoked glass with elegant negative space for headline overlay.",
+      "post": {
+        "id": "01",
+        "role": "Brand launch / editorial",
+        "headline": "La noche empieza\nantes de salir.",
+        "caption": "La noche empieza antes de salir. Legacy reúne siluetas importadas, presencia medida y entrega directa en CDMX. Explora modelos desde $590 MXN.",
+        "cta": "Elegir mi Legacy",
+        "hashtags": "#LegacyCDMX #OpticalNoir #LentesDeSol"
+      }
+    },
+    {
+      "job_id": "a757db18-e724-47b2-9a10-47f07ab46c91",
+      "post_id": "02",
+      "role": "MONROE / BLACK hero",
+      "prompt": "Premium editorial product photography for a luxury-accessible sunglasses brand named Legacy, campaign concept Optical Noir. Deep black, warm ivory, aged copper, subtle green lens reflections, cinematic low-key lighting, CDMX after-dark mood, mobile-first square crop, no visible text, no logos, no people, no stock-photo feel. Black sunglasses on warm ivory stone and black lacquer surface, refined product-first composition.",
+      "post": {
+        "id": "02",
+        "role": "MONROE / BLACK hero",
+        "headline": "Negro limpio.\nPresencia inmediata.",
+        "caption": "MONROE en negro: una silueta limpia para entrar sin explicar demasiado. Disponible en Legacy.",
+        "cta": "Apartar para la noche",
+        "hashtags": "#LegacyMonroe #LentesCDMX"
+      }
+    },
+    {
+      "job_id": "1e2bc74e-028e-42d0-bed8-d01c4cf97b58",
+      "post_id": "03",
+      "role": "Limited-feel product set",
+      "prompt": "Premium editorial product photography for a luxury-accessible sunglasses brand named Legacy, campaign concept Optical Noir. Deep black, warm ivory, aged copper, subtle green lens reflections, cinematic low-key lighting, CDMX after-dark mood, mobile-first square crop, no visible text, no logos, no people, no stock-photo feel. Three curated sunglasses silhouettes arranged like a limited archive, dramatic shadows.",
+      "post": {
+        "id": "03",
+        "role": "Limited-feel product set",
+        "headline": "Pocas piezas.\nMucha presencia.",
+        "caption": "Las piezas con más carácter no se quedan esperando. Hendrix, Gaga y Winehouse están en pocas piezas. Consulta color y disponibilidad.",
+        "cta": "Consultar disponibilidad",
+        "hashtags": "#LegacyDrop #CDMXStyle"
+      }
+    },
+    {
+      "job_id": "21a227bf-4ed2-46f9-9487-f2f097cb8dc7",
+      "post_id": "04",
+      "role": "CDMX editorial archive",
+      "prompt": "Premium editorial product photography for a luxury-accessible sunglasses brand named Legacy, campaign concept Optical Noir. Deep black, warm ivory, aged copper, subtle green lens reflections, cinematic low-key lighting, CDMX after-dark mood, mobile-first square crop, no visible text, no logos, no people, no stock-photo feel. Sunglasses near rain-streaked window with warm CDMX city bokeh outside, quiet luxury.",
+      "post": {
+        "id": "04",
+        "role": "CDMX editorial archive",
+        "headline": "CDMX privada.",
+        "caption": "No es solo el modelo: es la forma de entrar. Legacy trabaja con una estética Optical Noir: negro, marfil, geometría y noche de CDMX.",
+        "cta": "Ver novedades",
+        "hashtags": "#OpticalNoir #LegacyCDMX"
+      }
+    },
+    {
+      "job_id": "e7df5418-f2b7-4655-93fa-75f033019f0e",
+      "post_id": "05",
+      "role": "Buyer guide",
+      "prompt": "Premium editorial product photography for a luxury-accessible sunglasses brand named Legacy, campaign concept Optical Noir. Deep black, warm ivory, aged copper, subtle green lens reflections, cinematic low-key lighting, CDMX after-dark mood, mobile-first square crop, no visible text, no logos, no people, no stock-photo feel. Four sunglasses with varied lens tones arranged as a buyer guide, modular composition.",
+      "post": {
+        "id": "05",
+        "role": "Buyer guide",
+        "headline": "Elige por actitud,\nno por tendencia.",
+        "caption": "Guía rápida Legacy: azul para contraste, negro para presencia directa, oro para luz nocturna, crystal para precisión. El modelo correcto se nota antes de hablar.",
+        "cta": "Explorar modelos",
+        "hashtags": "#GuiaLegacy #SunglassesMX"
+      }
+    },
+    {
+      "job_id": "72259519-f9eb-45aa-b812-e291e79027d9",
+      "post_id": "06",
+      "role": "Accessible premium entry",
+      "prompt": "Premium editorial product photography for a luxury-accessible sunglasses brand named Legacy, campaign concept Optical Noir. Deep black, warm ivory, aged copper, subtle green lens reflections, cinematic low-key lighting, CDMX after-dark mood, mobile-first square crop, no visible text, no logos, no people, no stock-photo feel. Gold-framed sunglasses on warm ivory backdrop with black vertical panel, accessible premium feeling.",
+      "post": {
+        "id": "06",
+        "role": "Accessible premium entry",
+        "headline": "Desde $590 MXN.",
+        "caption": "Entrar al universo Legacy no tiene que esperar. Modelos seleccionados desde $590 MXN, con entrega coordinada desde CDMX.",
+        "cta": "Entrar a promos",
+        "hashtags": "#LegacyPromo #LentesImportados"
+      }
+    }
+  ],
+  "pipeline_snapshot": {
+    "engagement_id": "201201f2-9f69-40c1-ad59-552a041d64c5",
+    "created": true,
+    "program": {
+      "id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+      "company_id": "7c181ef3-fdd5-4833-be80-ce61c6ad846c",
+      "template_id": "digital_marketing_pro.weekend_social_launch.v1",
+      "title": "Legacy Department Pipeline",
+      "objective": "Legacy Optical Noir initial campaign package: six requested deliverables, PDF/HTML/assets, no Markdown to client.",
+      "status": "active",
+      "current_stage_id": "crm_lifecycle",
+      "external_key": "department-pipeline:201201f2-9f69-40c1-ad59-552a041d64c5:digital_marketing_pro.weekend_social_launch.v1",
+      "metadata": {
+        "service_engagement_id": "201201f2-9f69-40c1-ad59-552a041d64c5",
+        "service_catalog_item_id": "801b86cd-76ef-47f8-9581-c8e22a0d830c",
+        "created_via": "department_pipeline_service"
+      },
+      "created_at": "2026-06-09T23:04:55.502665+00:00",
+      "updated_at": "2026-06-09T23:04:56.007620+00:00"
+    },
+    "stages": [
+      {
+        "id": "82b708b1-6bd2-4019-9dd4-f8a6b319f7f2",
+        "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+        "stage_id": "strategy_research",
+        "label": "Strategy & Research",
+        "sequence": 1,
+        "status": "completed",
+        "department_id": "49ea8676-c16e-4eab-b549-b8b5ec2ce1bc",
+        "department_slug": "strategy_research",
+        "required": true,
+        "skippable": false,
+        "dependencies": [],
+        "inputs": [],
+        "outputs": [
+          {
+            "kind": "deliverable",
+            "type": "service_deliverable",
+            "id": "9a756910-a0b3-4c87-a547-319f902605dd",
+            "title": "Account brief / context pack"
+          },
+          {
+            "kind": "deliverable",
+            "type": "service_deliverable",
+            "id": "d28ed339-f35a-49ec-bef8-bd680ac4f34a",
+            "title": "Strategy brief"
+          },
+          {
+            "kind": "strategy_constraints",
+            "type": "asset_version",
+            "id": "e0a4b20f-e2a2-45f9-abf9-6a59153ce5c2",
+            "policy": "assets_after_strategy"
+          }
+        ],
+        "blockers": [],
+        "skipped": false,
+        "skipped_reason": "",
+        "started_at": "2026-06-09T23:04:55.842474+00:00",
+        "completed_at": "2026-06-09T23:04:55.910913+00:00",
+        "updated_at": "2026-06-09T23:04:56.012619+00:00"
+      },
+      {
+        "id": "bc8a6d4d-a441-413d-aec3-b4933048a1a5",
+        "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+        "stage_id": "brand_content",
+        "label": "Brand & Content",
+        "sequence": 2,
+        "status": "completed",
+        "department_id": "c606b171-6cf7-43fe-8c45-4b4bb7fa46d4",
+        "department_slug": "brand_content",
+        "required": true,
+        "skippable": false,
+        "dependencies": [
+          "strategy_research"
+        ],
+        "inputs": [],
+        "outputs": [
+          {
+            "kind": "deliverable",
+            "type": "service_deliverable",
+            "id": "4b5a2940-5d08-472c-99b3-1a649b04e30a",
+            "title": "Message house / brand-content pack"
+          },
+          {
+            "kind": "media_generation_jobs",
+            "count": 6,
+            "policy": "prompts_after_strategy"
+          }
+        ],
+        "blockers": [],
+        "skipped": false,
+        "skipped_reason": "",
+        "started_at": "2026-06-09T23:04:55.937919+00:00",
+        "completed_at": "2026-06-09T23:04:56.006620+00:00",
+        "updated_at": "2026-06-09T23:04:56.013620+00:00"
+      },
+      {
+        "id": "826aab63-6a0c-4e6c-bf23-17549dc75e5e",
+        "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+        "stage_id": "crm_lifecycle",
+        "label": "CRM & Lifecycle",
+        "sequence": 3,
+        "status": "not_started",
+        "department_id": "8a8533fc-3cd9-4b69-a552-ce6e717a5dae",
+        "department_slug": "crm_lifecycle",
+        "required": false,
+        "skippable": true,
+        "dependencies": [
+          "strategy_research"
+        ],
+        "inputs": [],
+        "outputs": [],
+        "blockers": [],
+        "skipped": false,
+        "skipped_reason": "",
+        "started_at": null,
+        "completed_at": null,
+        "updated_at": "2026-06-09T23:04:56.015620+00:00"
+      },
+      {
+        "id": "5e47cce5-0293-4535-bd51-119c139f7d1c",
+        "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+        "stage_id": "analytics_performance",
+        "label": "Analytics & Performance",
+        "sequence": 4,
+        "status": "not_started",
+        "department_id": "263432c5-8b39-4cf0-87a5-db99fe75c7e3",
+        "department_slug": "analytics_performance",
+        "required": true,
+        "skippable": false,
+        "dependencies": [
+          "strategy_research"
+        ],
+        "inputs": [],
+        "outputs": [],
+        "blockers": [],
+        "skipped": false,
+        "skipped_reason": "",
+        "started_at": null,
+        "completed_at": null,
+        "updated_at": "2026-06-09T23:04:56.018621+00:00"
+      },
+      {
+        "id": "061bc167-86f7-47f4-a840-47ed0766a156",
+        "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+        "stage_id": "channel_execution",
+        "label": "Channel Execution",
+        "sequence": 5,
+        "status": "not_started",
+        "department_id": "6779ce8e-886d-4121-a76f-694fbb5682a1",
+        "department_slug": "channel_execution",
+        "required": true,
+        "skippable": false,
+        "dependencies": [
+          "brand_content"
+        ],
+        "inputs": [],
+        "outputs": [],
+        "blockers": [],
+        "skipped": false,
+        "skipped_reason": "",
+        "started_at": null,
+        "completed_at": null,
+        "updated_at": "2026-06-09T23:04:56.020621+00:00"
+      },
+      {
+        "id": "936edb9b-d46e-433b-bc50-63c7800917c9",
+        "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+        "stage_id": "qa_compliance",
+        "label": "QA & Compliance",
+        "sequence": 6,
+        "status": "not_started",
+        "department_id": "f48bf932-e297-4664-a8a8-323016ae9d24",
+        "department_slug": "qa_compliance",
+        "required": true,
+        "skippable": false,
+        "dependencies": [
+          "channel_execution",
+          "crm_lifecycle",
+          "analytics_performance"
+        ],
+        "inputs": [],
+        "outputs": [],
+        "blockers": [],
+        "skipped": false,
+        "skipped_reason": "",
+        "started_at": null,
+        "completed_at": null,
+        "updated_at": "2026-06-09T23:04:56.022620+00:00"
+      },
+      {
+        "id": "ef12b073-5335-4eb9-93ab-b3c206985f86",
+        "program_id": "c28e3670-da75-40eb-9633-cb85f5d3171a",
+        "stage_id": "client_approval_ops",
+        "label": "Client / Approval Ops",
+        "sequence": 7,
+        "status": "not_started",
+        "department_id": "f687555c-d1d6-4faf-960d-95574b3865d3",
+        "department_slug": "client_approval_ops",
+        "required": true,
+        "skippable": false,
+        "dependencies": [
+          "qa_compliance"
+        ],
+        "inputs": [],
+        "outputs": [],
+        "blockers": [],
+        "skipped": false,
+        "skipped_reason": "",
+        "started_at": null,
+        "completed_at": null,
+        "updated_at": "2026-06-09T23:04:56.024620+00:00"
+      }
+    ]
+  }
+}

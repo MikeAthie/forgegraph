@@ -1,0 +1,7 @@
+I am interested in the Lead Golang & React Developer CDMX Bilingüe role at Codifin because it aligns closely with my experience building SaaS-style product systems, backend services, React/TypeScript interfaces, PostgreSQL-backed workflows, and data automation.
+
+In recent work, I have owned software domains from architecture and API contracts through implementation and iteration, including Go/Python backend services, React/Next.js product surfaces, workflow automation, and AI-assisted features with source-bounded behavior.
+
+Projects such as ForgeGraph, Lex Toolkit, and an automated trading/data-ingestion system give me relevant evidence for this role's mix of SaaS architecture, React interfaces, data pipelines, automation, and reliable backend execution.
+
+I would welcome a conversation about how this background can support Codifin's work on SaaS platforms, data automation, and AI-enabled workflows.

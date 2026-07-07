@@ -1,0 +1,26 @@
+{
+  "blockers": [],
+  "checks": {
+    "expected_text_embedded": "pass",
+    "no_internal_leakage": "pass",
+    "no_tables_images_icons": "pass",
+    "pdf_bytes_valid": "pass",
+    "professional_template": "pass",
+    "required_sections_present": "pass",
+    "section_order": "pass",
+    "single_column_policy": "pass"
+  },
+  "expected_text_sha256": "b008615ea355ac141c2a2db5557cf13014ffbb4283b47b29865f4cb93a4be918",
+  "external_side_effects_allowed": false,
+  "format": "career_ops_ats_resume_parseability_v1",
+  "formatter_version": "3",
+  "required_sections": [
+    "SUMMARY",
+    "TECHNICAL SKILLS",
+    "SELECTED EXPERIENCE",
+    "PROJECTS",
+    "EDUCATION"
+  ],
+  "status": "passed",
+  "warnings": []
+}

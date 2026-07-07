@@ -1,0 +1,35 @@
+FORGEGRAPH CLIENT HANDOFF
+Legacy Optical Noir -- entrega para revisión
+Paquete armado desde el prompt operativo, con estrategia, contenido, assets, medición, QA y evidencia de linaje listos para aprobación. No se afirma publicación en vivo: el lanzamiento queda condicionado a aprobación y conectores reales.
+
+APPROVAL CHECKPOINT
+Decisión solicitada
+Dirección visual Optical Noir Uso de los assets incluidos como borradores de campaña Tono Spanish-first, concreto y de baja exageración Launch posterior sólo con aprobación y recibos de canal
+
+ARTIFACT INDEX
+ForgeGraph archived run
+Engagement, whiteboard, asset checksums, source deliverables, and media provenance are archived in manifest.json. The visible handoff keeps internal IDs out of client copy.
+No Markdown files included.
+
+ASSETS
+Posts incluidos
+Legacy Optical Noir post 01
+
+Legacy Optical Noir post 02
+
+Post 01
+
+Post 02
+
+S T R AT E G Y
+Strategy & Research
+Recommendation
+Approve Optical Noir direction. Gate launch until connector receipts exist.
+
+MEASUREMENT PLAN
+Analytics & Performance Measurement plan: saves, replies, DMs, holds, sold status, and next actions every 24h.
+PROMPT FUENTE
+Solicitud operacional Create a premium client-ready Legacy Optical Noir weekend launch handoff.
+Paquete generado por ForgeGraph para revisión interna/client-facing. Requiere aprobación antes de producción.
+
+

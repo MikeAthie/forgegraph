@@ -1,0 +1,155 @@
+flowchart LR
+  %% CareerOps ForgeGraph company graph
+  %% Paste into Excalidraw: Insert -> Mermaid
+
+  CANDIDATE([Candidate / Operator])
+  COMPANY[[ForgeGraph Company\nCareerOps Workspace\npack: career_ops.v1]]
+
+  subgraph STATE[Backend-owned durable state]
+    PROFILE[(StateProjection\ncandidate_profile)]
+    POSITIONING[(StateProjection\ncareer_positioning)]
+    CV[(AssetVersion\ncv_source)]
+    PROOF[(AssetVersion\nproof_point_digest)]
+    PIPELINE[(StateProjection\npipeline_snapshot)]
+    STORYBANK[(AssetVersion\ninterview_story_bank)]
+  end
+
+  subgraph PROGRAM[CompanyProgram: Selective Job Search Operating Loop]
+    S01[01 Candidate onboarding]
+    S02[02 Search strategy]
+    S03[03 Market scan]
+    S04[04 Liveness and dedupe]
+    S05[05 Fit evaluation]
+    S06[06 Application packet]
+    S07{07 Candidate approval gate}
+    S08[08 Submission tracking]
+    S09[09 Interview prep]
+    S10[10 Follow-up and negotiation]
+    S11[11 Pipeline review]
+    S12[12 Learning update]
+  end
+
+  subgraph DEPTS[Departments and agent responsibilities]
+    D1[Candidate Profile and Strategy Agent\nResponsibilities:\n- Own CV, targets, constraints\n- Maintain positioning and proof points\nTasks:\n- Profile intake\n- CV/proof-point sync\n- Target role strategy]
+
+    D2[Market and Role Discovery Agent\nResponsibilities:\n- Scan job sources cheaply first\n- Normalize and dedupe leads\nTasks:\n- Provider scans\n- Title/location/salary filters\n- Source reliability receipts]
+
+    D3[Opportunity Evaluation Agent\nResponsibilities:\n- Score fit and legitimacy\n- Explain apply/no-apply decision\nTasks:\n- A-G evaluation\n- Compensation research\n- Ghost-job/liveness risk]
+
+    D4[Application Packet Studio Agent\nResponsibilities:\n- Produce truthful tailored artifacts\n- Keep ATS and PDF quality high\nTasks:\n- Tailored resume\n- Cover letter draft\n- Application answers\n- Packet manifest]
+
+    D5[Application Operations Agent\nResponsibilities:\n- Track status and next actions\n- Record receipts and follow-ups\nTasks:\n- Status transitions\n- Submission checklist\n- Follow-up cadence]
+
+    D6[Interview and Negotiation Prep Agent\nResponsibilities:\n- Build reusable story bank\n- Prepare company-specific interview plan\nTasks:\n- STAR+Reflection stories\n- Interview brief\n- Negotiation scripts]
+
+    D7[Pipeline Integrity and Analytics Agent\nResponsibilities:\n- Keep pipeline trustworthy\n- Report conversion and stale work\nTasks:\n- Dedupe checks\n- Broken artifact checks\n- Weekly pipeline report]
+
+    D8[Candidate Approval and Governance Agent\nResponsibilities:\n- Enforce human-in-loop\n- Prevent auto-apply and false claims\nTasks:\n- Approval gates\n- Privacy checks\n- No-invention policy]
+  end
+
+  subgraph RECORDS[Core ForgeGraph records created]
+    SIG[(CompanySignal\nscanned lead / risk / milestone)]
+    OPP[(CompanyOpportunity\njob opportunity)]
+    TE[(ToolExecution\nscan / liveness / render receipt)]
+    RUN[(Run\nbackend-owned operation)]
+    ENG[(ServiceEngagement\napplication engagement)]
+    DELIV[(ServiceDeliverable\npacket items)]
+    ASSET[(Asset / AssetVersion\nreports, PDFs, drafts)]
+  end
+
+  subgraph DELIVERABLES[MVP deliverables]
+    LIVENESS[job_liveness_receipt]
+    EVAL[job_evaluation_report\nA-G blocks]
+    RESUME[tailored_resume_pdf]
+    COVER[cover_letter_draft/pdf]
+    ANSWERS[application_answers]
+    PACKET[application_packet]
+    PREP[company_interview_prep]
+    FOLLOW[followup_plan]
+    HEALTH[pipeline_health_report]
+  end
+
+  CANDIDATE --> COMPANY
+  COMPANY --> STATE
+  COMPANY --> PROGRAM
+  COMPANY --> DEPTS
+
+  %% Stage flow
+  S01 --> S02 --> S03 --> S04 --> S05 --> S06 --> S07
+  S07 -- approved --> S08 --> S09 --> S10 --> S11 --> S12
+  S07 -- changes requested --> S06
+  S11 --> S02
+  S12 --> PROFILE
+  S12 --> POSITIONING
+  S12 --> STORYBANK
+
+  %% Department ownership of stages
+  D1 --> S01
+  D1 --> S02
+  D2 --> S03
+  D2 --> S04
+  D3 --> S05
+  D4 --> S06
+  D8 --> S07
+  D5 --> S08
+  D6 --> S09
+  D6 --> S10
+  D7 --> S11
+  D1 --> S12
+
+  %% Durable state inputs
+  PROFILE --> D1
+  POSITIONING --> D1
+  CV --> D4
+  PROOF --> D3
+  PIPELINE --> D7
+  STORYBANK --> D6
+
+  %% Record production
+  S03 --> SIG
+  S04 --> TE
+  S04 --> SIG
+  S05 --> OPP
+  S05 --> RUN
+  S06 --> ENG
+  S06 --> DELIV
+  S06 --> ASSET
+  S08 --> OPP
+  S11 --> PIPELINE
+
+  %% Deliverable lineage
+  TE --> LIVENESS
+  OPP --> EVAL
+  EVAL --> RESUME
+  EVAL --> COVER
+  EVAL --> ANSWERS
+  RESUME --> PACKET
+  COVER --> PACKET
+  ANSWERS --> PACKET
+  S09 --> PREP
+  S10 --> FOLLOW
+  S11 --> HEALTH
+  PACKET --> DELIV
+  PREP --> DELIV
+  FOLLOW --> DELIV
+  HEALTH --> DELIV
+
+  %% Governance constraints
+  D8 -. blocks unsafe external side effects .-> S08
+  D8 -. no auto-apply .-> PACKET
+  D7 -. integrity feedback .-> D2
+  D7 -. score calibration feedback .-> D3
+
+  classDef state fill:#c3fae8,stroke:#0b7285,stroke-width:2px,color:#111;
+  classDef dept fill:#d0bfff,stroke:#5f3dc4,stroke-width:2px,color:#111;
+  classDef stage fill:#a5d8ff,stroke:#1864ab,stroke-width:2px,color:#111;
+  classDef gate fill:#fff3bf,stroke:#f08c00,stroke-width:2px,color:#111;
+  classDef record fill:#ffd8a8,stroke:#e8590c,stroke-width:2px,color:#111;
+  classDef output fill:#b2f2bb,stroke:#2b8a3e,stroke-width:2px,color:#111;
+
+  class PROFILE,POSITIONING,CV,PROOF,PIPELINE,STORYBANK state;
+  class D1,D2,D3,D4,D5,D6,D7,D8 dept;
+  class S01,S02,S03,S04,S05,S06,S08,S09,S10,S11,S12 stage;
+  class S07 gate;
+  class SIG,OPP,TE,RUN,ENG,DELIV,ASSET record;
+  class LIVENESS,EVAL,RESUME,COVER,ANSWERS,PACKET,PREP,FOLLOW,HEALTH output;

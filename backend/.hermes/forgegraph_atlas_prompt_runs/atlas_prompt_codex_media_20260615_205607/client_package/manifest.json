@@ -1,0 +1,184 @@
+{
+  "run_id": "atlas_prompt_codex_media_20260615_205607",
+  "source": "atlas_prompt_delivery.codex_media.v1",
+  "engagement_id": "568f462d-c370-460d-a087-1d26baa921c5",
+  "whiteboard_id": "479d3393-4059-4614-8479-1a629e51e602",
+  "client": "Legacy",
+  "prompt_boundary": "Hermes/operator supplied one prompt; ForgeGraph executed departments, Codex media worker, package, and delivery.",
+  "media": [
+    {
+      "post": 1,
+      "filename": "assets/legacy_optical_noir_post_01.png",
+      "media_generation_job_id": "c37c3c1e-f5e1-4592-ba75-823744bec57d",
+      "asset_id": "eb202990-e093-49ba-98b9-c5f736f35d78",
+      "asset_version_id": "b24d7c70-1f1f-4b82-ba42-d6f926798563",
+      "asset_source": "operator_review_assets_override",
+      "asset_source_path": ".hermes\\legacy_optical_noir_review_assets_ai\\legacy_optical_noir_post_01.png",
+      "quality_tier": "review_ready_ai_generated",
+      "production_quality": true,
+      "brand_mark_applied": false
+    },
+    {
+      "post": 2,
+      "filename": "assets/legacy_optical_noir_post_02.png",
+      "media_generation_job_id": "90e09645-43e1-477a-8ba4-f35a57f0da2c",
+      "asset_id": "f6d65d91-a8e1-4b6c-ae4d-b4f38db2f083",
+      "asset_version_id": "05a49ac6-9308-4952-9a81-ea8f3e17dee4",
+      "asset_source": "operator_review_assets_override",
+      "asset_source_path": ".hermes\\legacy_optical_noir_review_assets_ai\\legacy_optical_noir_post_02.png",
+      "quality_tier": "review_ready_ai_generated",
+      "production_quality": true,
+      "brand_mark_applied": false
+    },
+    {
+      "post": 3,
+      "filename": "assets/legacy_optical_noir_post_03.png",
+      "media_generation_job_id": "5cf42b7e-7b3b-453e-8423-15f83b41a572",
+      "asset_id": "3ac47c03-f067-48ff-b550-c4db94aa144a",
+      "asset_version_id": "5cb067fd-1a65-45e8-9154-dc5c44e28551",
+      "asset_source": "operator_review_assets_override",
+      "asset_source_path": ".hermes\\legacy_optical_noir_review_assets_ai\\legacy_optical_noir_post_03.png",
+      "quality_tier": "review_ready_ai_generated",
+      "production_quality": true,
+      "brand_mark_applied": false
+    },
+    {
+      "post": 4,
+      "filename": "assets/legacy_optical_noir_post_04.png",
+      "media_generation_job_id": "34f69e6d-8c6a-4976-b69e-9b4a3c17381f",
+      "asset_id": "58ed232a-649c-4077-9297-d96d749552ae",
+      "asset_version_id": "9e94914b-0338-4e65-ad36-5fb4cbdbb5cd",
+      "asset_source": "operator_review_assets_override",
+      "asset_source_path": ".hermes\\legacy_optical_noir_review_assets_ai\\legacy_optical_noir_post_04.png",
+      "quality_tier": "review_ready_ai_generated",
+      "production_quality": true,
+      "brand_mark_applied": false
+    },
+    {
+      "post": 5,
+      "filename": "assets/legacy_optical_noir_post_05.png",
+      "media_generation_job_id": "5dedf36b-f8e7-4870-8d2b-ec3ffb7c11e5",
+      "asset_id": "dc8953b8-c694-4e15-a379-7b48b64df548",
+      "asset_version_id": "91c74384-c1f5-4a56-9ab0-58692e8dd895",
+      "asset_source": "operator_review_assets_override",
+      "asset_source_path": ".hermes\\legacy_optical_noir_review_assets_ai\\legacy_optical_noir_post_05.png",
+      "quality_tier": "review_ready_ai_generated",
+      "production_quality": true,
+      "brand_mark_applied": false
+    },
+    {
+      "post": 6,
+      "filename": "assets/legacy_optical_noir_post_06.png",
+      "media_generation_job_id": "8ccc2f55-1ffd-41d7-9623-1e38d47115ce",
+      "asset_id": "827a91ff-d4ce-4516-8a46-9f64e8cd7a02",
+      "asset_version_id": "642fdba4-cb35-4d35-9341-c36d1a5da804",
+      "asset_source": "operator_review_assets_override",
+      "asset_source_path": ".hermes\\legacy_optical_noir_review_assets_ai\\legacy_optical_noir_post_06.png",
+      "quality_tier": "review_ready_ai_generated",
+      "production_quality": true,
+      "brand_mark_applied": false
+    }
+  ],
+  "brand_requirements": {
+    "logo_required_on_posts": true,
+    "logo_policy": "approved_legacy_logo_or_operator_supplied_brand_mark_required",
+    "block_production_without_logo_asset": true
+  },
+  "asset_quality_gate": {
+    "ready": false,
+    "issues": [
+      {
+        "post": 1,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 2,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 3,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 4,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 5,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 6,
+        "code": "missing_brand_mark"
+      }
+    ]
+  },
+  "deliverables": [
+    {
+      "id": "1f36ec48-db38-4530-96f4-013fa16e19e6",
+      "type": "codex_strategy_brief",
+      "title": "Legacy Optical Noir Strategy Brief"
+    },
+    {
+      "id": "4139f34b-6588-450f-953e-3f7722ff506c",
+      "type": "message_house",
+      "title": "Legacy Optical Noir Message House"
+    },
+    {
+      "id": "c8be4f3d-ba46-4161-87e0-0ad2b4c62a39",
+      "type": "crm_scripts",
+      "title": "Legacy WhatsApp / DM Response Scripts"
+    },
+    {
+      "id": "95f35afa-e398-4e58-bf57-fb550d8b4c45",
+      "type": "measurement_plan",
+      "title": "Legacy Manual Measurement Plan"
+    },
+    {
+      "id": "2876870c-23da-4fc3-afc4-1699c39564ee",
+      "type": "channel_asset_map",
+      "title": "Legacy Channel Asset Map"
+    },
+    {
+      "id": "2abbd96b-bb5c-4b23-9ced-33250faf44ff",
+      "type": "qa_report",
+      "title": "Legacy Launch QA Report"
+    }
+  ],
+  "client_files_policy": "No Markdown files included.",
+  "quality_gate_report": {
+    "ready": false,
+    "issues": [
+      {
+        "post": 1,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 2,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 3,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 4,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 5,
+        "code": "missing_brand_mark"
+      },
+      {
+        "post": 6,
+        "code": "missing_brand_mark"
+      }
+    ],
+    "required_gates": [
+      "strategy_rationale",
+      "brand_logo_requirement",
+      "asset_visual_qa",
+      "copy_ambiguity_review"
+    ]
+  }
+}

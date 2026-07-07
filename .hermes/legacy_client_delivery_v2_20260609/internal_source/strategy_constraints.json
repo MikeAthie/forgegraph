@@ -1,0 +1,91 @@
+{
+  "client": "Legacy",
+  "campaign": "Optical Noir",
+  "created_at": "2026-06-09T21:47:10.123389+00:00",
+  "delivery_principles": {
+    "client_formats": [
+      "PDF",
+      "polished HTML",
+      "ZIP with client-ready files and assets"
+    ],
+    "not_for_client_delivery": [
+      "Markdown source files"
+    ],
+    "whatsapp_style": "brief, concrete, casual-professional; no long-form deliverables pasted into chat",
+    "asset_policy": "fresh AI-generated visuals created after strategy; no recycled prior draft assets"
+  },
+  "strategy": {
+    "objective": "Launch a premium-feeling social sequence for Legacy that makes sunglasses feel like a CDMX editorial identity, then converts visual interest into DM/WhatsApp consultation.",
+    "thesis": "Legacy should not look like a product catalog. The campaign should feel like an Optical Noir editorial: black, ivory, copper, reflections, after-dark city energy, controlled luxury, and product-first composition.",
+    "audience": [
+      "Style-conscious CDMX buyers looking for distinctive sunglasses without overproduced luxury language.",
+      "Gift buyers who need a polished, easy-to-understand product choice.",
+      "Night-out / editorial-style consumers who buy attitude and presence as much as the product."
+    ],
+    "message_platform": "La noche empieza antes de salir.",
+    "voice": [
+      "Spanish-first",
+      "short lines",
+      "confident",
+      "editorial",
+      "not hype-driven",
+      "not discount-led"
+    ],
+    "visual_constraints": {
+      "mood": "premium nocturnal CDMX editorial product photography",
+      "palette": [
+        "deep black",
+        "warm ivory",
+        "aged copper",
+        "subtle bottle green lens reflections"
+      ],
+      "lighting": "low-key studio lighting, soft specular highlights, reflective glass, dramatic shadow falloff",
+      "composition": "sunglasses as hero object, clean negative space, mobile-first square crop, no clutter",
+      "avoid": [
+        "generic ecommerce catalog look",
+        "recycled/stock-photo feel",
+        "busy backgrounds",
+        "neon party cliché",
+        "text baked into the image unless intentionally minimal"
+      ]
+    },
+    "post_sequence": [
+      {
+        "id": "01",
+        "role": "Brand launch/editorial",
+        "headline": "La noche empieza antes de salir.",
+        "cta": "Elegir mi Legacy"
+      },
+      {
+        "id": "02",
+        "role": "Hero product MONROE BLACK",
+        "headline": "Negro limpio. Presencia inmediata.",
+        "cta": "Apartar para la noche"
+      },
+      {
+        "id": "03",
+        "role": "Limited-feel product set",
+        "headline": "Pocas piezas. Mucha presencia.",
+        "cta": "Consultar disponibilidad"
+      },
+      {
+        "id": "04",
+        "role": "CDMX editorial archive",
+        "headline": "CDMX privada.",
+        "cta": "Ver novedades"
+      },
+      {
+        "id": "05",
+        "role": "Buyer guide by attitude",
+        "headline": "Elige por actitud, no por tendencia.",
+        "cta": "Explorar modelos"
+      },
+      {
+        "id": "06",
+        "role": "Accessible premium entry",
+        "headline": "Desde $590 MXN.",
+        "cta": "Entrar a promos"
+      }
+    ]
+  }
+}

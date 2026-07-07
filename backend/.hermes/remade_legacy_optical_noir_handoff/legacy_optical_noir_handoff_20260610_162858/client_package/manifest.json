@@ -1,0 +1,65 @@
+{
+  "client": "Legacy",
+  "campaign": "Optical Noir",
+  "source": "hermes_diagnostic_remake.v1",
+  "generated_at": "2026-06-10T16:28:59.861524+00:00",
+  "input_package": "C:/Users/mathi/Downloads/legacy_optical_noir_handoff_package.zip",
+  "hero_image_source": {
+    "tool": "image_generate",
+    "url": "https://v3b.fal.media/files/b/0a9dc19e/YYkaiYSDQ3jxanpunnMzt_yYrm2AvI.png",
+    "local_file": "assets/legacy_optical_noir_hero.png"
+  },
+  "rendering_tools": [
+    "Python custom markdown-to-HTML renderer",
+    "CSS based on premium BMW/noir design tokens",
+    "Pillow preview card generation",
+    "ReportLab PDF generation",
+    "zipfile packaging"
+  ],
+  "client_files_policy": "Client ZIP contains HTML/PDF/PNG/TXT/JSON only; source Markdown from attached package was used as input but not included.",
+  "deliverables": [
+    {
+      "title": "Client Approval Packet",
+      "description": "Final go/no-go, decisions, launch gates",
+      "source_reference": "codex_client_approval_packet.md",
+      "file": "deliverables/01_client_approval_packet.html"
+    },
+    {
+      "title": "Strategy & Research Brief",
+      "description": "Positioning, audience, guardrails",
+      "source_reference": "codex_strategy_brief.md",
+      "file": "deliverables/02_strategy_research_brief.html"
+    },
+    {
+      "title": "Brand Content Pack",
+      "description": "Campaign lines, captions, CTAs",
+      "source_reference": "codex_brand_content_pack.md",
+      "file": "deliverables/03_brand_content_pack.html"
+    },
+    {
+      "title": "Channel Execution Calendar",
+      "description": "Weekend routing plan",
+      "source_reference": "codex_channel_execution_calendar.md",
+      "file": "deliverables/04_channel_execution_calendar.html"
+    },
+    {
+      "title": "CRM / WhatsApp Scripts",
+      "description": "Boutique response flows",
+      "source_reference": "codex_crm_response_scripts.md",
+      "file": "deliverables/05_crm_whatsapp_scripts.html"
+    },
+    {
+      "title": "Measurement Plan",
+      "description": "KPIs, UTMs, readout model",
+      "source_reference": "codex_measurement_plan.md",
+      "file": "deliverables/06_measurement_plan.html"
+    },
+    {
+      "title": "Launch QA Report",
+      "description": "Claims, connector, and client-safety checks",
+      "source_reference": "codex_qa_report.md",
+      "file": "deliverables/07_launch_qa_report.html"
+    }
+  ],
+  "production_boundary": "No live publishing, sending, scheduling, connector success, or performance result is claimed."
+}

@@ -1,0 +1,50 @@
+Miguel Athie
+Mexico City, MX • miguel.athien@gmail.com • +52 55 3900 3599 • GitHub: https://github.com/GreyCrossX
+
+Summary
+Lead Full-Stack Software Engineer building SaaS platforms and data automation systems across Golang, React, PostgreSQL, Python, and TypeScript. Experienced designing clean backend service boundaries, REST APIs, data pipelines, AI-powered workflow features, and maintainable product interfaces. Comfortable translating business needs into reliable software, collaborating across product/QA/non-technical stakeholders, and owning delivery from architecture through iteration in bilingual English/Spanish environments.
+
+Experience
+- Owned full-stack/backend domains end-to-end, from architecture and API contracts through implementation, deployment, and iteration.
+- Designed product-facing and internal service boundaries with Go/Python backends, PostgreSQL data models, and maintainable interfaces.
+- Built React/TypeScript product surfaces and API-driven workflows where frontend clarity and backend reliability both mattered.
+- Built SaaS-style automation workflows, data collection/processing pipelines, and report generation systems for operational decision-making.
+- Integrated AI-powered features and automated workflows with source-bounded behavior, reliability guardrails, and practical business impact.
+- Collaborated with technical and non-technical stakeholders in English and Spanish, communicating tradeoffs clearly and driving work to completion.
+
+Projects
+ForgeGraph
+Nov 2025 - Present
+https://github.com/MikeAthie/ForgeGraph
+AI-powered company OS for competitor analysis, strategy automation, and report generation.
+- Built backend workflows for competitive strategy scraping, content analysis, and report generation.
+- Used Go and backend services to support durable workflow state, automation, and scalable service expansion.
+- Integrated LLM-assisted analysis with source-bounded outputs and operational guardrails.
+Lex Toolkit
+Nov 2025 - Present
+https://github.com/MikeAthie/Lex-Toolkit
+Full-stack legal workflow product using Next.js, React, TypeScript, and FastAPI.
+- Built a full-stack app with Next.js/React frontend and FastAPI backend for professional workflows.
+- Designed clear API contracts and AI-assisted workflow features for product-quality delivery.
+Automated Trading Bot (Binance)
+Aug 2025 - Present
+https://github.com/MikeAthie/2m2
+Real-time async data automation using WebSockets, Redis, and Celery workers.
+- Consumed market data via WebSockets and persisted streams in Redis for low-latency access.
+- Orchestrated background execution with Celery workers and resilient task handling.
+- Separated indicator computation into a Redis-backed service to improve throughput and reliability.
+
+Education
+- ITAM | Bachelor of Science in Law | 2012 - 2017
+
+Skills
+- Full-Stack / Frontend: React, Next.js, TypeScript, product interfaces, API-driven workflows
+- Backend / APIs: Golang, Python, REST APIs, GraphQL, service architecture, clean interfaces
+- Data & Automation: PostgreSQL, SQL, Python pipelines, Redis, data processing, report generation
+- DevOps / Delivery: Docker, Linux, Git, CI/CD practices, testing, release discipline
+- AI in Production: RAG/agent workflows, AI feature integration, grounded outputs, automation guardrails
+- Ways of Working: product/QA collaboration, clear communication, structured problem-solving, English/Spanish collaboration
+
+Certifications
+- Meta Back-End Developer Certification (May 2023)
+- IBM RAG and Agentic AI (May 2025)

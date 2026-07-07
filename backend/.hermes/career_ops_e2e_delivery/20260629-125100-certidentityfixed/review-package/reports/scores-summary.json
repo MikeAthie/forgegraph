@@ -1,0 +1,32 @@
+[
+  {
+    "company": "Belvo",
+    "ats_score": 86,
+    "recruiter_score": 92,
+    "recruiter_recommendation": "approve_for_human_send_review"
+  },
+  {
+    "company": "Clipbook",
+    "ats_score": 82,
+    "recruiter_score": 91,
+    "recruiter_recommendation": "approve_for_human_send_review"
+  },
+  {
+    "company": "RYZ Labs",
+    "ats_score": 75,
+    "recruiter_score": 90,
+    "recruiter_recommendation": "approve_for_human_send_review"
+  },
+  {
+    "company": "Remote Talent LATAM",
+    "ats_score": 80,
+    "recruiter_score": 91,
+    "recruiter_recommendation": "approve_for_human_send_review"
+  },
+  {
+    "company": "South Geeks",
+    "ats_score": 77,
+    "recruiter_score": 91,
+    "recruiter_recommendation": "approve_for_human_send_review"
+  }
+]

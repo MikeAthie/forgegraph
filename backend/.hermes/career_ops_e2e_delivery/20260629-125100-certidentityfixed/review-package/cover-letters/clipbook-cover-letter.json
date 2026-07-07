@@ -1,0 +1,47 @@
+{
+  "claim_source_map": [
+    {
+      "claim": "Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.",
+      "source_ref": {
+        "index": 0,
+        "type": "cv_proof_point"
+      }
+    },
+    {
+      "claim": "Built async and event-driven pipelines for data-heavy workflows and operational automation.",
+      "source_ref": {
+        "index": 1,
+        "type": "cv_proof_point"
+      }
+    }
+  ],
+  "format": "cover_letter_v1",
+  "opportunity": {
+    "employer_name": "Clipbook",
+    "id": "5cdf1b92-32b7-4d92-a012-8075b97fb867",
+    "job_url": "https://jobs.ashbyhq.com/clipbook/a83afbff-3d1e-466e-8c1c-302dceb136e8",
+    "role_title": "Founding Senior Software Engineer (USA + LATAM)"
+  },
+  "paragraphs": [
+    "I am interested in the Founding Senior Software Engineer (USA + LATAM) role at Clipbook because it aligns with my source-backed experience in PostgreSQL, TypeScript, Python. Backend engineer building Python APIs, data systems, and AI workflow systems.",
+    "Relevant evidence includes Built production APIs and service boundaries with Python, FastAPI, Django, PostgreSQL, Redis, and workers.; Built async and event-driven pipelines for data-heavy workflows and operational automation..",
+    "I would welcome a conversation about how this background can support Clipbook's work on Founding Senior Software Engineer (USA + LATAM)."
+  ],
+  "quality": {
+    "external_side_effects_allowed": false,
+    "live_ready": false,
+    "no_invented_candidate_facts": true,
+    "source_backed_claims": true
+  },
+  "source_refs": [
+    {
+      "index": 0,
+      "type": "cv_proof_point"
+    },
+    {
+      "index": 1,
+      "type": "cv_proof_point"
+    }
+  ],
+  "status": "draft"
+}

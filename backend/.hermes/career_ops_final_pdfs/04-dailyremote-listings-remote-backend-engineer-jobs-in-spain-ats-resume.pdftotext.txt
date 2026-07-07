@@ -1,0 +1,38 @@
+MIGUEL ATHIE
+Mexico City, MX | miguel.athien@gmail.com | +52 55 3900 3599 | GitHub: https://github.com/GreyCrossX
+SUMMARY
+Backend-leaning Software Engineer with strong end-to-end ownership building production APIs, data systems, AI-native workflows, and async service architectures. Experienced with Python, FastAPI, PostgreSQL, Redis, workers, and Go-based backend services; comfortable taking systems from discovery and architecture through implementation, testing, observability, and launch. Strong interest in B2B/enterprise products, integrations, agentic AI, RAG, and production-grade systems that require reliability, maintainability, and operational rigor.
+TECHNICAL SKILLS
+Backend / APIs: Python, FastAPI, Django, Go, REST APIs, service architecture, schema design, clean interfaces, production deployment
+Data & Async Systems: PostgreSQL, Redis, Redis Streams, Celery, event-driven pipelines, workers, WebSockets, batch processing
+AI Engineering: RAG, LangGraph, agentic workflows, AI-assisted development, LLM integration, grounded outputs, prompt/workflow design
+Reliability & Operations: Prometheus, observability, retries, dry-run workflows, safe deletion flows, testing, debugging, production maintenance
+Frontend / Product: React, Next.js, TypeScript, dashboards, internal tools, product discovery, stakeholder collaboration
+Delivery: end-to-end ownership, requirements shaping, technical documentation, code review, high-urgency shipping
+SELECTED EXPERIENCE
+Grey Cross Developments - Product Engineer Jul 2022 - Present
+- Owned backend products end-to-end (discovery architecture implementation deployment), delivering data-driven systems for SMBs and consulting clients.
+- Designed and implemented APIs and service boundaries with a focus on clean, maintainable interfaces and long-term iteration.
+- Built async/event-driven pipelines for near real-time processing, improving responsiveness and reliability for data-heavy workflows.
+- Implemented data ingestion and storage patterns using PostgreSQL and Redis/Redis Streams to handle high-volume structured data.
+- Integrated AI-powered features into production systems, emphasizing grounded outputs and practical user workflows.
+Vittahouse - Automation & Data Consultant Oct 2019 - Nov 2025
+- Automated accounting and audit workflows, reducing manual effort and improving consistency of recurring operational processes.
+- Built discrepancy-detection tools to surface data issues earlier and support data-driven decision-making.
+- Translated ambiguous stakeholder needs into shippable automation and data products, iterating based on feedback and operational constraints.
+- Developed ingestion/normalization workflows to standardize inputs across sources and enable reliable reporting.
+PROJECTS
+Lex Toolkit - AI agents for legal workflows (Next.js + FastAPI) Nov 2025 - Present | https://github.com/MikeAthie/Lex-Toolkit
+
+- Built a full-stack application with Next.js (frontend) and FastAPI (backend), designed to scale for real-world professional workflows.
+- Developed AI agent use cases for law practice operations; the project has attracted interest from local law firms.
+- Focused on product-quality delivery: clear API contracts, iterative UX improvements, and production-minded backend structure.
+Forgegraph - AI-native backend platform for agentic workflows 2026 - Present | https://github.com/MikeAthie/ForgeGraph
+- Built an end-to-end backend platform exploring how AI agents can interact with structured project knowledge, memory, summaries, and operational workflows.
+- Designed and implemented backend services in Go and Django, including summarization workflows, memory lifecycle management, retry logic, safe deletion flows, dry-run execution, batching, reindexing, and admin-facing endpoints.
+- Added production-minded reliability features, including Prometheus counters, retry mechanisms, structured service boundaries, and tests around critical workflows.
+- Used AI-assisted development practices with rigorous validation: code review, local execution, tests, and a 4R review loop - Risk, Readability, Reliability, Resilience - to accelerate delivery without losing engineering control.
+EDUCATION
+- Instituto Tecnologico Autonomo de Mexico (ITAM) - BSc in Law - 2017 | Mexico City, Mexico
+
+
