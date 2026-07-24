@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -138,6 +138,10 @@ export function ToolNodeForm({ config, onChange, errors, setErrors }: NodeFormPr
   );
 
   const isCustomTool = !toolConfig.tool_name || toolConfig.tool_name === "custom";
+
+  useEffect(() => {
+    setErrors(validateToolConfig(toolConfig));
+  }, [setErrors, toolConfig]);
 
   return (
     <div className="space-y-6">

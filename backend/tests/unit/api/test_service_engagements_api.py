@@ -14,6 +14,7 @@ from infrastructure.orm.models import (
     AuditLog,
     CompanyAccessPolicy,
     CompanyAssignment,
+    CompanySignal,
     Graph,
     Organization,
     OrganizationMembership,
@@ -1029,6 +1030,28 @@ def test_atlas_launch_readiness_api_returns_sanitized_dry_run_payload_and_receip
     assert receipt["metadata"]["source"] == "atlas_launch_readiness"
     assert receipt["metadata"]["dry_run"] is True
     assert receipt["metadata"]["live_execution_enabled"] is False
+    launch_attempt = payload["launch_attempt"]
+    assert launch_attempt["status"] == "ready"
+    assert launch_attempt["requested_mode"] == "dry_run"
+    assert launch_attempt["checkpoint_count"] == 1
+    assert launch_attempt["receipt_deliverable_id"] == receipt["id"]
+    projection = StateProjection.objects.get(
+        company=company,
+        projection_type__startswith=f"atlas_launch_attempt:{whiteboard.id}:",
+    )
+    attempt_state = projection.json_state
+    assert attempt_state["attempt_id"] == str(projection.id)
+    assert attempt_state["whiteboard_id"] == str(whiteboard.id)
+    assert attempt_state["checkpoint_count"] == 1
+    assert attempt_state["checkpoints"][0]["sequence"] == 1
+    assert attempt_state["checkpoints"][0]["status"] == "ready"
+    checkpoint_signal = CompanySignal.objects.get(
+        company=company,
+        source="atlas_launch_checkpoint",
+    )
+    assert checkpoint_signal.external_key.startswith(f"atlas-launch:{whiteboard.id}:")
+    assert checkpoint_signal.metadata_json["attempt_id"] == str(projection.id)
+    assert checkpoint_signal.metadata_json["checkpoint_sequence"] == 1
     rendered = json.dumps(response.data, sort_keys=True, default=str)
     assert "email-secret" not in rendered
     assert "whatsapp-secret" not in rendered
@@ -1103,6 +1126,45 @@ def test_atlas_launch_readiness_receipt_replays_and_rejects_conflict(
         ).count()
         == 1
     )
+    assert (
+        CompanySignal.objects.filter(company=company, source="atlas_launch_checkpoint").count() == 1
+    )
+    projection = StateProjection.objects.get(
+        company=company,
+        projection_type__startswith=f"atlas_launch_attempt:{whiteboard.id}:",
+    )
+    assert projection.json_state["checkpoint_count"] == 1
+
+
+def test_atlas_live_launch_records_blocked_attempt_checkpoint(authenticated_client, user):
+    company = _company(user, "Atlas Blocked Launch Client")
+    whiteboard = _whiteboard(company, user)
+
+    response = authenticated_client.post(
+        f"/api/whiteboards/{whiteboard.id}/atlas-launch/readiness",
+        {"mode": "live"},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY="atlas-launch-blocked-live",
+    )
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "ATLAS_LIVE_LAUNCH_BLOCKED"
+    detail = error["details"][0]
+    launch_attempt = detail["launch_attempt"]
+    assert launch_attempt["status"] == "blocked"
+    assert launch_attempt["requested_mode"] == "live"
+    assert launch_attempt["checkpoint_count"] == 1
+    assert (
+        CompanySignal.objects.filter(company=company, source="atlas_launch_checkpoint").count() == 1
+    )
+    projection = StateProjection.objects.get(
+        company=company,
+        projection_type__startswith=f"atlas_launch_attempt:{whiteboard.id}:",
+    )
+    assert projection.json_state["status"] == "blocked"
+    assert projection.json_state["checkpoints"][0]["status"] == "blocked"
+    assert projection.json_state["checkpoints"][0]["blocker_codes"]
 
 
 def test_atlas_launch_readiness_api_requires_auth_and_scopes_whiteboard(api_client, user):

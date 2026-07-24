@@ -2452,10 +2452,6 @@ def _attempt_id(*, idempotency_key: str, tool_id: str, inputs: dict[str, Any]) -
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
-def _email_attempt_id(*, idempotency_key: str, tool_id: str, inputs: dict[str, Any]) -> str:
-    return _connector_attempt_id(idempotency_key=idempotency_key, tool_id=tool_id, inputs=inputs)
-
-
 def _connector_attempt_id(*, idempotency_key: str, tool_id: str, inputs: dict[str, Any]) -> str:
     clean_key = str(idempotency_key or "").strip()
     if clean_key:

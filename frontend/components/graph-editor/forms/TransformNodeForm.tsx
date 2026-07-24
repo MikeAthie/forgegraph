@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/ui/form-field";
@@ -33,6 +33,10 @@ function validateTransformConfig(transformConfig: TransformConfig): Record<strin
 
 export function TransformNodeForm({ config, onChange, errors, setErrors }: NodeFormProps) {
   const transformConfig = config as TransformConfig;
+
+  useEffect(() => {
+    setErrors(validateTransformConfig(transformConfig));
+  }, [setErrors, transformConfig]);
 
   const handleChange = useCallback(
     <K extends keyof TransformConfig>(field: K, value: TransformConfig[K]) => {

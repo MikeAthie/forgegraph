@@ -139,7 +139,6 @@ from infrastructure.orm.models import (
     Run,
     StateProjection,
     User,
-    ValidationDecision,
 )
 
 
@@ -1720,10 +1719,6 @@ def _revision_payload(version: AssetVersion) -> dict[str, Any]:
     from application.services.work_artifacts import revision_payload
 
     return revision_payload(version)
-
-
-def _validation_decision_payload(decision: ValidationDecision) -> dict[str, Any]:
-    return validation_decision_payload(decision)
 
 
 def _program_operation_payload(operation: Run) -> dict[str, Any]:

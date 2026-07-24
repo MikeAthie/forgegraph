@@ -81,6 +81,8 @@ def evaluate_backend_watchdog() -> BackendWatchdogSnapshot:
         triggers.append("request_timeout_rate")
     if queue_backlog_threshold > 0 and queue_backlog >= queue_backlog_threshold:
         triggers.append("queue_backlog")
+    if errors:
+        triggers.append("watchdog_probe_error")
 
     snapshot = BackendWatchdogSnapshot(
         enabled=enabled,

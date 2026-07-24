@@ -149,27 +149,6 @@ def _parse_rate(rate: str | None) -> tuple[int, int] | None:
     return count, window
 
 
-def _allow_ws_ticket_issue(user_id: str) -> bool:
-    from django.core.cache import cache
-
-    parsed = _parse_rate(
-        cast(dict[str, str | None], settings.REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {})).get(
-            "auth_ws_ticket"
-        )
-    )
-    if parsed is None:
-        return True
-    limit, window_seconds = parsed
-    bucket = int(timezone.now().timestamp()) // window_seconds
-    key = f"throttle:auth_ws_ticket:{user_id}:{bucket}"
-    try:
-        added = cache.add(key, 1, timeout=window_seconds + 1)
-        count = 1 if added else cache.incr(key)
-    except Exception:
-        return True
-    return int(count) <= limit
-
-
 async def _allow_ws_ticket_issue_async(user_id: str) -> bool:
     parsed = _parse_rate(
         cast(dict[str, str | None], settings.REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {})).get(
