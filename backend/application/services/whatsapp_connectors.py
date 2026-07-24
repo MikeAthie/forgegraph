@@ -944,7 +944,10 @@ def _session_status_from_response(response: Any) -> str:
         return "unhealthy"
     if not isinstance(payload, dict):
         return "unknown"
-    session_payload = payload.get("session") if isinstance(payload.get("session"), dict) else {}
+    raw_session_payload = payload.get("session")
+    session_payload: dict[object, object] = (
+        raw_session_payload if isinstance(raw_session_payload, dict) else {}
+    )
     connected = payload.get("connected") is True or payload.get("isConnected") is True
     return _safe_session_status(
         payload.get("status")

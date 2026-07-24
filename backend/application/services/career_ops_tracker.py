@@ -70,10 +70,14 @@ def check_career_ops_pipeline_integrity(*, company: Graph) -> dict[str, Any]:
         career_ops = _career_ops_metadata(opportunity.metadata_json)
         employer = str(career_ops.get("employer_name") or opportunity.contact_alias or "").strip()
         role = str(career_ops.get("role_title") or opportunity.title or "").strip()
-        raw_status = career_ops.get("tracker_status") or career_ops.get("application_status") or "evaluated"
+        raw_status = (
+            career_ops.get("tracker_status") or career_ops.get("application_status") or "evaluated"
+        )
         canonical = normalize_career_ops_status(raw_status)
         if canonical is None:
-            invalid_statuses.append({"opportunity_id": str(opportunity.id), "status": str(raw_status)})
+            invalid_statuses.append(
+                {"opportunity_id": str(opportunity.id), "status": str(raw_status)}
+            )
             counts["invalid"] += 1
         else:
             counts[canonical] += 1
@@ -84,7 +88,9 @@ def check_career_ops_pipeline_integrity(*, company: Graph) -> dict[str, Any]:
             first_meta = _career_ops_metadata(group[0].metadata_json)
             duplicates.append(
                 {
-                    "employer_name": str(first_meta.get("employer_name") or group[0].contact_alias or ""),
+                    "employer_name": str(
+                        first_meta.get("employer_name") or group[0].contact_alias or ""
+                    ),
                     "role_title": str(first_meta.get("role_title") or group[0].title or ""),
                     "opportunity_ids": [str(opportunity.id) for opportunity in group],
                 }

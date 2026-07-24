@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from django.core.management.base import BaseCommand, CommandParser
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from application.services.career_ops_pipeline import (
     build_career_ops_application_packet_for_opportunity,
@@ -23,17 +23,23 @@ class Command(BaseCommand):
         parser.add_argument("--idempotency-key", required=True)
 
     def handle(self, *args: object, **options: object) -> None:
-        company = Graph.objects.get(id=options["company_id"])
-        user = User.objects.get(id=options["user_id"])
-        opportunity = CompanyOpportunity.objects.get(id=options["opportunity_id"], company=company)
+        company = Graph.objects.get(id=str(options["company_id"]))
+        user = User.objects.get(id=str(options["user_id"]))
+        opportunity = CompanyOpportunity.objects.get(
+            id=str(options["opportunity_id"]), company=company
+        )
         result = build_career_ops_application_packet_for_opportunity(
             company=company,
             actor=user,
             opportunity=opportunity,
             idempotency_key=str(options["idempotency_key"]),
         )
+        if result.packet_asset_version_id is None:
+            raise CommandError("CareerOps packet build did not produce a packet asset version.")
         packet_version = AssetVersion.objects.get(id=result.packet_asset_version_id)
-        readiness = check_career_ops_packet_readiness(company=company, packet_version=packet_version)
+        readiness = check_career_ops_packet_readiness(
+            company=company, packet_version=packet_version
+        )
         payload = {
             "status": "ok",
             "run_id": result.run_id,

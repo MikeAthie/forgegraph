@@ -335,7 +335,7 @@ def _submitted_atlas_rubric_scorecard(
     hard_fail: bool = False,
     primitive: str = "CompanySignal",
 ) -> dict[str, Any]:
-    criteria = [
+    criteria: list[dict[str, Any]] = [
         {
             "key": "problem_framing",
             "label": "Problem framing",

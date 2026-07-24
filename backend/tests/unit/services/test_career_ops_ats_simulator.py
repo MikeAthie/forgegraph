@@ -14,7 +14,9 @@ def _candidate_facts(**overrides: Any) -> dict[str, Any]:
             "Delivered RAG and agentic workflow prototypes with observability.",
         ],
         "skills": ["Python", "FastAPI", "PostgreSQL", "Redis", "RAG", "observability"],
-        "projects": ["Career automation backend using Python, FastAPI, PostgreSQL, and RAG workflows."],
+        "projects": [
+            "Career automation backend using Python, FastAPI, PostgreSQL, and RAG workflows."
+        ],
         "education": ["B.S. Computer Science"],
     }
     facts.update(overrides)
@@ -73,7 +75,12 @@ def _resume(**overrides: Any) -> dict[str, Any]:
             },
             {
                 "heading": "EDUCATION",
-                "items": [{"text": "B.S. Computer Science", "source_ref": {"type": "cv_education", "index": 0}}],
+                "items": [
+                    {
+                        "text": "B.S. Computer Science",
+                        "source_ref": {"type": "cv_education", "index": 0},
+                    }
+                ],
             },
         ],
         "plain_text": (
@@ -98,7 +105,11 @@ def _resume(**overrides: Any) -> dict[str, Any]:
 def _packet(resume: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "status": "draft",
-        "opportunity": {"id": "opp-123", "employer_name": "Acme AI", "role_title": "Backend Engineer"},
+        "opportunity": {
+            "id": "opp-123",
+            "employer_name": "Acme AI",
+            "role_title": "Backend Engineer",
+        },
         "alignment": {
             "keyword_alignment": {
                 "matched_keywords": [
@@ -119,7 +130,9 @@ def _packet(resume: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 def _score_for(resume: dict[str, Any], posting: dict[str, Any] | None = None) -> dict[str, Any]:
-    return simulate_career_ops_ats(packet=_packet(resume), posting=posting or _posting(), candidate_facts=_candidate_facts())
+    return simulate_career_ops_ats(
+        packet=_packet(resume), posting=posting or _posting(), candidate_facts=_candidate_facts()
+    )
 
 
 def test_ats_simulator_scores_well_structured_source_backed_resume() -> None:
@@ -129,7 +142,13 @@ def test_ats_simulator_scores_well_structured_source_backed_resume() -> None:
     assert report["status"] == "simulated"
     assert report["atsScore"] >= 85
     assert report["scoreBand"] in {"human_review", "send_ready"}
-    assert set(report["scoreBreakdown"]) == {"formatting", "keywords", "structure", "readability", "risk"}
+    assert set(report["scoreBreakdown"]) == {
+        "formatting",
+        "keywords",
+        "structure",
+        "readability",
+        "risk",
+    }
     matched = {item["keyword"] for item in report["keywordAnalysis"]["matched"]}
     assert {"Python", "FastAPI", "PostgreSQL", "RAG"} <= matched
     assert report["quality"]["external_side_effects_allowed"] is False
@@ -166,7 +185,9 @@ def test_ats_simulator_blocks_internal_leakage() -> None:
 
 def test_ats_simulator_penalizes_missing_required_sections() -> None:
     resume = _resume()
-    resume["sections"] = [section for section in resume["sections"] if section["heading"] != "EDUCATION"]
+    resume["sections"] = [
+        section for section in resume["sections"] if section["heading"] != "EDUCATION"
+    ]
 
     report = _score_for(resume)
 

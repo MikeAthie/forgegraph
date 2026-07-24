@@ -22,6 +22,7 @@ from infrastructure.orm.models import (
     GatewayConversation,
     GatewayInboundReceipt,
     GraphVersion,
+    MemoryObservation,
     Organization,
     Run,
     User,
@@ -67,12 +68,14 @@ def materialize_gateway_inbound(
     input_json: dict[str, Any],
     thread_id: UUID | None,
 ) -> dict[str, Any]:
-    gateway = input_json.get("gateway") if isinstance(input_json.get("gateway"), dict) else {}
+    raw_gateway = input_json.get("gateway")
+    gateway: dict[str, Any] = raw_gateway if isinstance(raw_gateway, dict) else {}
     platform = str(gateway.get("platform") or receipt.platform)
     provider = str(gateway.get("provider") or receipt.provider)
     conversation_id = str(gateway.get("conversation_id") or receipt.external_conversation_id)
     message_text = str(input_json.get("message") or "")
-    attachments = gateway.get("attachments") if isinstance(gateway.get("attachments"), list) else []
+    raw_attachments = gateway.get("attachments")
+    attachments: list[Any] = raw_attachments if isinstance(raw_attachments, list) else []
 
     with transaction.atomic():
         if receipt.connection_id:
@@ -252,7 +255,7 @@ def _create_message_observation(
     message_text: str,
     platform: str,
     conversation_id: str,
-):
+) -> MemoryObservation | None:
     if not message_text.strip():
         return None
     service = MemoryObservationService()
@@ -288,7 +291,7 @@ def _create_media_transcript_observation(
     transcript_text: str,
     platform: str,
     artifact_id: UUID,
-):
+) -> MemoryObservation:
     service = MemoryObservationService()
     return service.create_observation(
         tenant_id=receipt.organization_id,

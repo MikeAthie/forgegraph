@@ -77,7 +77,9 @@ def test_parse_bing_html_extracts_result_url_title_and_snippet() -> None:
     ]
 
 
-def test_stdlib_provider_falls_back_to_bing_when_duckduckgo_returns_no_results(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stdlib_provider_falls_back_to_bing_when_duckduckgo_returns_no_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     requested_urls: list[str] = []
 
     def fake_urlopen(request: Any, *, timeout: float) -> FakeSearchResponse:
@@ -225,7 +227,9 @@ def test_normalize_career_ops_live_search_hit_infers_safe_missing_locations_from
     assert posting["external_side_effects_allowed"] is False
 
 
-def test_normalize_career_ops_live_search_hit_preserves_explicit_location_and_does_not_infer_us() -> None:
+def test_normalize_career_ops_live_search_hit_preserves_explicit_location_and_does_not_infer_us() -> (
+    None
+):
     explicit_location = normalize_career_ops_live_search_hit(
         {
             "title": "Backend AI Engineer",

@@ -19,17 +19,28 @@ def _create_company(user: User) -> Graph:
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Projection Co"))
-    GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=user, organization=organization, name="CareerOps Projection Co"),
+    )
+    GraphVersion.objects.create(
+        graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+    )
     return company
 
 
-def test_materialize_career_ops_pipeline_projection_rebuilds_from_durable_records(user: User) -> None:
+def test_materialize_career_ops_pipeline_projection_rebuilds_from_durable_records(
+    user: User,
+) -> None:
     company = _create_company(user)
     result = run_career_ops_url_pipeline(
         company=company,
         actor=user,
-        posting={"title": "Senior AI Product Engineer", "company": "Acme AI", "url": "https://jobs.example.com/acme/123"},
+        posting={
+            "title": "Senior AI Product Engineer",
+            "company": "Acme AI",
+            "url": "https://jobs.example.com/acme/123",
+        },
         idempotency_key="projection:test",
     )
 
@@ -41,4 +52,9 @@ def test_materialize_career_ops_pipeline_projection_rebuilds_from_durable_record
     assert projection.json_state["integrity"]["status"] == "ok"
     assert projection.json_state["opportunities"][0]["decision_ids"]
     assert projection.json_state["opportunities"][0]["deliverable_ids"]
-    assert StateProjection.objects.filter(company=company, projection_type=CAREER_OPS_PIPELINE_PROJECTION_TYPE).count() == 1
+    assert (
+        StateProjection.objects.filter(
+            company=company, projection_type=CAREER_OPS_PIPELINE_PROJECTION_TYPE
+        ).count()
+        == 1
+    )

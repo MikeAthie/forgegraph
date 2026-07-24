@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -429,7 +430,22 @@ def _record_metadata(
     run_context: dict[str, Any],
     runtime_provider: str,
 ) -> dict[str, Any]:
-    metadata = {
+    task_metadata: dict[str, Any] = {
+        "program_id": str(program.id),
+        "program_title": program.title,
+        "program_template_id": program.template_id,
+        "stage_state_id": str(stage.id),
+        "stage_id": stage.stage_id,
+        "stage_label": stage.label,
+        "sequence": stage.sequence,
+        "status": generic_status,
+        "dependencies": dependencies,
+        "department_id": str(department.id),
+        "department_slug": department.slug,
+        "runtime_provider": runtime_provider,
+        "created_via": "company_run_task_routing",
+    }
+    metadata: dict[str, Any] = {
         "title": title,
         "customer_visible": False,
         "board_card": True,
@@ -441,26 +457,12 @@ def _record_metadata(
                 program=program, whiteboard=whiteboard
             ),
         },
-        TASK_METADATA_KEY: {
-            "program_id": str(program.id),
-            "program_title": program.title,
-            "program_template_id": program.template_id,
-            "stage_state_id": str(stage.id),
-            "stage_id": stage.stage_id,
-            "stage_label": stage.label,
-            "sequence": stage.sequence,
-            "status": generic_status,
-            "dependencies": dependencies,
-            "department_id": str(department.id),
-            "department_slug": department.slug,
-            "runtime_provider": runtime_provider,
-            "created_via": "company_run_task_routing",
-        },
+        TASK_METADATA_KEY: task_metadata,
         "event_type": TASK_EVENT_TYPE,
         "trigger_type": TASK_EVENT_TYPE,
     }
     if run_context:
-        metadata[TASK_METADATA_KEY]["run_context"] = run_context
+        task_metadata["run_context"] = run_context
     return metadata
 
 
@@ -595,11 +597,13 @@ def _explicit_dependencies(stage: ProgramStageState) -> list[str] | None:
     for key in ("dependencies", "depends_on", "dependency_stage_ids"):
         if key in state:
             return _stage_id_list(state.get(key))
-    template = state.get("template") if isinstance(state.get("template"), dict) else {}
+    raw_template = state.get("template")
+    template: dict[str, Any] = raw_template if isinstance(raw_template, dict) else {}
     for key in ("dependencies", "depends_on", "dependency_stage_ids"):
         if key in template:
             return _stage_id_list(template.get(key))
-    metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+    raw_metadata = state.get("metadata")
+    metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
     for key in ("dependencies", "depends_on", "dependency_stage_ids"):
         if key in metadata:
             return _stage_id_list(metadata.get(key))
@@ -695,7 +699,8 @@ def _department_for_stage(stage: ProgramStageState) -> DepartmentRegistry:
 def _department_id_from_state(state: dict[str, Any]) -> Any:
     if state.get("department_id"):
         return state.get("department_id")
-    template = state.get("template") if isinstance(state.get("template"), dict) else {}
+    raw_template = state.get("template")
+    template: dict[str, Any] = raw_template if isinstance(raw_template, dict) else {}
     return template.get("department_id")
 
 
@@ -705,7 +710,8 @@ def _department_slug_from_state_or_stage(stage: ProgramStageState) -> str:
         state.get("department_slug"),
         state.get("department"),
     ]
-    template = state.get("template") if isinstance(state.get("template"), dict) else {}
+    raw_template = state.get("template")
+    template: dict[str, Any] = raw_template if isinstance(raw_template, dict) else {}
     candidates.extend([template.get("department_slug"), template.get("department")])
     for candidate in candidates:
         slug = _safe_slug(candidate)
@@ -716,8 +722,10 @@ def _department_slug_from_state_or_stage(stage: ProgramStageState) -> str:
 
 def _stage_title(stage: ProgramStageState) -> str:
     state = dict(stage.state_json or {})
-    template = state.get("template") if isinstance(state.get("template"), dict) else {}
-    metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+    raw_template = state.get("template")
+    template: dict[str, Any] = raw_template if isinstance(raw_template, dict) else {}
+    raw_metadata = state.get("metadata")
+    metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
     for value in (
         state.get("task_title"),
         state.get("title"),
@@ -820,7 +828,15 @@ def _whiteboard_for_program(program: CompanyProgram) -> WorkWhiteboard | None:
         company=program.company,
     )
     if service_engagement_id:
-        whiteboard = queryset.filter(service_engagement_id=service_engagement_id).first()
+        try:
+            service_engagement_uuid = UUID(service_engagement_id)
+        except ValueError:
+            service_engagement_uuid = None
+        whiteboard = (
+            queryset.filter(service_engagement_id=service_engagement_uuid).first()
+            if service_engagement_uuid is not None
+            else None
+        )
         if whiteboard is not None:
             return whiteboard
     return queryset.filter(

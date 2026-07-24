@@ -38,7 +38,9 @@ def _external_document_text(*values: object) -> str:
 
 
 def test_alignment_report_matches_supported_keywords_and_flags_gaps() -> None:
-    report = build_career_ops_alignment_report(candidate_facts=_candidate_facts(), posting=_posting())
+    report = build_career_ops_alignment_report(
+        candidate_facts=_candidate_facts(), posting=_posting()
+    )
 
     matched = {item["keyword"] for item in report["keyword_alignment"]["matched_keywords"]}
     missing = {item["keyword"] for item in report["keyword_alignment"]["missing_keywords"]}
@@ -55,7 +57,9 @@ def test_resume_draft_uses_required_ats_sections_and_supported_keywords_only() -
     posting = _posting()
     alignment = build_career_ops_alignment_report(candidate_facts=candidate, posting=posting)
 
-    resume = build_tailored_resume_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
+    resume = build_tailored_resume_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
 
     assert resume["status"] == "draft"
     assert resume["format"] == "ats_resume_v2.optimized_python_backend"
@@ -78,7 +82,9 @@ def test_cover_letter_references_role_and_evidence_without_missing_keywords() ->
     posting = _posting()
     alignment = build_career_ops_alignment_report(candidate_facts=candidate, posting=posting)
 
-    cover_letter = build_cover_letter_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
+    cover_letter = build_cover_letter_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
     text = "\n".join(cover_letter["paragraphs"])
 
     assert cover_letter["status"] == "draft"
@@ -101,8 +107,12 @@ def test_location_and_work_authorization_are_not_invented() -> None:
         location="Remote, Canada",
     )
     alignment = build_career_ops_alignment_report(candidate_facts=candidate, posting=posting)
-    resume = build_tailored_resume_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
-    cover_letter = build_cover_letter_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
+    resume = build_tailored_resume_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
+    cover_letter = build_cover_letter_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
 
     text = _external_document_text(resume["plain_text"], cover_letter["paragraphs"])
 
@@ -120,14 +130,17 @@ def test_generated_external_text_has_no_internal_leakage_tokens() -> None:
     )
     posting = _posting(description="Python PostgreSQL workflow observability engineer.")
     alignment = build_career_ops_alignment_report(candidate_facts=candidate, posting=posting)
-    resume = build_tailored_resume_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
-    cover_letter = build_cover_letter_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
+    resume = build_tailored_resume_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
+    cover_letter = build_cover_letter_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
 
     text = _external_document_text(resume["plain_text"], cover_letter["paragraphs"]).casefold()
 
     for token in ("hermes", "forgegraph", "metadata_json", "prompt", "provenance_json"):
         assert token not in text
-
 
 
 def test_optimized_python_backend_cv_builder_uses_360dialog_guardrails() -> None:
@@ -186,14 +199,24 @@ def test_optimized_python_backend_cv_builder_uses_360dialog_guardrails() -> None
     )
     alignment = build_career_ops_alignment_report(candidate_facts=candidate, posting=posting)
 
-    resume = build_tailored_resume_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
+    resume = build_tailored_resume_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
     text = resume["plain_text"]
 
     assert resume["quality"]["cv_builder_profile"] == "python_backend_api_reliability"
-    assert "Backend Developer (Python) building reliable, maintainable, and observable backend services" in text
+    assert (
+        "Backend Developer (Python) building reliable, maintainable, and observable backend services"
+        in text
+    )
     assert "remote, high-autonomy environments" in text
-    assert "Python Backend: Python, FastAPI, Django, REST APIs, service architecture, maintainable codebases, production ownership" in text
-    assert "Async & Workers: event-driven pipelines, WebSockets, Celery, background processing" in text
+    assert (
+        "Python Backend: Python, FastAPI, Django, REST APIs, service architecture, maintainable codebases, production ownership"
+        in text
+    )
+    assert (
+        "Async & Workers: event-driven pipelines, WebSockets, Celery, background processing" in text
+    )
     assert "Datastores: PostgreSQL" in text and "Redis Streams" in text
     assert "Automated Trading Bot (Binance)" in text
     assert "WebSockets" in text and "Celery workers" in text
@@ -210,9 +233,11 @@ def test_optimized_python_backend_cv_builder_uses_360dialog_guardrails() -> None
         "TECHNICAL SKILLS",
         "CERTIFICATIONS",
     ]
-    assert resume["guardrails"]["project_selection"] == ["Automated Trading Bot (Binance)", "ForgeGraph"]
+    assert resume["guardrails"]["project_selection"] == [
+        "Automated Trading Bot (Binance)",
+        "ForgeGraph",
+    ]
     assert resume["guardrails"]["avoid_generic_ai_native_prose"] is True
-
 
 
 def test_optimized_lead_fullstack_go_react_builder_for_codifin_guardrails() -> None:
@@ -261,7 +286,13 @@ def test_optimized_lead_fullstack_go_react_builder_for_codifin_guardrails() -> N
                 ],
             },
         ],
-        education=[{"institution": "ITAM", "degree": "Bachelor of Science in Law", "graduation_year": "2017"}],
+        education=[
+            {
+                "institution": "ITAM",
+                "degree": "Bachelor of Science in Law",
+                "graduation_year": "2017",
+            }
+        ],
         certifications=[
             "Meta Back-End Developer Certification (May 2023)",
             "IBM RAG and Agentic AI (May 2025)",
@@ -281,8 +312,12 @@ def test_optimized_lead_fullstack_go_react_builder_for_codifin_guardrails() -> N
     )
     alignment = build_career_ops_alignment_report(candidate_facts=candidate, posting=posting)
 
-    resume = build_tailored_resume_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
-    cover_letter = build_cover_letter_draft(candidate_facts=candidate, posting=posting, alignment=alignment)
+    resume = build_tailored_resume_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
+    cover_letter = build_cover_letter_draft(
+        candidate_facts=candidate, posting=posting, alignment=alignment
+    )
     text = resume["plain_text"]
     cover_text = "\n".join(cover_letter["paragraphs"])
 
@@ -300,7 +335,11 @@ def test_optimized_lead_fullstack_go_react_builder_for_codifin_guardrails() -> N
     assert "English C1" not in text
     assert "Advanced English C1" not in text
     assert resume["guardrails"]["do_not_claim_unsourced_c1"] is True
-    assert resume["guardrails"]["project_selection"] == ["ForgeGraph", "Lex Toolkit", "Automated Trading Bot (Binance)"]
+    assert resume["guardrails"]["project_selection"] == [
+        "ForgeGraph",
+        "Lex Toolkit",
+        "Automated Trading Bot (Binance)",
+    ]
     assert "Codifin" in cover_text
     assert "Golang" in cover_text and "React" in cover_text
     assert "English C1" not in cover_text

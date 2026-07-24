@@ -700,6 +700,12 @@ def _snapshot_recovery_whiteboard(
     )
     if isinstance(whiteboard_uuid, Response):
         return whiteboard_uuid
+    if whiteboard_uuid is None:
+        return error_response(
+            "VALIDATION_ERROR",
+            "whiteboard_id is required.",
+            status=drf_status.HTTP_400_BAD_REQUEST,
+        )
     whiteboard = WorkWhiteboard.objects.filter(
         organization=organization,
         id=whiteboard_uuid,

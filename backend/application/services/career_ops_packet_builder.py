@@ -25,7 +25,9 @@ class CareerOpsPacketPayloads:
 
 
 # Backward compatible alias for the former function name.
-def build_career_ops_packet_payloads(*, company: Graph, opportunity: CompanyOpportunity) -> CareerOpsPacketPayloads:
+def build_career_ops_packet_payloads(
+    *, company: Graph, opportunity: CompanyOpportunity
+) -> CareerOpsPacketPayloads:
     """Build deterministic non-live liveness, evaluation, and packet payloads."""
 
     career_ops = _career_ops_metadata(opportunity.metadata_json)
@@ -87,7 +89,9 @@ def build_career_ops_packet_payloads(*, company: Graph, opportunity: CompanyOppo
             posting=posting,
             candidate_facts=candidate_facts,
         )
-    quality["ats_score"] = ats_simulation.get("atsScore") if isinstance(ats_simulation, dict) else None
+    quality["ats_score"] = (
+        ats_simulation.get("atsScore") if isinstance(ats_simulation, dict) else None
+    )
     quality["ats_human_review_minimum_passed"] = bool(
         isinstance(ats_simulation, dict) and ats_simulation.get("atsScore", 0) >= 85
     )
@@ -147,7 +151,10 @@ def _base_cv_asset(*, company: Graph) -> Asset | None:
         career_ops = metadata.get("career_ops", {}) if isinstance(metadata, dict) else {}
         if asset.source_key == "career_ops:cv_source":
             return asset
-        if isinstance(career_ops, dict) and career_ops.get("deliverable_type") == CAREER_OPS_BASE_CV_ARTIFACT_TYPE:
+        if (
+            isinstance(career_ops, dict)
+            and career_ops.get("deliverable_type") == CAREER_OPS_BASE_CV_ARTIFACT_TYPE
+        ):
             return asset
     return None
 
@@ -191,7 +198,9 @@ def _packet_http_status(career_ops: dict[str, Any]) -> int:
     status = int(career_ops.get("http_status") or 0)
     source_mode = str(career_ops.get("source_mode") or "").strip()
     posting_source_mode = str(career_ops.get("posting_source_mode") or "").strip()
-    if status not in {404, 410} and (source_mode == "live_url_discovery" or posting_source_mode == "live_search_skill"):
+    if status not in {404, 410} and (
+        source_mode == "live_url_discovery" or posting_source_mode == "live_search_skill"
+    ):
         return 0
     return status
 

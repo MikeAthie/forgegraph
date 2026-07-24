@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
-ATS_REQUIRED_SECTIONS = ("SUMMARY", "TECHNICAL SKILLS", "SELECTED EXPERIENCE", "PROJECTS", "EDUCATION")
-OPTIMIZED_BACKEND_SECTIONS = ("SUMMARY", "SELECTED EXPERIENCE", "PROJECTS", "EDUCATION", "TECHNICAL SKILLS", "CERTIFICATIONS")
+ATS_REQUIRED_SECTIONS = (
+    "SUMMARY",
+    "TECHNICAL SKILLS",
+    "SELECTED EXPERIENCE",
+    "PROJECTS",
+    "EDUCATION",
+)
+OPTIMIZED_BACKEND_SECTIONS = (
+    "SUMMARY",
+    "SELECTED EXPERIENCE",
+    "PROJECTS",
+    "EDUCATION",
+    "TECHNICAL SKILLS",
+    "CERTIFICATIONS",
+)
 INTERNAL_LEAKAGE_TOKENS = ("hermes", "metadata_json", "provenance_json", "raw tool")
 CAREER_OPS_KEYWORDS = (
     "AWS Lambda",
@@ -33,7 +45,9 @@ CAREER_OPS_KEYWORDS = (
 )
 
 
-def build_career_ops_alignment_report(*, candidate_facts: dict[str, Any], posting: dict[str, Any]) -> dict[str, Any]:
+def build_career_ops_alignment_report(
+    *, candidate_facts: dict[str, Any], posting: dict[str, Any]
+) -> dict[str, Any]:
     """Build a source-backed deterministic alignment report for one posting."""
 
     fact_texts = _candidate_fact_texts(candidate_facts)
@@ -64,7 +78,9 @@ def build_career_ops_alignment_report(*, candidate_facts: dict[str, Any], postin
         },
         "positioning": {
             "headline": _headline(posting=posting, matched_keywords=matched_keywords),
-            "summary_bullets": _summary_bullets(candidate_facts=candidate_facts, matched_keywords=matched_keywords),
+            "summary_bullets": _summary_bullets(
+                candidate_facts=candidate_facts, matched_keywords=matched_keywords
+            ),
             "emphasis_order": [match["keyword"] for match in matched_keywords],
         },
         "ats": {
@@ -109,7 +125,9 @@ def build_tailored_resume_draft(
         matched_keywords=matched_keywords,
     )
     experience_items = _proof_point_items(candidate_facts.get("proof_points"), section="experience")
-    project_items = _proof_point_items(candidate_facts.get("projects") or candidate_facts.get("proof_points"), section="project")
+    project_items = _proof_point_items(
+        candidate_facts.get("projects") or candidate_facts.get("proof_points"), section="project"
+    )
     education_items = _education_items(candidate_facts.get("education"))
     claim_source_map = [
         *summary_claims,
@@ -118,7 +136,7 @@ def build_tailored_resume_draft(
         *_claim_map_from_items(project_items),
         *_claim_map_from_items(education_items),
     ]
-    sections = [
+    sections: list[dict[str, Any]] = [
         {"heading": "SUMMARY", "items": summary_items},
         {"heading": "TECHNICAL SKILLS", "items": skills},
         {"heading": "SELECTED EXPERIENCE", "items": experience_items},
@@ -156,7 +174,10 @@ def build_cover_letter_draft(
     summary = _safe_external_text(str(candidate_facts.get("summary") or "")).strip()
     top_skills = ", ".join(keyword["keyword"] for keyword in matched_keywords[:3])
     role = str(posting.get("title") or "this role").strip() or "this role"
-    company = str(posting.get("company") or posting.get("employer") or "the company").strip() or "the company"
+    company = (
+        str(posting.get("company") or posting.get("employer") or "the company").strip()
+        or "the company"
+    )
     profile = _cv_builder_profile(posting=posting, candidate_facts=candidate_facts)
     if profile == "lead_fullstack_go_react_saas_automation":
         return _build_lead_fullstack_go_react_cover_letter(
@@ -175,15 +196,21 @@ def build_cover_letter_draft(
     if summary:
         opening = f"{opening} {summary}"
 
-    evidence_items = _proof_point_items(candidate_facts.get("proof_points"), section="cover_letter")[:2]
+    evidence_items = _proof_point_items(
+        candidate_facts.get("proof_points"), section="cover_letter"
+    )[:2]
     evidence_text = "; ".join(item["text"] for item in evidence_items)
     if evidence_text:
         evidence = f"Relevant evidence includes {evidence_text}."
     else:
-        evidence = "I would keep this draft limited to verified CV evidence before sending it externally."
+        evidence = (
+            "I would keep this draft limited to verified CV evidence before sending it externally."
+        )
 
     closing = f"I would welcome a conversation about how this background can support {company}'s work on {role}."
-    paragraphs = [_safe_external_text(paragraph).strip() for paragraph in (opening, evidence, closing)]
+    paragraphs = [
+        _safe_external_text(paragraph).strip() for paragraph in (opening, evidence, closing)
+    ]
     paragraphs = [paragraph for paragraph in paragraphs if paragraph]
     claim_source_map = _claim_map_from_items(evidence_items)
     source_refs = _dedupe_refs([claim["source_ref"] for claim in claim_source_map])
@@ -198,10 +225,10 @@ def build_cover_letter_draft(
     }
 
 
-
-
 def _cv_builder_profile(*, posting: dict[str, Any], candidate_facts: dict[str, Any]) -> str:
-    text = "\n".join(str(posting.get(key) or "") for key in ("title", "description", "body_text", "jd_text")).casefold()
+    text = "\n".join(
+        str(posting.get(key) or "") for key in ("title", "description", "body_text", "jd_text")
+    ).casefold()
     fullstack_go_react_signals = (
         "golang",
         "go ",
@@ -216,7 +243,19 @@ def _cv_builder_profile(*, posting: dict[str, Any], candidate_facts: dict[str, A
         return "lead_fullstack_go_react_saas_automation"
     if sum(1 for signal in fullstack_go_react_signals if signal in text) >= 5:
         return "lead_fullstack_go_react_saas_automation"
-    backend_signals = ("backend", "python", "api", "apis", "rest", "redis", "postgres", "postgresql", "async", "event-driven", "worker")
+    backend_signals = (
+        "backend",
+        "python",
+        "api",
+        "apis",
+        "rest",
+        "redis",
+        "postgres",
+        "postgresql",
+        "async",
+        "event-driven",
+        "worker",
+    )
     if "python" in text and ("backend" in text or "api" in text or "apis" in text):
         return "python_backend_api_reliability"
     if sum(1 for signal in backend_signals if signal in text) >= 4:
@@ -225,22 +264,27 @@ def _cv_builder_profile(*, posting: dict[str, Any], candidate_facts: dict[str, A
 
 
 def _build_python_backend_api_resume(
-    *, candidate_facts: dict[str, Any], posting: dict[str, Any], alignment: dict[str, Any], profile: str
+    *,
+    candidate_facts: dict[str, Any],
+    posting: dict[str, Any],
+    alignment: dict[str, Any],
+    profile: str,
 ) -> dict[str, Any]:
-    matched_keywords = _matched_keywords(alignment)
     summary = _optimized_backend_summary(posting=posting)
     summary_items = [{"text": summary, "source_ref": {"type": "cv_summary"}}]
     experience_items = _optimized_backend_experience(candidate_facts)
     project_items = _optimized_backend_projects(candidate_facts)
     education_items = _education_items(candidate_facts.get("education"))
     skill_items = _optimized_backend_skills(candidate_facts)
-    certification_items = _certification_items(candidate_facts.get("certifications") or candidate_facts.get("certification"))
+    certification_items = _certification_items(
+        candidate_facts.get("certifications") or candidate_facts.get("certification")
+    )
     contact_items = _contact_items(candidate_facts)
     if contact_items:
         # Keep contact/canonical repository facts inside the summary section so the draft can carry
         # them through the ATS text layer without introducing a non-standard top-level section.
         summary_items.extend(contact_items)
-    sections = [
+    sections: list[dict[str, Any]] = [
         {"heading": "SUMMARY", "items": summary_items},
         {"heading": "SELECTED EXPERIENCE", "items": experience_items},
         {"heading": "PROJECTS", "items": project_items},
@@ -290,11 +334,19 @@ def _build_python_backend_api_resume(
     }
 
 
-
 def _build_lead_fullstack_go_react_resume(
-    *, candidate_facts: dict[str, Any], posting: dict[str, Any], alignment: dict[str, Any], profile: str
+    *,
+    candidate_facts: dict[str, Any],
+    posting: dict[str, Any],
+    alignment: dict[str, Any],
+    profile: str,
 ) -> dict[str, Any]:
-    summary_items = [{"text": _lead_fullstack_go_react_summary(posting=posting), "source_ref": {"type": "cv_summary"}}]
+    summary_items = [
+        {
+            "text": _lead_fullstack_go_react_summary(posting=posting),
+            "source_ref": {"type": "cv_summary"},
+        }
+    ]
     contact_items = _contact_items(candidate_facts)
     if contact_items:
         summary_items.extend(contact_items)
@@ -302,8 +354,10 @@ def _build_lead_fullstack_go_react_resume(
     project_items = _lead_fullstack_projects(candidate_facts)
     education_items = _education_items(candidate_facts.get("education"))
     skill_items = _lead_fullstack_skills(candidate_facts)
-    certification_items = _certification_items(candidate_facts.get("certifications") or candidate_facts.get("certification"))
-    sections = [
+    certification_items = _certification_items(
+        candidate_facts.get("certifications") or candidate_facts.get("certification")
+    )
+    sections: list[dict[str, Any]] = [
         {"heading": "SUMMARY", "items": summary_items},
         {"heading": "SELECTED EXPERIENCE", "items": experience_items},
         {"heading": "PROJECTS", "items": project_items},
@@ -336,7 +390,10 @@ def _build_lead_fullstack_go_react_resume(
         "plain_text": _plain_text(sections),
         "claim_source_map": claim_source_map,
         "source_refs": _dedupe_refs([claim["source_ref"] for claim in claim_source_map]),
-        "ats": {"pass": _has_required_sections(sections), "warnings": [] if claim_source_map else ["no_source_backed_resume_claims"]},
+        "ats": {
+            "pass": _has_required_sections(sections),
+            "warnings": [] if claim_source_map else ["no_source_backed_resume_claims"],
+        },
         "quality": quality,
         "guardrails": {
             "profile": profile,
@@ -372,16 +429,34 @@ def _lead_fullstack_experience(candidate_facts: dict[str, Any]) -> list[dict[str
     ]
     chosen: list[str] = []
     for text in templates:
-        concepts = [word for word in ("full-stack", "Go", "React", "SaaS", "AI", "English") if word.casefold() in text.casefold()]
-        if not concepts or any(concept.casefold() in source_text.casefold() for concept in concepts):
+        concepts = [
+            word
+            for word in ("full-stack", "Go", "React", "SaaS", "AI", "English")
+            if word.casefold() in text.casefold()
+        ]
+        if not concepts or any(
+            concept.casefold() in source_text.casefold() for concept in concepts
+        ):
             chosen.append(text)
     if not chosen:
-        chosen = [_safe_external_text(_item_text(point)) for point in source_points[:5] if _item_text(point)]
-    return [{"text": text, "source_ref": {"type": "cv_proof_point", "index": index}} for index, text in enumerate(chosen[:6]) if _is_external_safe(text)]
+        chosen = [
+            _safe_external_text(_item_text(point))
+            for point in source_points[:5]
+            if _item_text(point)
+        ]
+    return [
+        {"text": text, "source_ref": {"type": "cv_proof_point", "index": index}}
+        for index, text in enumerate(chosen[:6])
+        if _is_external_safe(text)
+    ]
 
 
 def _lead_fullstack_projects(candidate_facts: dict[str, Any]) -> list[dict[str, Any]]:
-    projects = [project for project in _listify(candidate_facts.get("projects")) if isinstance(project, dict)]
+    projects = [
+        project
+        for project in _listify(candidate_facts.get("projects"))
+        if isinstance(project, dict)
+    ]
     ranked = sorted(projects, key=_lead_fullstack_project_rank)
     items: list[dict[str, Any]] = []
     for project in ranked[:3]:
@@ -393,12 +468,21 @@ def _lead_fullstack_projects(candidate_facts: dict[str, Any]) -> list[dict[str, 
             value = _safe_external_text(str(project.get(key) or "")).strip()
             if value:
                 parts.append(value)
-        bullets = [_safe_external_text(str(bullet)).strip() for bullet in _listify(project.get("bullets")) if str(bullet).strip()]
+        bullets = [
+            _safe_external_text(str(bullet)).strip()
+            for bullet in _listify(project.get("bullets"))
+            if str(bullet).strip()
+        ]
         text = " | ".join(parts)
         if bullets:
             text = f"{text} — " + " ".join(bullets[:3])
         if _is_external_safe(text):
-            items.append({"text": text, "source_ref": {"type": "cv_project", "index": projects.index(project)}})
+            items.append(
+                {
+                    "text": text,
+                    "source_ref": {"type": "cv_project", "index": projects.index(project)},
+                }
+            )
     return items
 
 
@@ -407,7 +491,18 @@ def _lead_fullstack_project_rank(project: dict[str, Any]) -> tuple[int, str]:
     score = 100
     if "forgegraph" in text:
         score -= 70
-    if any(token in text for token in ("go", "golang", "saas", "strategy", "report generation", "automation", "ai-powered")):
+    if any(
+        token in text
+        for token in (
+            "go",
+            "golang",
+            "saas",
+            "strategy",
+            "report generation",
+            "automation",
+            "ai-powered",
+        )
+    ):
         score -= 25
     if "lex toolkit" in text or "next.js" in text or "react" in text or "typescript" in text:
         score -= 85
@@ -416,21 +511,43 @@ def _lead_fullstack_project_rank(project: dict[str, Any]) -> tuple[int, str]:
     return (score, str(project.get("name") or project.get("title") or ""))
 
 
-
 def _lead_fullstack_skills(candidate_facts: dict[str, Any]) -> list[dict[str, Any]]:
     source_ref = {"type": "cv_skill", "index": 0}
     return [
-        {"text": "Full-Stack / Frontend: React, Next.js, TypeScript, product interfaces, API-driven workflows", "source_ref": source_ref},
-        {"text": "Backend / APIs: Golang, Python, REST APIs, GraphQL, service architecture, clean interfaces", "source_ref": source_ref},
-        {"text": "Data & Automation: PostgreSQL, SQL, Python pipelines, Redis, data processing, report generation", "source_ref": source_ref},
-        {"text": "DevOps / Delivery: Docker, Linux, Git, CI/CD practices, testing, release discipline", "source_ref": source_ref},
-        {"text": "AI in Production: RAG/agent workflows, AI feature integration, grounded outputs, automation guardrails", "source_ref": source_ref},
-        {"text": "Ways of Working: product/QA collaboration, clear communication, structured problem-solving, English/Spanish collaboration", "source_ref": source_ref},
+        {
+            "text": "Full-Stack / Frontend: React, Next.js, TypeScript, product interfaces, API-driven workflows",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "Backend / APIs: Golang, Python, REST APIs, GraphQL, service architecture, clean interfaces",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "Data & Automation: PostgreSQL, SQL, Python pipelines, Redis, data processing, report generation",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "DevOps / Delivery: Docker, Linux, Git, CI/CD practices, testing, release discipline",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "AI in Production: RAG/agent workflows, AI feature integration, grounded outputs, automation guardrails",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "Ways of Working: product/QA collaboration, clear communication, structured problem-solving, English/Spanish collaboration",
+            "source_ref": source_ref,
+        },
     ]
 
 
 def _build_lead_fullstack_go_react_cover_letter(
-    *, candidate_facts: dict[str, Any], posting: dict[str, Any], alignment: dict[str, Any], role: str, company: str
+    *,
+    candidate_facts: dict[str, Any],
+    posting: dict[str, Any],
+    alignment: dict[str, Any],
+    role: str,
+    company: str,
 ) -> dict[str, Any]:
     evidence_items = _lead_fullstack_experience(candidate_facts)[:2]
     project_items = _lead_fullstack_projects(candidate_facts)[:2]
@@ -452,7 +569,10 @@ def _build_lead_fullstack_go_react_cover_letter(
         ),
     ]
     paragraphs = [_safe_external_text(paragraph).strip() for paragraph in paragraphs if paragraph]
-    claim_source_map = [*_claim_map_from_items(evidence_items), *_claim_map_from_items(project_items)]
+    claim_source_map = [
+        *_claim_map_from_items(evidence_items),
+        *_claim_map_from_items(project_items),
+    ]
     return {
         "status": "draft" if claim_source_map else "blocked",
         "format": "cover_letter_v2.optimized_lead_fullstack_go_react",
@@ -460,13 +580,22 @@ def _build_lead_fullstack_go_react_cover_letter(
         "paragraphs": paragraphs,
         "claim_source_map": claim_source_map,
         "source_refs": _dedupe_refs([claim["source_ref"] for claim in claim_source_map]),
-        "quality": {**_quality(source_backed_claims=bool(claim_source_map)), "cv_builder_profile": "lead_fullstack_go_react_saas_automation"},
-        "guardrails": {"do_not_claim_unsourced_c1": True, "employer_submit_side_effects_allowed": False},
+        "quality": {
+            **_quality(source_backed_claims=bool(claim_source_map)),
+            "cv_builder_profile": "lead_fullstack_go_react_saas_automation",
+        },
+        "guardrails": {
+            "do_not_claim_unsourced_c1": True,
+            "employer_submit_side_effects_allowed": False,
+        },
     }
 
 
 def _optimized_backend_summary(*, posting: dict[str, Any]) -> str:
-    role = str(posting.get("title") or "Backend Developer (Python)").strip() or "Backend Developer (Python)"
+    role = (
+        str(posting.get("title") or "Backend Developer (Python)").strip()
+        or "Backend Developer (Python)"
+    )
     if "python" not in role.casefold():
         role = f"{role} (Python)"
     return (
@@ -492,11 +621,21 @@ def _optimized_backend_experience(candidate_facts: dict[str, Any]) -> list[dict[
     for text in fallback:
         # These are user-approved phrasing templates. Only emit them when the candidate facts
         # contain corresponding source-backed concepts, otherwise keep the original source fact.
-        concepts = [word for word in ("backend", "REST", "async", "data", "AI", "production") if word.casefold() in text.casefold()]
-        if not concepts or any(concept.casefold() in source_text.casefold() for concept in concepts):
+        concepts = [
+            word
+            for word in ("backend", "REST", "async", "data", "AI", "production")
+            if word.casefold() in text.casefold()
+        ]
+        if not concepts or any(
+            concept.casefold() in source_text.casefold() for concept in concepts
+        ):
             chosen.append(text)
     if not chosen:
-        chosen = [_safe_external_text(_item_text(point)) for point in source_points[:4] if _item_text(point)]
+        chosen = [
+            _safe_external_text(_item_text(point))
+            for point in source_points[:4]
+            if _item_text(point)
+        ]
     return [
         {"text": text, "source_ref": {"type": "cv_proof_point", "index": index}}
         for index, text in enumerate(chosen[:6])
@@ -505,18 +644,28 @@ def _optimized_backend_experience(candidate_facts: dict[str, Any]) -> list[dict[
 
 
 def _optimized_backend_projects(candidate_facts: dict[str, Any]) -> list[dict[str, Any]]:
-    projects = [project for project in _listify(candidate_facts.get("projects")) if isinstance(project, dict)]
+    projects = [
+        project
+        for project in _listify(candidate_facts.get("projects"))
+        if isinstance(project, dict)
+    ]
     ranked = sorted(projects, key=_backend_project_rank)
     selected = ranked[:2]
     items: list[dict[str, Any]] = []
-    for index, project in enumerate(selected):
+    for project in selected:
         name = _safe_external_text(str(project.get("name") or project.get("title") or "")).strip()
         if not name:
             continue
         period = _safe_external_text(str(project.get("period") or "")).strip()
         url = _safe_external_text(str(project.get("url") or "")).strip()
-        summary = _safe_external_text(str(project.get("summary") or project.get("description") or "")).strip()
-        bullets = [_safe_external_text(str(bullet)).strip() for bullet in _listify(project.get("bullets")) if str(bullet).strip()]
+        summary = _safe_external_text(
+            str(project.get("summary") or project.get("description") or "")
+        ).strip()
+        bullets = [
+            _safe_external_text(str(bullet)).strip()
+            for bullet in _listify(project.get("bullets"))
+            if str(bullet).strip()
+        ]
         parts = [name]
         if period:
             parts.append(period)
@@ -529,7 +678,9 @@ def _optimized_backend_projects(candidate_facts: dict[str, Any]) -> list[dict[st
             text = f"{text} — " + " ".join(bullets[:3])
         if _is_external_safe(text):
             original_index = projects.index(project)
-            items.append({"text": text, "source_ref": {"type": "cv_project", "index": original_index}})
+            items.append(
+                {"text": text, "source_ref": {"type": "cv_project", "index": original_index}}
+            )
     return items
 
 
@@ -539,11 +690,17 @@ def _backend_project_rank(project: dict[str, Any]) -> tuple[int, str]:
     score = 100
     if "automated trading" in lowered or "binance" in lowered:
         score -= 80
-    if any(token in lowered for token in ("websocket", "redis", "celery", "async", "worker", "real-time")):
+    if any(
+        token in lowered
+        for token in ("websocket", "redis", "celery", "async", "worker", "real-time")
+    ):
         score -= 30
     if "forgegraph" in lowered:
         score -= 40
-    if any(token in lowered for token in ("backend", "api", "workflow", "report generation", "automation")):
+    if any(
+        token in lowered
+        for token in ("backend", "api", "workflow", "report generation", "automation")
+    ):
         score -= 15
     if "lex toolkit" in lowered:
         score += 25
@@ -553,7 +710,7 @@ def _backend_project_rank(project: dict[str, Any]) -> tuple[int, str]:
 def jsonish(value: object) -> str:
     if isinstance(value, dict):
         parts: list[str] = []
-        for key, item in value.items():
+        for item in value.values():
             if isinstance(item, list | tuple):
                 parts.extend(str(child) for child in item)
             else:
@@ -565,18 +722,39 @@ def jsonish(value: object) -> str:
 def _optimized_backend_skills(candidate_facts: dict[str, Any]) -> list[dict[str, Any]]:
     source_ref = {"type": "cv_skill", "index": 0}
     return [
-        {"text": "Python Backend: Python, FastAPI, Django, REST APIs, service architecture, maintainable codebases, production ownership", "source_ref": source_ref},
-        {"text": "Async & Workers: event-driven pipelines, WebSockets, Celery, background processing", "source_ref": source_ref},
-        {"text": "Datastores: PostgreSQL (schema design, performance-minded querying), Redis, Redis Streams", "source_ref": source_ref},
-        {"text": "Integrations: external API/service integrations, reliability-first error handling", "source_ref": source_ref},
-        {"text": "AI in Production: RAG/agent workflows, AI feature integration with safety/grounding considerations", "source_ref": source_ref},
-        {"text": "Ways of Working: structured problem-solving, clear communication, knowledge sharing, remote collaboration", "source_ref": source_ref},
+        {
+            "text": "Python Backend: Python, FastAPI, Django, REST APIs, service architecture, maintainable codebases, production ownership",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "Async & Workers: event-driven pipelines, WebSockets, Celery, background processing",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "Datastores: PostgreSQL (schema design, performance-minded querying), Redis, Redis Streams",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "Integrations: external API/service integrations, reliability-first error handling",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "AI in Production: RAG/agent workflows, AI feature integration with safety/grounding considerations",
+            "source_ref": source_ref,
+        },
+        {
+            "text": "Ways of Working: structured problem-solving, clear communication, knowledge sharing, remote collaboration",
+            "source_ref": source_ref,
+        },
     ]
 
 
 def _certification_items(value: object) -> list[dict[str, Any]]:
     return [
-        {"text": _safe_external_text(_item_text(item)), "source_ref": {"type": "cv_certification", "index": index}}
+        {
+            "text": _safe_external_text(_item_text(item)),
+            "source_ref": {"type": "cv_certification", "index": index},
+        }
         for index, item in enumerate(_listify(value))
         if _item_text(item) and _is_external_safe(_item_text(item))
     ]
@@ -586,7 +764,12 @@ def _contact_items(candidate_facts: dict[str, Any]) -> list[dict[str, Any]]:
     github = str(candidate_facts.get("github") or candidate_facts.get("repository") or "").strip()
     if not github:
         return []
-    return [{"text": f"GitHub: {_safe_external_text(github)}", "source_ref": {"type": "cv_identity", "field": "github"}}]
+    return [
+        {
+            "text": f"GitHub: {_safe_external_text(github)}",
+            "source_ref": {"type": "cv_identity", "field": "github"},
+        }
+    ]
 
 
 def _generic_guardrails(*, profile: str) -> dict[str, Any]:
@@ -596,6 +779,7 @@ def _generic_guardrails(*, profile: str) -> dict[str, Any]:
         "avoid_generic_ai_native_prose": False,
         "employer_submit_side_effects_allowed": False,
     }
+
 
 def _candidate_fact_texts(candidate_facts: dict[str, Any]) -> list[dict[str, Any]]:
     facts: list[dict[str, Any]] = []
@@ -708,9 +892,13 @@ def _resume_summary_items(
     return [text], [{"claim": text, "source_ref": {"type": "cv_summary"}}]
 
 
-def _resume_skills(*, matched_keywords: list[dict[str, Any]], fact_texts: list[dict[str, Any]]) -> list[str]:
+def _resume_skills(
+    *, matched_keywords: list[dict[str, Any]], fact_texts: list[dict[str, Any]]
+) -> list[str]:
     skills = [match["keyword"] for match in matched_keywords]
-    fact_text = "\n".join(str(fact["text"]) for fact in fact_texts if _is_external_safe(str(fact["text"])))
+    fact_text = "\n".join(
+        str(fact["text"]) for fact in fact_texts if _is_external_safe(str(fact["text"]))
+    )
     for keyword in CAREER_OPS_KEYWORDS:
         if keyword not in skills and _contains_keyword(keyword, fact_text):
             skills.append(keyword)
@@ -729,7 +917,11 @@ def _skill_claims(
         source_ref = matched_refs.get(skill)
         if source_ref is None:
             source_ref = next(
-                (fact["source_ref"] for fact in fact_texts if _contains_keyword(skill, str(fact["text"]))),
+                (
+                    fact["source_ref"]
+                    for fact in fact_texts
+                    if _contains_keyword(skill, str(fact["text"]))
+                ),
                 None,
             )
         if source_ref:
@@ -746,7 +938,9 @@ def _proof_point_items(value: object, *, section: str) -> list[dict[str, Any]]:
         text = _safe_external_text(raw_text).strip()
         if not text:
             continue
-        source_type = "cv_project" if section == "project" and isinstance(point, dict) else "cv_proof_point"
+        source_type = (
+            "cv_project" if section == "project" and isinstance(point, dict) else "cv_proof_point"
+        )
         source_ref = {"type": source_type, "index": index}
         items.append({"text": text, "source_ref": source_ref})
         if len(items) == 3:
@@ -758,9 +952,19 @@ def _education_items(value: object) -> list[dict[str, Any]]:
     items = []
     for index, education in enumerate(_listify(value)):
         if isinstance(education, dict):
-            institution = str(education.get("institution") or education.get("school") or education.get("name") or "").strip()
+            institution = str(
+                education.get("institution")
+                or education.get("school")
+                or education.get("name")
+                or ""
+            ).strip()
             degree = str(education.get("degree") or education.get("credential") or "").strip()
-            period = str(education.get("period") or education.get("graduation_year") or education.get("year") or "").strip()
+            period = str(
+                education.get("period")
+                or education.get("graduation_year")
+                or education.get("year")
+                or ""
+            ).strip()
             parts = [part for part in (institution, degree, period) if part]
             raw_text = " | ".join(parts)
         else:
@@ -794,17 +998,27 @@ def _plain_text(sections: list[dict[str, Any]]) -> str:
 
 
 def _matched_keywords(alignment: dict[str, Any]) -> list[dict[str, Any]]:
-    keyword_alignment = alignment.get("keyword_alignment", {}) if isinstance(alignment, dict) else {}
-    matched = keyword_alignment.get("matched_keywords", []) if isinstance(keyword_alignment, dict) else []
+    keyword_alignment = (
+        alignment.get("keyword_alignment", {}) if isinstance(alignment, dict) else {}
+    )
+    matched = (
+        keyword_alignment.get("matched_keywords", []) if isinstance(keyword_alignment, dict) else []
+    )
     return [match for match in matched if isinstance(match, dict) and match.get("keyword")]
 
 
-def _source_refs(*, posting: dict[str, Any], matched_keywords: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _source_refs(
+    *, posting: dict[str, Any], matched_keywords: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
     url = str(posting.get("url") or posting.get("job_url") or "").strip()
     if url:
         refs.append({"type": "job_url", "url": url})
-    refs.extend(match["cv_source_ref"] for match in matched_keywords if isinstance(match.get("cv_source_ref"), dict))
+    refs.extend(
+        match["cv_source_ref"]
+        for match in matched_keywords
+        if isinstance(match.get("cv_source_ref"), dict)
+    )
     return _dedupe_refs(refs)
 
 
@@ -821,7 +1035,9 @@ def _dedupe_refs(refs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _has_required_sections(sections: list[dict[str, Any]]) -> bool:
-    return [str(section.get("heading") or "") for section in sections] == list(ATS_REQUIRED_SECTIONS)
+    return [str(section.get("heading") or "") for section in sections] == list(
+        ATS_REQUIRED_SECTIONS
+    )
 
 
 def _safe_external_text(text: str) -> str:
@@ -857,7 +1073,7 @@ def _listify(value: object) -> list[object]:
     return [value]
 
 
-def _quality(*, source_backed_claims: bool) -> dict[str, bool]:
+def _quality(*, source_backed_claims: bool) -> dict[str, Any]:
     return {
         "source_backed_claims": source_backed_claims,
         "no_invented_candidate_facts": True,

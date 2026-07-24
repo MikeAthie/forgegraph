@@ -237,8 +237,10 @@ def _verify_gateway_request(platform: str, request: Request, payload: dict[str, 
         app_secret = _as_str(getattr(settings, "WHATSAPP_APP_SECRET", ""))
         signature = _as_str(request.headers.get("X-Hub-Signature-256"))
         if app_secret and signature:
-            digest = hmac.new(app_secret.encode("utf-8"), request.body, hashlib.sha256).hexdigest()
-            return hmac.compare_digest(signature, f"sha256={digest}")
+            signature_digest = hmac.new(
+                app_secret.encode("utf-8"), request.body, hashlib.sha256
+            ).hexdigest()
+            return hmac.compare_digest(signature, f"sha256={signature_digest}")
         token = _as_str(getattr(settings, "WHATSAPP_VERIFY_TOKEN", ""))
         provided = _as_str(request.headers.get("X-Forgegraph-Webhook-Secret"))
         return not token or hmac.compare_digest(provided, token)
@@ -250,14 +252,17 @@ def _verify_gateway_request(platform: str, request: Request, payload: dict[str, 
         signed_url = request.build_absolute_uri()
         form_items = payload.items() if isinstance(payload, dict) else []
         base = signed_url + "".join(f"{key}{value}" for key, value in sorted(form_items))
-        digest = hmac.new(auth_token.encode("utf-8"), base.encode("utf-8"), hashlib.sha1).digest()
-        expected = base64.b64encode(digest).decode("ascii")
+        payload_digest = hmac.new(
+            auth_token.encode("utf-8"), base.encode("utf-8"), hashlib.sha1
+        ).digest()
+        expected = base64.b64encode(payload_digest).decode("ascii")
         return hmac.compare_digest(signature, expected)
     if platform == "msgraph_webhook":
         expected = _as_str(getattr(settings, "MSGRAPH_CLIENT_STATE", ""))
         if not expected:
             return True
-        notifications = payload.get("value") if isinstance(payload.get("value"), list) else []
+        raw_notifications = payload.get("value")
+        notifications: list[Any] = raw_notifications if isinstance(raw_notifications, list) else []
         return any(
             hmac.compare_digest(_as_str(item.get("clientState")), expected)
             for item in notifications

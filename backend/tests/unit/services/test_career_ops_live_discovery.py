@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 
 from application.services.career_ops_first_prompt import run_career_ops_first_prompt
@@ -94,7 +96,9 @@ def test_live_discovery_filters_scores_persists_to_whiteboard_and_kanban(user) -
     first_prompt = whiteboard.metadata_json["career_ops"]["first_prompt"]
     assert first_prompt["source_mode"] == "live_url_discovery"
     assert first_prompt["result_count"] == 2
-    assert [posting["url"] for posting in first_prompt["postings"]] == [posting["url"] for posting in result.postings]
+    assert [posting["url"] for posting in first_prompt["postings"]] == [
+        posting["url"] for posting in result.postings
+    ]
 
     snapshot = whiteboard.metadata_json[TASK_SNAPSHOT_METADATA_KEY]
     assert [task["title"] for task in snapshot["tasks"]] == [
@@ -115,12 +119,28 @@ def test_live_discovery_filters_scores_persists_to_whiteboard_and_kanban(user) -
     ]
     assert {card.status for card in cards} >= {"completed", "queued", "blocked"}
 
-    assert CompanySignal.objects.filter(company_id=result.company_id, domain_context="career_ops").count() == 2
-    opportunities = list(CompanyOpportunity.objects.filter(company_id=result.company_id).order_by("title"))
+    assert (
+        CompanySignal.objects.filter(
+            company_id=UUID(result.company_id), domain_context="career_ops"
+        ).count()
+        == 2
+    )
+    opportunities = list(
+        CompanyOpportunity.objects.filter(company_id=UUID(result.company_id)).order_by("title")
+    )
     assert len(opportunities) == 2
-    assert all(opp.metadata_json["career_ops"]["source_mode"] == "live_url_discovery" for opp in opportunities)
-    assert all(opp.metadata_json["career_ops"]["external_side_effects_allowed"] is False for opp in opportunities)
-    assert all(opp.next_action == "Review live posting fit before generating a tailored CV." for opp in opportunities)
+    assert all(
+        opp.metadata_json["career_ops"]["source_mode"] == "live_url_discovery"
+        for opp in opportunities
+    )
+    assert all(
+        opp.metadata_json["career_ops"]["external_side_effects_allowed"] is False
+        for opp in opportunities
+    )
+    assert all(
+        opp.next_action == "Review live posting fit before generating a tailored CV."
+        for opp in opportunities
+    )
 
 
 def test_live_discovery_is_idempotent_for_same_live_urls(user) -> None:
@@ -140,5 +160,5 @@ def test_live_discovery_is_idempotent_for_same_live_urls(user) -> None:
     assert first.whiteboard_id == second.whiteboard_id
     assert first.program_id == second.program_id
     assert len(second.postings) == 2
-    assert CompanyOpportunity.objects.filter(company_id=second.company_id).count() == 2
+    assert CompanyOpportunity.objects.filter(company_id=UUID(second.company_id)).count() == 2
     assert TaskRoutingRecord.objects.filter(id__in=second.task_ids).count() == 4

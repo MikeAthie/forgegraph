@@ -30,9 +30,16 @@ def _create_company(user: User, *, with_version: bool = True) -> Graph:
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Pipeline Co"))
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=user, organization=organization, name="CareerOps Pipeline Co"),
+    )
     if with_version:
-        GraphVersion.objects.create(graph=company, version=3, graph_json={"nodes": [], "edges": [], "metadata": {"existing": True}})
+        GraphVersion.objects.create(
+            graph=company,
+            version=3,
+            graph_json={"nodes": [], "edges": [], "metadata": {"existing": True}},
+        )
     return company
 
 
@@ -50,8 +57,10 @@ def _posting(**overrides: object) -> dict[str, object]:
 
 
 def _base_cv(company: Graph) -> Asset:
+    organization = company.organization
+    assert organization is not None
     return Asset.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         title="Base CV",
         asset_type="document",
@@ -118,14 +127,21 @@ def test_url_pipeline_end_to_end_materializes_native_contract(user: User) -> Non
     assert len(result.deliverable_ids) == 3
     assert result.projection_id
     assert "missing_cv_source" in result.blocked_reasons
-    assert Run.objects.get(id=result.run_id).output_json["career_ops"]["external_side_effects_allowed"] is False
+    run_output = Run.objects.get(id=result.run_id).output_json
+    assert isinstance(run_output, dict)
+    assert run_output["career_ops"]["external_side_effects_allowed"] is False
     assert CompanySignal.objects.filter(company=company).count() == 1
     assert CompanyOpportunity.objects.filter(company=company).count() == 1
     assert TaskRecord.objects.filter(organization=company.organization).count() == 6
-    assert StateProjection.objects.get(id=result.projection_id).projection_type == "career_ops:pipeline_snapshot"
+    assert (
+        StateProjection.objects.get(id=result.projection_id).projection_type
+        == "career_ops:pipeline_snapshot"
+    )
 
 
-def test_url_pipeline_with_base_cv_persists_resume_and_cover_letter_deliverables(user: User) -> None:
+def test_url_pipeline_with_base_cv_persists_resume_and_cover_letter_deliverables(
+    user: User,
+) -> None:
     company = _create_company(user)
     _base_cv(company)
 
@@ -169,25 +185,36 @@ def test_url_pipeline_with_base_cv_persists_resume_and_cover_letter_deliverables
         metadata = deliverable.metadata_json["career_ops"]
         assert metadata["opportunity_id"] == opportunity_id
         assert metadata["external_side_effects_allowed"] is False
-        assert deliverable.artifact is not None
-        assert deliverable.artifact.metadata_json["career_ops"]["opportunity_id"] == opportunity_id
-        assert deliverable.artifact.metadata_json["career_ops"]["external_side_effects_allowed"] is False
-    pdf_version = deliverables.get(deliverable_type="ats_resume_pdf").artifact.versions.latest("created_at")
+        artifact = deliverable.artifact
+        assert artifact is not None
+        assert artifact.metadata_json["career_ops"]["opportunity_id"] == opportunity_id
+        assert artifact.metadata_json["career_ops"]["external_side_effects_allowed"] is False
+    pdf_asset = deliverables.get(deliverable_type="ats_resume_pdf").artifact
+    assert pdf_asset is not None
+    pdf_version = pdf_asset.versions.latest("created_at")
     assert pdf_version.mime_type == "application/pdf"
     assert pdf_version.content_hash
     assert pdf_version.provenance_json["career_ops"]["parseability_status"] == "passed"
-    parseability_payload = deliverables.get(
+    parseability_asset = deliverables.get(
         deliverable_type="ats_resume_parseability_report"
-    ).artifact.versions.latest("created_at").provenance_json["career_ops"]
-    assert parseability_payload["status"] == "passed"
-    ats_payload = deliverables.get(deliverable_type="ats_simulation_report").artifact.versions.latest("created_at").provenance_json[
+    ).artifact
+    assert parseability_asset is not None
+    parseability_payload = parseability_asset.versions.latest("created_at").provenance_json[
         "career_ops"
     ]
+    assert parseability_payload["status"] == "passed"
+    ats_asset = deliverables.get(deliverable_type="ats_simulation_report").artifact
+    assert ats_asset is not None
+    ats_payload = ats_asset.versions.latest("created_at").provenance_json["career_ops"]
     assert ats_payload["format"] == "career_ops_ats_simulation_v1"
-    assert ats_payload["thresholds"] == {"human_review": 85, "send_ready": 90, "improvement_review": 70}
-    recruiter_payload = deliverables.get(
-        deliverable_type="recruiter_evaluation_report"
-    ).artifact.versions.latest("created_at").provenance_json["career_ops"]
+    assert ats_payload["thresholds"] == {
+        "human_review": 85,
+        "send_ready": 90,
+        "improvement_review": 70,
+    }
+    recruiter_asset = deliverables.get(deliverable_type="recruiter_evaluation_report").artifact
+    assert recruiter_asset is not None
+    recruiter_payload = recruiter_asset.versions.latest("created_at").provenance_json["career_ops"]
     assert recruiter_payload["format"] == "career_ops_recruiter_evaluation_v1"
     assert recruiter_payload["external_side_effects_allowed"] is False
     assert set(recruiter_payload["scores"]) >= {
@@ -231,9 +258,14 @@ def test_url_pipeline_isolates_resume_and_cover_letter_assets_by_opportunity(use
         "cover_letter_draft",
         "ats_simulation_report",
     ):
-        deliverables = list(ServiceDeliverable.objects.filter(company=company, deliverable_type=deliverable_type))
+        deliverables = list(
+            ServiceDeliverable.objects.filter(company=company, deliverable_type=deliverable_type)
+        )
         assert len(deliverables) == 2
-        assert {deliverable.metadata_json["career_ops"]["opportunity_id"] for deliverable in deliverables} == {
+        assert {
+            deliverable.metadata_json["career_ops"]["opportunity_id"]
+            for deliverable in deliverables
+        } == {
             first.opportunity_id,
             second.opportunity_id,
         }
@@ -243,7 +275,9 @@ def test_url_pipeline_isolates_resume_and_cover_letter_assets_by_opportunity(use
 def test_url_pipeline_replay_does_not_duplicate_signal_opportunity_or_tasks(user: User) -> None:
     company = _create_company(user)
 
-    first = run_career_ops_url_pipeline(company=company, actor=user, posting=_posting(), idempotency_key="manual:test")
+    first = run_career_ops_url_pipeline(
+        company=company, actor=user, posting=_posting(), idempotency_key="manual:test"
+    )
     second = run_career_ops_url_pipeline(
         company=company,
         actor=user,

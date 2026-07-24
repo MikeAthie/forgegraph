@@ -22,9 +22,16 @@ def _setup(user: User):
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Approval Co"))
-    version = GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
-    run = Run.objects.create(owner=user, organization=organization, graph_version=version, status="running")
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=user, organization=organization, name="CareerOps Approval Co"),
+    )
+    version = GraphVersion.objects.create(
+        graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+    )
+    run = Run.objects.create(
+        owner=user, organization=organization, graph_version=version, status="running"
+    )
     signal = record_scanned_job(
         company=company,
         user=user,
@@ -36,8 +43,12 @@ def _setup(user: User):
     )
     opportunity = ensure_opportunity_for_signal(signal=signal, user=user)
     assert opportunity is not None
-    tasks = materialize_url_pipeline_tasks(company=company, run=run, opportunity_external_key=opportunity.external_key)
-    approval_task = next(task for task in tasks if task.source_node_id == "stage_07_candidate_approval")
+    tasks = materialize_url_pipeline_tasks(
+        company=company, run=run, opportunity_external_key=opportunity.external_key
+    )
+    approval_task = next(
+        task for task in tasks if task.source_node_id == "stage_07_candidate_approval"
+    )
     engagement = ensure_career_ops_application_engagement(company=company, actor=user)
     deliverable, version = write_career_ops_deliverable(
         engagement=engagement,
@@ -59,14 +70,18 @@ def test_request_packet_approval_references_exact_packet_version(user: User) -> 
         approval_task=approval_task,
         opportunity=opportunity,
         packet_version=packet_version,
-        deliverable_versions=[{"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}],
+        deliverable_versions=[
+            {"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}
+        ],
     )
     replay = request_packet_approval(
         run=run,
         approval_task=approval_task,
         opportunity=opportunity,
         packet_version=packet_version,
-        deliverable_versions=[{"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}],
+        deliverable_versions=[
+            {"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}
+        ],
     )
 
     assert replay.id == decision.id
@@ -83,7 +98,9 @@ def test_request_packet_approval_replay_preserves_resolved_status(user: User) ->
         approval_task=approval_task,
         opportunity=opportunity,
         packet_version=packet_version,
-        deliverable_versions=[{"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}],
+        deliverable_versions=[
+            {"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}
+        ],
     )
     decision.status = "approved"
     decision.resolution_json = {"approved_by": "candidate"}
@@ -94,7 +111,9 @@ def test_request_packet_approval_replay_preserves_resolved_status(user: User) ->
         approval_task=approval_task,
         opportunity=opportunity,
         packet_version=packet_version,
-        deliverable_versions=[{"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}],
+        deliverable_versions=[
+            {"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}
+        ],
     )
 
     assert replay.id == decision.id

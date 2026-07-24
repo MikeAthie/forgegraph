@@ -27,9 +27,16 @@ def _setup(user: User):
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Artifact Co"))
-    version = GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
-    run = Run.objects.create(owner=user, organization=organization, graph_version=version, status="running")
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=user, organization=organization, name="CareerOps Artifact Co"),
+    )
+    version = GraphVersion.objects.create(
+        graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+    )
+    run = Run.objects.create(
+        owner=user, organization=organization, graph_version=version, status="running"
+    )
     signal = record_scanned_job(
         company=company,
         user=user,

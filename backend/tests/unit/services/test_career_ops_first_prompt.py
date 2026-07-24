@@ -67,7 +67,11 @@ def test_first_prompt_bootstraps_company_whiteboard_kanban_and_job_results(user)
     assert whiteboard.request_type == "career_ops_discovery"
     assert whiteboard.work_status == WorkWhiteboard.WORK_STATUS_IN_PROGRESS
     assert whiteboard.known_facts_json["candidate"]["name"] == "Miguel Athie"
-    assert whiteboard.constraints_json["work_authorized_regions"] == ["Mexico", "European Union", "Spain"]
+    assert whiteboard.constraints_json["work_authorized_regions"] == [
+        "Mexico",
+        "European Union",
+        "Spain",
+    ]
     assert whiteboard.metadata_json["career_ops"]["first_prompt"]["result_count"] == 5
     assert len(whiteboard.metadata_json["career_ops"]["first_prompt"]["postings"]) == 5
 
@@ -87,7 +91,9 @@ def test_first_prompt_bootstraps_company_whiteboard_kanban_and_job_results(user)
     cards = list(TaskRoutingRecord.objects.filter(company=company).order_by("created_at"))
     assert len(cards) == 4
     assert {card.status for card in cards} >= {"completed", "queued"}
-    assert all(card.metadata_json["company_run_task"]["program_id"] == str(program.id) for card in cards)
+    assert all(
+        card.metadata_json["company_run_task"]["program_id"] == str(program.id) for card in cards
+    )
 
     snapshot = whiteboard.metadata_json[TASK_SNAPSHOT_METADATA_KEY]
     assert snapshot["schema_version"] == "company_run_task_snapshot_v1"
@@ -100,8 +106,12 @@ def test_first_prompt_bootstraps_company_whiteboard_kanban_and_job_results(user)
     opportunities = list(CompanyOpportunity.objects.filter(company=company).order_by("title"))
     assert len(opportunities) == 5
     assert all(opp.metadata_json["career_ops"]["visa_ok"] is True for opp in opportunities)
-    assert all("United States" not in opp.metadata_json["career_ops"]["locations"] for opp in opportunities)
-    assert any("Agent" in posting["title"] or "AI" in posting["title"] for posting in result.postings)
+    assert all(
+        "United States" not in opp.metadata_json["career_ops"]["locations"] for opp in opportunities
+    )
+    assert any(
+        "Agent" in posting["title"] or "AI" in posting["title"] for posting in result.postings
+    )
 
 
 def test_first_prompt_is_idempotent_for_same_actor_and_key(user) -> None:
@@ -125,6 +135,21 @@ def test_first_prompt_is_idempotent_for_same_actor_and_key(user) -> None:
     assert first.whiteboard_id == second.whiteboard_id
     assert first.program_id == second.program_id
     assert len(second.postings) == 5
-    assert Graph.objects.filter(external_source="career_ops", external_ref="career-ops-first-prompt-idem").count() == 1
-    assert WorkWhiteboard.objects.filter(idempotency_key="career-ops:first_prompt:career-ops-first-prompt-idem").count() == 1
-    assert CompanyProgram.objects.filter(external_key="career-ops:first-prompt:career-ops-first-prompt-idem").count() == 1
+    assert (
+        Graph.objects.filter(
+            external_source="career_ops", external_ref="career-ops-first-prompt-idem"
+        ).count()
+        == 1
+    )
+    assert (
+        WorkWhiteboard.objects.filter(
+            idempotency_key="career-ops:first_prompt:career-ops-first-prompt-idem"
+        ).count()
+        == 1
+    )
+    assert (
+        CompanyProgram.objects.filter(
+            external_key="career-ops:first-prompt:career-ops-first-prompt-idem"
+        ).count()
+        == 1
+    )

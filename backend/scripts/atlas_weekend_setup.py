@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 from typing import Any
 
 from django.db import transaction
@@ -33,7 +34,7 @@ COMPANY_NAME = "Atlas Mkt"
 PACK_ID = "digital_marketing_pro.v1"
 SOURCE = "atlas-weekend-setup.v1"
 
-DEPARTMENTS = [
+DEPARTMENTS: list[tuple[str, str, list[str]]] = [
     (
         "strategy_research",
         "Strategy & Research",
@@ -71,7 +72,7 @@ DEPARTMENTS = [
     ),
 ]
 
-DELIVERABLES = [
+DELIVERABLES: list[dict[str, Any]] = [
     {
         "type": "client_brief",
         "title": "Weekend Client Brief",
@@ -300,9 +301,7 @@ def markdown_for(item: dict[str, Any], company: Graph, engagement: ServiceEngage
 
 @transaction.atomic
 def run() -> dict[str, Any]:  # noqa: C901
-    password = os.environ.get("ATLAS_OPERATOR_PASSWORD") or User.objects.make_random_password(
-        length=32
-    )
+    password = os.environ.get("ATLAS_OPERATOR_PASSWORD") or secrets.token_urlsafe(24)
     user, user_created = User.objects.get_or_create(email=EMAIL, defaults={})
     user.set_password(password)
     user.save(update_fields=["password"])
@@ -371,6 +370,7 @@ def run() -> dict[str, Any]:  # noqa: C901
         departments[slug] = dept
 
     pack_status = "installed"
+    installation: CompanyOperatingModelInstallation | None
     try:
         installation = install_pack_for_company(
             company=company, user=user, pack_id=PACK_ID, role="primary"
@@ -608,15 +608,18 @@ def run() -> dict[str, Any]:  # noqa: C901
                 "status": item.status,
                 "department": item.department.slug if item.department else None,
                 "artifact_id": str(item.artifact_id) if item.artifact_id else None,
-                "latest_asset_version_id": str(
-                    item.artifact.versions.order_by("-version_number").first().id
-                )
-                if item.artifact and item.artifact.versions.exists()
-                else None,
+                "latest_asset_version_id": _latest_asset_version_id(item.artifact),
             }
             for item in deliverables
         ],
     }
+
+
+def _latest_asset_version_id(asset: Asset | None) -> str | None:
+    if asset is None:
+        return None
+    version = asset.versions.order_by("-version_number").first()
+    return str(version.id) if version is not None else None
 
 
 payload = run()

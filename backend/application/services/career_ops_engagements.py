@@ -8,7 +8,9 @@ from infrastructure.orm.models import Graph, ServiceCatalogItem, ServiceEngageme
 CAREER_OPS_APPLICATION_PACKET_CATALOG_SLUG = "career-ops-application-packet"
 
 
-def ensure_career_ops_application_engagement(*, company: Graph, actor: User | None) -> ServiceEngagement:
+def ensure_career_ops_application_engagement(
+    *, company: Graph, actor: User | None
+) -> ServiceEngagement:
     """Return the durable engagement that owns CareerOps application packet deliverables."""
 
     organization = company.organization

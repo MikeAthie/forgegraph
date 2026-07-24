@@ -486,7 +486,8 @@ def _dedupe_actions(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _engagement_summary(engagement: ServiceEngagement) -> dict[str, Any]:
     intake_data = dict(engagement.intake_data_json or {})
-    metadata = engagement.metadata_json if isinstance(engagement.metadata_json, dict) else {}
+    raw_metadata = engagement.metadata_json
+    metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
     return {
         "id": str(engagement.id),
         "status": engagement.status,
@@ -497,8 +498,8 @@ def _engagement_summary(engagement: ServiceEngagement) -> dict[str, Any]:
         "public_summary": engagement.public_summary,
         "intake_data_summary": _safe_intake_summary(intake_data),
         "operator_metadata_summary": safe_metadata(
-            metadata.get("operator_metadata")
-            if isinstance(metadata.get("operator_metadata"), dict)
+            operator_metadata
+            if isinstance(operator_metadata := metadata.get("operator_metadata"), dict)
             else {}
         ),
         "created_at": engagement.created_at.isoformat(),

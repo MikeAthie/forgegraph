@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 ATLAS_DEPARTMENT_SLUGS = {
     "strategy_research",
@@ -196,7 +197,14 @@ def connector_slug_for_value(value: object) -> str:
     return normalized
 
 
-def _by_slug(items: tuple) -> dict[str, object]:
+class _SlugDefinition(Protocol):
+    @property
+    def slug(self) -> str: ...
+
+
+def _by_slug[SlugDefinitionT: _SlugDefinition](
+    items: tuple[SlugDefinitionT, ...],
+) -> dict[str, SlugDefinitionT]:
     return {item.slug: item for item in items}
 
 

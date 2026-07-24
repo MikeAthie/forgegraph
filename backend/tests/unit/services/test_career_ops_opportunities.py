@@ -54,11 +54,14 @@ def _posting(**overrides: object) -> dict[str, object]:
 
 
 def test_normalize_job_key_drops_tracking_query_params() -> None:
-    assert normalize_job_key(
-        company_name="Acme AI",
-        role_title="Senior AI Product Engineer",
-        url="https://jobs.ashbyhq.com/acme/123?utm_source=spam#apply",
-    ) == "acme-ai:senior-ai-product-engineer:jobs.ashbyhq.com/acme/123"
+    assert (
+        normalize_job_key(
+            company_name="Acme AI",
+            role_title="Senior AI Product Engineer",
+            url="https://jobs.ashbyhq.com/acme/123?utm_source=spam#apply",
+        )
+        == "acme-ai:senior-ai-product-engineer:jobs.ashbyhq.com/acme/123"
+    )
 
 
 def test_record_scanned_job_is_idempotent_by_normalized_url(user: User) -> None:

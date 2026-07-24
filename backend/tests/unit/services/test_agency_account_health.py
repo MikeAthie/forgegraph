@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from django.utils import timezone
@@ -49,7 +49,7 @@ def _engagement(
     company: Graph,
     user: User,
     *,
-    metadata: dict | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> ServiceEngagement:
     organization = company.organization
     assert organization is not None

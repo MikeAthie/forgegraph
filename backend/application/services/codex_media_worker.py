@@ -16,7 +16,7 @@ import struct
 import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from django.db import IntegrityError, transaction
@@ -33,6 +33,8 @@ from application.services.gemini_media import (
     sanitize_media_prompt,
 )
 from infrastructure.orm.models import Graph, MediaGenerationJob, Organization, User
+
+type RGB = tuple[int, int, int]
 
 CODEX_MEDIA_SOURCE = "codex_media_worker"
 CODEX_MEDIA_RUNTIME_PROVIDER = "codex_session_runtime"
@@ -60,6 +62,7 @@ def codex_spec_renderer_quality_contract() -> dict[str, Any]:
             "or route ForgeGraph MediaGenerationJob execution to a real image generator."
         ),
     }
+
 
 Runtime = Callable[..., CodexSessionRunResult]
 
@@ -299,7 +302,10 @@ def render_codex_image_spec_png(
         for x in range(width):
             vignette = _vignette(x, y, width, height)
             grain = ((x * 13 + y * 17) % 19) - 9
-            color = tuple(max(0, min(255, int(channel * vignette + grain))) for channel in base)
+            color = cast(
+                RGB,
+                tuple(max(0, min(255, int(channel * vignette + grain))) for channel in base),
+            )
             _set_pixel(pixels, width, x, y, color)
 
     # editorial tabletop planes
@@ -416,26 +422,34 @@ def _safe_spec(spec: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def _palette(spec: dict[str, Any]) -> list[tuple[int, int, int]]:
+def _palette(spec: dict[str, Any]) -> list[RGB]:
     raw = spec.get("palette")
-    colors = (
-        [_hex_to_rgb(item) for item in raw if isinstance(item, str)]
-        if isinstance(raw, list)
-        else []
-    )
-    colors = [color for color in colors if color is not None]
-    defaults = [(4, 4, 5), (27, 22, 18), (243, 232, 209), (166, 106, 42), (13, 59, 52)]
+    colors: list[RGB] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, str):
+                continue
+            color = _hex_to_rgb(item)
+            if color is not None:
+                colors.append(color)
+    defaults: list[RGB] = [
+        (4, 4, 5),
+        (27, 22, 18),
+        (243, 232, 209),
+        (166, 106, 42),
+        (13, 59, 52),
+    ]
     return (colors + defaults)[:5]
 
 
-def _hex_to_rgb(value: str) -> tuple[int, int, int] | None:
+def _hex_to_rgb(value: str) -> RGB | None:
     text = value.strip().lstrip("#")
     if len(text) != 6 or any(char not in "0123456789abcdefABCDEF" for char in text):
         return None
     return (int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16))
 
 
-def _set_pixel(pixels: bytearray, width: int, x: int, y: int, color: tuple[int, int, int]) -> None:
+def _set_pixel(pixels: bytearray, width: int, x: int, y: int, color: RGB) -> None:
     idx = (y * width + x) * 3
     pixels[idx : idx + 3] = bytes(color)
 
@@ -544,13 +558,21 @@ def _png_bytes(width: int, height: int, rgb: bytes) -> bytes:
     )
 
 
-def _lerp_color(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
+def _lerp_color(a: RGB, b: RGB, t: float) -> RGB:
     t = max(0.0, min(1.0, t))
-    return tuple(int(a[i] * (1 - t) + b[i] * t) for i in range(3))
+    return (
+        int(a[0] * (1 - t) + b[0] * t),
+        int(a[1] * (1 - t) + b[1] * t),
+        int(a[2] * (1 - t) + b[2] * t),
+    )
 
 
-def _darken(color: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
-    return tuple(max(0, min(255, int(channel * amount))) for channel in color)
+def _darken(color: RGB, amount: float) -> RGB:
+    return (
+        max(0, min(255, int(color[0] * amount))),
+        max(0, min(255, int(color[1] * amount))),
+        max(0, min(255, int(color[2] * amount))),
+    )
 
 
 def _vignette(x: int, y: int, width: int, height: int) -> float:

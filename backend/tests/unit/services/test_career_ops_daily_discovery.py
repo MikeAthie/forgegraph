@@ -22,8 +22,13 @@ def _create_company(user: User) -> Graph:
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Daily Co"))
-    GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=user, organization=organization, name="CareerOps Daily Co"),
+    )
+    GraphVersion.objects.create(
+        graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+    )
     return company
 
 
@@ -67,7 +72,12 @@ def test_daily_discovery_limits_evaluations_and_materializes_projection(user: Us
     assert len(summary["runs"]) == 2
     assert summary["external_side_effects_allowed"] is False
     assert CompanyOpportunity.objects.filter(company=company).count() == 2
-    assert StateProjection.objects.filter(company=company, projection_type="career_ops:pipeline_snapshot").count() == 1
+    assert (
+        StateProjection.objects.filter(
+            company=company, projection_type="career_ops:pipeline_snapshot"
+        ).count()
+        == 1
+    )
     assert "missing_cv_source" in summary["blocked_reasons"]
 
 
@@ -76,7 +86,11 @@ def test_daily_discovery_passes_custom_cooldown_to_pipeline(user: User) -> None:
     previous_signal = record_scanned_job(
         company=company,
         user=user,
-        posting={"title": "Senior AI Product Engineer", "company": "Acme AI", "url": "https://jobs.example.com/acme/old"},
+        posting={
+            "title": "Senior AI Product Engineer",
+            "company": "Acme AI",
+            "url": "https://jobs.example.com/acme/old",
+        },
     )
     previous_opportunity = ensure_opportunity_for_signal(signal=previous_signal, user=user)
     assert previous_opportunity is not None
@@ -90,7 +104,13 @@ def test_daily_discovery_passes_custom_cooldown_to_pipeline(user: User) -> None:
     run_career_ops_daily_discovery(
         company=company,
         actor=user,
-        postings=[{"title": "Senior AI Product Engineer", "company": "Acme AI", "url": "https://jobs.example.com/acme/new"}],
+        postings=[
+            {
+                "title": "Senior AI Product Engineer",
+                "company": "Acme AI",
+                "url": "https://jobs.example.com/acme/new",
+            }
+        ],
         idempotency_key="daily:cooldown",
         cooldown_days=60,
     )

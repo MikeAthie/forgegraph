@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from application.services import atlas_prompt_delivery, codex_media_worker
+from infrastructure.orm.models import MediaGenerationJob
 
 
 def test_codex_spec_renderer_quality_contract_is_placeholder_not_production() -> None:
@@ -138,8 +141,14 @@ def test_client_handoff_rendering_converts_markdown_tables_to_client_copy() -> N
 
     assert "|---|" not in html
     assert "| Timing |" not in html
-    assert "<li><strong>Timing:</strong> Friday evening; <strong>Social Role:</strong> Launch the mood; <strong>CTA:</strong> View the collection</li>" in html
-    assert "<li><strong>Timing:</strong> Saturday morning; <strong>Social Role:</strong> Product clarity; <strong>CTA:</strong> Book a fitting</li>" in html
+    assert (
+        "<li><strong>Timing:</strong> Friday evening; <strong>Social Role:</strong> Launch the mood; <strong>CTA:</strong> View the collection</li>"
+        in html
+    )
+    assert (
+        "<li><strong>Timing:</strong> Saturday morning; <strong>Social Role:</strong> Product clarity; <strong>CTA:</strong> Book a fitting</li>"
+        in html
+    )
     assert "|---|" not in text
     assert "Timing: Friday evening; Social Role: Launch the mood; CTA: View the collection" in text
 
@@ -152,7 +161,7 @@ def test_client_package_media_content_prefers_review_asset_override(tmp_path, mo
     monkeypatch.setenv("FORGEGRAPH_ATLAS_REVIEW_ASSETS_DIR", str(override_dir))
 
     content, metadata = atlas_prompt_delivery._client_package_media_content(  # noqa: SLF001
-        job=object(), index=1
+        job=cast(MediaGenerationJob, object()), index=1
     )
 
     assert content == b"review-ready-png"
@@ -182,7 +191,9 @@ def test_client_handoff_pdf_prefers_html_browser_renderer(tmp_path, monkeypatch)
     assert b"plain fallback" not in pdf
 
 
-def test_client_handoff_pdf_falls_back_to_plain_renderer_when_browser_unavailable(tmp_path, monkeypatch) -> None:
+def test_client_handoff_pdf_falls_back_to_plain_renderer_when_browser_unavailable(
+    tmp_path, monkeypatch
+) -> None:
     html_path = tmp_path / "Legacy_Optical_Noir_Handoff.html"
     html_path.write_text("<html><body><h1>HTML report</h1></body></html>", encoding="utf-8")
 
@@ -331,7 +342,7 @@ def test_client_handoff_pdf_contains_substantive_source_text() -> None:
     assert len(pdf) > 2200
 
 
-def _manifest() -> dict:
+def _manifest() -> dict[str, Any]:
     return {
         "engagement_id": "engagement-123",
         "whiteboard_id": "whiteboard-456",

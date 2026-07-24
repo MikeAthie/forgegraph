@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from django.utils import timezone
 
@@ -110,7 +110,8 @@ def _service_engagement_status(company: Graph) -> tuple[str, str]:
 
 
 def _connector_setup_status(readiness: dict[str, Any]) -> tuple[str, str]:
-    summary = readiness.get("summary") if isinstance(readiness.get("summary"), dict) else {}
+    raw_summary = readiness.get("summary")
+    summary = cast(dict[str, Any], raw_summary) if isinstance(raw_summary, dict) else {}
     if int(summary.get("missing") or 0):
         return "blocked", "Required connectors are missing."
     if int(summary.get("degraded") or 0) or int(summary.get("disabled") or 0):

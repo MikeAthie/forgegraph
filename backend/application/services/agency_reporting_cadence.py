@@ -151,20 +151,20 @@ def _cadence_slugs_from_value(value: Any) -> set[str]:
         slug = _slug_for_value(value)
         return {slug} if slug is not None else set()
     if isinstance(value, dict):
-        slugs: set[str] = set()
+        mapping_slugs: set[str] = set()
         for key, item in value.items():
             if key in {"cadence", "cadences", "frequency", "frequencies"}:
-                slugs.update(_cadence_slugs_from_value(item))
+                mapping_slugs.update(_cadence_slugs_from_value(item))
             elif _truthy(item):
                 slug = _slug_for_value(key)
                 if slug is not None:
-                    slugs.add(slug)
-        return slugs
+                    mapping_slugs.add(slug)
+        return mapping_slugs
     if isinstance(value, (list, tuple, set)):
-        slugs: set[str] = set()
+        sequence_slugs: set[str] = set()
         for item in value:
-            slugs.update(_cadence_slugs_from_value(item))
-        return slugs
+            sequence_slugs.update(_cadence_slugs_from_value(item))
+        return sequence_slugs
     return set()
 
 

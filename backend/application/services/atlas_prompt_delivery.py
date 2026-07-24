@@ -53,7 +53,10 @@ from infrastructure.orm.models import (
     CommunicationMessage,
     CommunicationThread,
     DepartmentRegistry,
+    MediaGenerationJob,
+    Organization,
     ServiceDeliverable,
+    ServiceEngagement,
     User,
     WorkWhiteboard,
 )
@@ -313,8 +316,10 @@ def run_atlas_prompt_delivery(
     whiteboard.save(update_fields=["status", "work_status", "updated_at"])
     refresh_whiteboard_task_snapshot(whiteboard, program)
 
-    if send and not package["gate_report"]["ready"] and not _truthy_env(
-        "FORGEGRAPH_ATLAS_ALLOW_CLIENT_GATE_OVERRIDE"
+    if (
+        send
+        and not package["gate_report"]["ready"]
+        and not _truthy_env("FORGEGRAPH_ATLAS_ALLOW_CLIENT_GATE_OVERRIDE")
     ):
         issue_codes = ", ".join(issue["code"] for issue in package["gate_report"]["issues"])
         raise RuntimeError(
@@ -355,7 +360,7 @@ def run_atlas_prompt_delivery(
     )
 
 
-def _ensure_departments(organization) -> None:
+def _ensure_departments(organization: Organization) -> None:
     for slug, name in DEPARTMENTS.items():
         department, _ = DepartmentRegistry.objects.get_or_create(
             organization=organization,
@@ -383,7 +388,13 @@ def _stage_prompt(prompt: str, stage_id: str) -> str:
 
 
 def _generated_deliverable(
-    *, engagement, stage_id: str, user, deliverable_type: str, title: str, content: str
+    *,
+    engagement: ServiceEngagement,
+    stage_id: str,
+    user: User,
+    deliverable_type: str,
+    title: str,
+    content: str,
 ) -> ServiceDeliverable:
     stage = stage_state_for_engagement(engagement, stage_id)
     data = content.encode("utf-8")
@@ -476,8 +487,7 @@ def _media_prompts(prompt: str) -> list[str]:
         "Legacy Optical Noir, premium editorial sunglasses asset, square mobile crop, "
         "deep black, warm ivory, aged copper, subtle green lens reflections, approved Legacy logo "
         "or brand mark in a clean corner lockup, no unrelated visible words, no people, "
-        "no fake brand marks. Source prompt: "
-        + prompt
+        "no fake brand marks. Source prompt: " + prompt
     )
     angles = [
         "Hero frame on smoked glass with cinematic negative space.",
@@ -490,7 +500,7 @@ def _media_prompts(prompt: str) -> list[str]:
     return [f"{base} Composition: {angle}" for angle in angles]
 
 
-def _channel_asset_map(media_jobs: list) -> str:
+def _channel_asset_map(media_jobs: list[MediaGenerationJob]) -> str:
     return "\n".join(
         ["Channel Asset Map"]
         + [
@@ -500,7 +510,7 @@ def _channel_asset_map(media_jobs: list) -> str:
     )
 
 
-def _qa_report(media_jobs: list) -> str:
+def _qa_report(media_jobs: list[MediaGenerationJob]) -> str:
     all_ready = all(job.status == "succeeded" and job.output_asset_version_id for job in media_jobs)
     return "\n".join(
         [
@@ -517,11 +527,11 @@ def _build_client_package(
     *,
     root: Path,
     run_id: str,
-    engagement,
-    whiteboard,
+    engagement: ServiceEngagement,
+    whiteboard: WorkWhiteboard,
     prompt: str,
-    media_jobs: list,
-    deliverables: list,
+    media_jobs: list[MediaGenerationJob],
+    deliverables: list[ServiceDeliverable],
 ) -> dict[str, Any]:
     client_dir = root / "client_package"
     assets_dir = client_dir / "assets"
@@ -623,7 +633,9 @@ def _build_client_package(
     }
 
 
-def _client_package_media_content(*, job, index: int) -> tuple[bytes, dict[str, Any]]:
+def _client_package_media_content(
+    *, job: MediaGenerationJob, index: int
+) -> tuple[bytes, dict[str, Any]]:
     override_dir = os.environ.get("FORGEGRAPH_ATLAS_REVIEW_ASSETS_DIR", "").strip()
     filename = f"legacy_optical_noir_post_{index:02d}.png"
     if override_dir:
@@ -636,7 +648,10 @@ def _client_package_media_content(*, job, index: int) -> tuple[bytes, dict[str, 
                 "production_quality": True,
                 "brand_mark_applied": _truthy_env("FORGEGRAPH_ATLAS_BRAND_MARK_APPLIED"),
             }
-    content, _mime_type, _filename = read_media_asset_version_content(job.output_asset_version)
+    output_asset_version = job.output_asset_version
+    if output_asset_version is None:
+        raise ValueError(f"Media job {job.id} is missing its output asset version.")
+    content, _mime_type, _filename = read_media_asset_version_content(output_asset_version)
     return content, {
         "asset_source": "forgegraph_media_generation_job",
         "quality_tier": "placeholder_review_asset",
@@ -733,10 +748,14 @@ def _has_ambiguous_distribution_copy(lowered: str) -> bool:
     return not any(clarifier in lowered for clarifier in clarifiers)
 
 
-def _deliverable_sections(deliverables: list) -> list[dict[str, str]]:
+def _deliverable_sections(
+    deliverables: list[ServiceDeliverable],
+) -> list[dict[str, str]]:
     sections: list[dict[str, str]] = []
     for deliverable in deliverables:
-        title = str(getattr(deliverable, "title", "") or getattr(deliverable, "deliverable_type", ""))
+        title = str(
+            getattr(deliverable, "title", "") or getattr(deliverable, "deliverable_type", "")
+        )
         content = _deliverable_content(deliverable)
         if not content:
             continue
@@ -750,7 +769,7 @@ def _deliverable_sections(deliverables: list) -> list[dict[str, str]]:
     return sections
 
 
-def _deliverable_content(deliverable) -> str:
+def _deliverable_content(deliverable: ServiceDeliverable) -> str:
     metadata = dict(getattr(deliverable, "metadata_json", {}) or {})
     version_id = str(metadata.get("asset_version_id") or "").strip()
     if version_id and getattr(deliverable, "artifact_id", None):
@@ -962,17 +981,17 @@ def _client_html(
     asset_cards = "\n".join(
         f"""
         <article class=\"asset\">
-          <img src=\"{html.escape(item['filename'])}\" alt=\"Legacy Optical Noir post {item['post']:02d}\">
-          <div><strong>Post {item['post']:02d}</strong><span>{html.escape(item['filename'])}</span></div>
+          <img src=\"{html.escape(item["filename"])}\" alt=\"Legacy Optical Noir post {item["post"]:02d}\">
+          <div><strong>Post {item["post"]:02d}</strong><span>{html.escape(item["filename"])}</span></div>
         </article>"""
         for item in manifest["media"]
     )
     section_cards = "\n".join(
         f"""
         <section class=\"card source-card\">
-          <p class=\"eyebrow\">{html.escape(section.get('type', 'department')).replace('_', ' ').title()}</p>
-          <h2>{html.escape(section['title'])}</h2>
-          {_client_section_body_html(section['content'])}
+          <p class=\"eyebrow\">{html.escape(section.get("type", "department")).replace("_", " ").title()}</p>
+          <h2>{html.escape(section["title"])}</h2>
+          {_client_section_body_html(section["content"])}
         </section>"""
         for section in sections
     )
@@ -993,7 +1012,7 @@ ul{{padding-left:20px}}code{{color:#f0b869;white-space:nowrap}}.source-card p:la
 <p class=\"dek\">Paquete armado desde el prompt operativo, con estrategia, contenido, assets, medición, QA y evidencia de linaje listos para aprobación. No se afirma publicación en vivo: el lanzamiento queda condicionado a aprobación y conectores reales.</p></header>
 <div class=\"grid\">
 <section class=\"card\"><p class=\"eyebrow\">Approval checkpoint</p><h2>Decisión solicitada</h2><ul><li>Dirección visual Optical Noir</li><li>Uso de los assets incluidos como borradores de campaña</li><li>Tono Spanish-first, concreto y de baja exageración</li><li>Launch posterior sólo con aprobación y recibos de canal</li></ul></section>
-<section class=\"card\"><p class=\"eyebrow\">Artifact Index</p><h2>ForgeGraph archived run</h2><p>Engagement, whiteboard, asset checksums, source deliverables, and media provenance are archived in <code>manifest.json</code>. The visible handoff keeps internal IDs out of client copy.</p><p>{html.escape(str(manifest.get('client_files_policy', 'No Markdown files included.')))}</p></section>
+<section class=\"card\"><p class=\"eyebrow\">Artifact Index</p><h2>ForgeGraph archived run</h2><p>Engagement, whiteboard, asset checksums, source deliverables, and media provenance are archived in <code>manifest.json</code>. The visible handoff keeps internal IDs out of client copy.</p><p>{html.escape(str(manifest.get("client_files_policy", "No Markdown files included.")))}</p></section>
 </div>
 <section class=\"card asset-gallery\"><p class=\"eyebrow\">Assets</p><h2>Posts incluidos</h2><div class=\"assets\">{asset_cards}</div></section>
 {section_cards}
@@ -1157,7 +1176,7 @@ def _html_pdf_playwright_script_path() -> Path:
     return script_path
 
 
-_HTML_TO_PDF_PLAYWRIGHT_SCRIPT = r'''
+_HTML_TO_PDF_PLAYWRIGHT_SCRIPT = r"""
 const { chromium } = require('playwright');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -1210,7 +1229,7 @@ function chromiumLaunchArgs() {
   console.error(error && error.stack ? error.stack : String(error));
   process.exit(1);
 });
-'''
+"""
 
 
 def _pdf_escape(value: str) -> str:
@@ -1218,7 +1237,11 @@ def _pdf_escape(value: str) -> str:
 
 
 def _package_deliverable(
-    *, engagement, user, package: dict[str, Any], stage_id: str
+    *,
+    engagement: ServiceEngagement,
+    user: User,
+    package: dict[str, Any],
+    stage_id: str,
 ) -> ServiceDeliverable:
     stage = stage_state_for_engagement(engagement, stage_id)
     deliverable, _ = ServiceDeliverable.objects.get_or_create(
@@ -1320,8 +1343,8 @@ def _message_id(payload: dict[str, Any]) -> str:
 
 def _persist_delivery_receipt(
     *,
-    engagement,
-    package_deliverable,
+    engagement: ServiceEngagement,
+    package_deliverable: ServiceDeliverable,
     package_asset: Asset,
     package_version: AssetVersion,
     phone_e164: str,

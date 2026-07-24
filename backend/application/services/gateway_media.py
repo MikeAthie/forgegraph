@@ -179,7 +179,7 @@ def _content_type(attachment: dict[str, Any]) -> str:
 
 def _size_bytes(attachment: dict[str, Any]) -> int | None:
     raw = attachment.get("size_bytes") or attachment.get("size") or attachment.get("file_size")
-    if raw in (None, ""):
+    if raw in (None, "") or not isinstance(raw, str | bytes | bytearray | int | float):
         return None
     try:
         return max(0, int(raw))

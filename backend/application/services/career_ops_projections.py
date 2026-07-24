@@ -67,7 +67,9 @@ def _opportunity_row(opportunity: CompanyOpportunity) -> dict[str, Any]:
         ).order_by("created_at")
     )
     deliverables = []
-    for deliverable in ServiceDeliverable.objects.filter(company=opportunity.company).order_by("created_at"):
+    for deliverable in ServiceDeliverable.objects.filter(company=opportunity.company).order_by(
+        "created_at"
+    ):
         metadata = _career_ops_metadata(deliverable.metadata_json)
         if metadata.get("opportunity_id") == str(opportunity.id):
             deliverables.append(deliverable)
@@ -77,7 +79,9 @@ def _opportunity_row(opportunity: CompanyOpportunity) -> dict[str, Any]:
         "employer_name": career_ops.get("employer_name", ""),
         "role_title": career_ops.get("role_title", ""),
         "application_status": career_ops.get("application_status", "discovered"),
-        "recent_application_cooldown": career_ops.get("recent_application_cooldown", {"skip": False}),
+        "recent_application_cooldown": career_ops.get(
+            "recent_application_cooldown", {"skip": False}
+        ),
         "task_ids": [str(task.id) for task in tasks],
         "decision_ids": [str(decision.id) for decision in decisions],
         "deliverable_ids": [str(deliverable.id) for deliverable in deliverables],

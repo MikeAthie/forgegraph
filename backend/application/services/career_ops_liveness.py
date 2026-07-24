@@ -82,9 +82,13 @@ def classify_career_ops_liveness(  # noqa: C901
 
     bot_challenge = _first_match(BOT_CHALLENGE_PATTERNS, body_text)
     if bot_challenge:
-        return CareerOpsLivenessResult("uncertain", "bot_challenge", f"anti-bot challenge: {bot_challenge}")
+        return CareerOpsLivenessResult(
+            "uncertain", "bot_challenge", f"anti-bot challenge: {bot_challenge}"
+        )
     if status in {403, 503}:
-        return CareerOpsLivenessResult("uncertain", "access_blocked", f"HTTP {status} (access blocked, likely anti-bot)")
+        return CareerOpsLivenessResult(
+            "uncertain", "access_blocked", f"HTTP {status} (access blocked, likely anti-bot)"
+        )
 
     expired_url = _first_match(EXPIRED_URL_PATTERNS, final_url)
     if expired_url:
@@ -92,22 +96,34 @@ def classify_career_ops_liveness(  # noqa: C901
 
     expired_body = _first_match(HARD_EXPIRED_PATTERNS, body_text)
     if expired_body:
-        return CareerOpsLivenessResult("expired", "expired_body", f"pattern matched: {expired_body}")
+        return CareerOpsLivenessResult(
+            "expired", "expired_body", f"pattern matched: {expired_body}"
+        )
 
     if _has_apply_control(controls):
-        return CareerOpsLivenessResult("active", "apply_control_visible", "visible apply control detected")
+        return CareerOpsLivenessResult(
+            "active", "apply_control_visible", "visible apply control detected"
+        )
 
     listing_page = _first_match(LISTING_PAGE_PATTERNS, body_text)
     if listing_page:
-        return CareerOpsLivenessResult("expired", "listing_page", f"pattern matched: {listing_page}")
+        return CareerOpsLivenessResult(
+            "expired", "listing_page", f"pattern matched: {listing_page}"
+        )
 
     if body_text_clean := body_text.strip():
         if len(body_text_clean) < MIN_CONTENT_CHARS and status:
-            return CareerOpsLivenessResult("expired", "insufficient_content", "insufficient content - likely nav/footer only")
+            return CareerOpsLivenessResult(
+                "expired", "insufficient_content", "insufficient content - likely nav/footer only"
+            )
         if len(body_text_clean) < MIN_CONTENT_CHARS:
-            return CareerOpsLivenessResult("uncertain", "unverified_short_text", "short JD text without fetched HTTP status")
+            return CareerOpsLivenessResult(
+                "uncertain", "unverified_short_text", "short JD text without fetched HTTP status"
+            )
 
-    return CareerOpsLivenessResult("uncertain", "no_apply_control", "content present but no visible apply control found")
+    return CareerOpsLivenessResult(
+        "uncertain", "no_apply_control", "content present but no visible apply control found"
+    )
 
 
 def _first_match(patterns: tuple[str, ...], text: str = "") -> str | None:
@@ -118,4 +134,8 @@ def _first_match(patterns: tuple[str, ...], text: str = "") -> str | None:
 
 
 def _has_apply_control(controls: list[str]) -> bool:
-    return any(re.search(pattern, control, re.IGNORECASE) for control in controls for pattern in APPLY_PATTERNS)
+    return any(
+        re.search(pattern, control, re.IGNORECASE)
+        for control in controls
+        for pattern in APPLY_PATTERNS
+    )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from django.db import transaction
 from django.utils import timezone
@@ -32,6 +32,7 @@ from application.services.career_ops_recruiter_evaluation import (
 )
 from application.services.career_ops_resume_formatter import render_career_ops_ats_resume
 from application.services.career_ops_tasks import materialize_url_pipeline_tasks
+from application.services.run_state_machine import apply_run_status_transition
 from infrastructure.orm.models import Asset, CompanyOpportunity, Graph, GraphVersion, Run, User
 
 
@@ -71,32 +72,52 @@ class CareerOpsApplicationPacketBuildResult:
 def ensure_career_ops_graph_version(*, company: Graph) -> GraphVersion:
     """Return the latest company graph version or create a minimal CareerOps contract version."""
 
-    latest = GraphVersion.objects.filter(graph=company).order_by("-version").first()
+    latest = cast(
+        GraphVersion | None,
+        GraphVersion.objects.filter(graph=company).order_by("-version").first(),
+    )
     if latest is not None:
         return latest
     with transaction.atomic():
-        latest = GraphVersion.objects.filter(graph=company).order_by("-version").first()
+        latest = cast(
+            GraphVersion | None,
+            GraphVersion.objects.filter(graph=company).order_by("-version").first(),
+        )
         if latest is not None:
             return latest
-        return GraphVersion.objects.create(
-            graph=company,
-            version=1,
-            external_idempotency_key=f"career-ops:{company.id}:initial-graph",
-            graph_json={
-                "nodes": [
-                    {"id": stage, "type": "career_ops_stage", "label": CAREER_OPS_STAGE_LABELS[stage]}
-                    for stage in CAREER_OPS_STAGE_SEQUENCE
-                ],
-                "edges": [
-                    {"source": src, "target": dst}
-                    for src, dst in zip(CAREER_OPS_STAGE_SEQUENCE, CAREER_OPS_STAGE_SEQUENCE[1:], strict=False)
-                ],
-                "metadata": {"pack_id": CAREER_OPS_PACK_ID, "source": "career_ops_pipeline"},
-            },
+        return cast(
+            GraphVersion,
+            GraphVersion.objects.create(
+                graph=company,
+                version=1,
+                external_idempotency_key=f"career-ops:{company.id}:initial-graph",
+                graph_json={
+                    "nodes": [
+                        {
+                            "id": stage,
+                            "type": "career_ops_stage",
+                            "label": CAREER_OPS_STAGE_LABELS[stage],
+                        }
+                        for stage in CAREER_OPS_STAGE_SEQUENCE
+                    ],
+                    "edges": [
+                        {"source": src, "target": dst}
+                        for src, dst in zip(
+                            CAREER_OPS_STAGE_SEQUENCE, CAREER_OPS_STAGE_SEQUENCE[1:], strict=False
+                        )
+                    ],
+                    "metadata": {
+                        "pack_id": CAREER_OPS_PACK_ID,
+                        "source": "career_ops_pipeline",
+                    },
+                },
+            ),
         )
 
 
-def create_career_ops_run(*, company: Graph, actor: User, posting: dict[str, Any], idempotency_key: str) -> Run:
+def create_career_ops_run(
+    *, company: Graph, actor: User, posting: dict[str, Any], idempotency_key: str
+) -> Run:
     """Create a backend Run for a synchronous dry-run CareerOps URL pipeline."""
 
     graph_version = ensure_career_ops_graph_version(company=company)
@@ -143,7 +164,9 @@ def run_career_ops_url_pipeline(
             posting=posting,
             idempotency_key=idempotency_key,
         )
-        signal = record_scanned_job(company=company, user=actor, posting=posting, cooldown_days=cooldown_days)
+        signal = record_scanned_job(
+            company=company, user=actor, posting=posting, cooldown_days=cooldown_days
+        )
         opportunity = ensure_opportunity_for_signal(signal=signal, user=actor)
         if opportunity is None:
             raise ValueError("CareerOps signal did not produce an opportunity.")
@@ -187,7 +210,7 @@ def run_career_ops_url_pipeline(
                 task.ended_at = timezone.now()
                 task.save(update_fields=["status", "ended_at", "updated_at"])
             projection = materialize_career_ops_pipeline_projection(company=company)
-            run.status = "succeeded"
+            run_transition = apply_run_status_transition(run, "succeeded")
             run.ended_at = timezone.now()
             run.output_json = {
                 "career_ops": {
@@ -203,7 +226,7 @@ def run_career_ops_url_pipeline(
                     "external_side_effects_allowed": False,
                 }
             }
-            run.save(update_fields=["status", "ended_at", "output_json"])
+            run.save(update_fields=[*run_transition.update_fields, "ended_at", "output_json"])
             return CareerOpsPipelineResult(
                 run_id=str(run.id),
                 signal_id=str(signal.id),
@@ -270,7 +293,7 @@ def run_career_ops_url_pipeline(
             evaluation=payloads.evaluation,
         )
         projection = materialize_career_ops_pipeline_projection(company=company)
-        run.status = "succeeded"
+        run_transition = apply_run_status_transition(run, "succeeded")
         run.ended_at = timezone.now()
         run.output_json = {
             "career_ops": {
@@ -280,13 +303,15 @@ def run_career_ops_url_pipeline(
                 "decision_id": str(decision.id),
                 "deliverable_ids": deliverable_ids,
                 "packet_asset_version_id": str(packet_version.id),
-                "ats_simulation_asset_version_id": content_versions_by_type.get("ats_simulation_report"),
+                "ats_simulation_asset_version_id": content_versions_by_type.get(
+                    "ats_simulation_report"
+                ),
                 "projection_id": str(projection.id),
                 "blocked_reasons": payloads.blocked_reasons,
                 "external_side_effects_allowed": False,
             }
         }
-        run.save(update_fields=["status", "ended_at", "output_json"])
+        run.save(update_fields=[*run_transition.update_fields, "ended_at", "output_json"])
     return CareerOpsPipelineResult(
         run_id=str(run.id),
         signal_id=str(signal.id),
@@ -310,9 +335,13 @@ def build_career_ops_application_packet_for_opportunity(
     """Build review-ready CareerOps application drafts for an existing opportunity."""
 
     if opportunity.company_id != company.id:
-        raise ValueError("CareerOps application packet opportunity must belong to the target company.")
+        raise ValueError(
+            "CareerOps application packet opportunity must belong to the target company."
+        )
     if company.organization_id is None:
-        raise ValueError("CareerOps application packet build requires an organization-scoped company.")
+        raise ValueError(
+            "CareerOps application packet build requires an organization-scoped company."
+        )
     with transaction.atomic():
         graph_version = ensure_career_ops_graph_version(company=company)
         now = timezone.now()
@@ -409,7 +438,7 @@ def build_career_ops_application_packet_for_opportunity(
             evaluation=payloads.evaluation,
         )
         projection = materialize_career_ops_pipeline_projection(company=company)
-        run.status = "succeeded"
+        run_transition = apply_run_status_transition(run, "succeeded")
         run.ended_at = timezone.now()
         run.output_json = {
             "career_ops": {
@@ -418,22 +447,28 @@ def build_career_ops_application_packet_for_opportunity(
                 "decision_id": str(decision.id),
                 "deliverable_ids": deliverable_ids,
                 "packet_asset_version_id": str(packet_version.id),
-                "tailored_resume_asset_version_id": content_versions_by_type.get("tailored_resume_html"),
+                "tailored_resume_asset_version_id": content_versions_by_type.get(
+                    "tailored_resume_html"
+                ),
                 "ats_resume_text_asset_version_id": content_versions_by_type.get("ats_resume_text"),
                 "ats_resume_html_asset_version_id": content_versions_by_type.get("ats_resume_html"),
                 "ats_resume_pdf_asset_version_id": content_versions_by_type.get("ats_resume_pdf"),
                 "ats_resume_parseability_report_asset_version_id": content_versions_by_type.get(
                     "ats_resume_parseability_report"
                 ),
-                "recruiter_evaluation_asset_version_id": content_versions_by_type.get("recruiter_evaluation_report"),
+                "recruiter_evaluation_asset_version_id": content_versions_by_type.get(
+                    "recruiter_evaluation_report"
+                ),
                 "cover_letter_asset_version_id": content_versions_by_type.get("cover_letter_draft"),
-                "ats_simulation_asset_version_id": content_versions_by_type.get("ats_simulation_report"),
+                "ats_simulation_asset_version_id": content_versions_by_type.get(
+                    "ats_simulation_report"
+                ),
                 "projection_id": str(projection.id),
                 "blocked_reasons": payloads.blocked_reasons,
                 "external_side_effects_allowed": False,
             }
         }
-        run.save(update_fields=["status", "ended_at", "output_json"])
+        run.save(update_fields=[*run_transition.update_fields, "ended_at", "output_json"])
     return CareerOpsApplicationPacketBuildResult(
         run_id=str(run.id),
         opportunity_id=str(opportunity.id),
@@ -450,7 +485,9 @@ def build_career_ops_application_packet_for_opportunity(
         ats_resume_parseability_report_asset_version_id=content_versions_by_type.get(
             "ats_resume_parseability_report"
         ),
-        recruiter_evaluation_asset_version_id=content_versions_by_type.get("recruiter_evaluation_report"),
+        recruiter_evaluation_asset_version_id=content_versions_by_type.get(
+            "recruiter_evaluation_report"
+        ),
         cover_letter_asset_version_id=content_versions_by_type.get("cover_letter_draft"),
         ats_simulation_asset_version_id=content_versions_by_type.get("ats_simulation_report"),
     )
@@ -483,7 +520,9 @@ def _write_application_draft_deliverables(
         )
         ats_artifacts = render_career_ops_ats_resume(
             tailored_resume=tailored_resume,
-            opportunity=packet.get("opportunity") if isinstance(packet.get("opportunity"), dict) else None,
+            opportunity=packet.get("opportunity")
+            if isinstance(packet.get("opportunity"), dict)
+            else None,
             candidate_identity=_candidate_identity(company=engagement.company),
         )
         common_payload = {
@@ -497,7 +536,9 @@ def _write_application_draft_deliverables(
         ats_score = ats_simulation.get("atsScore") if isinstance(ats_simulation, dict) else None
         recruiter_evaluation = evaluate_career_ops_resume_professional_delivery(
             resume_text=ats_artifacts.text,
-            opportunity=packet.get("opportunity") if isinstance(packet.get("opportunity"), dict) else None,
+            opportunity=packet.get("opportunity")
+            if isinstance(packet.get("opportunity"), dict)
+            else None,
             ats_score=ats_score if isinstance(ats_score, int) else None,
         )
         deliverable_versions.extend(
@@ -588,7 +629,9 @@ def _write_application_draft_deliverables(
 
 
 def _candidate_identity(*, company: Graph) -> dict[str, Any]:
-    asset = Asset.objects.filter(company=company, source_key="career_ops:cv_source", status="active").first()
+    asset = Asset.objects.filter(
+        company=company, source_key="career_ops:cv_source", status="active"
+    ).first()
     if asset is None:
         return {}
     metadata = asset.metadata_json or {}

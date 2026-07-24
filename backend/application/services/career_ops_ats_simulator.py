@@ -9,6 +9,7 @@ from application.services.career_ops_content_alignment import (
     ATS_REQUIRED_SECTIONS,
     CAREER_OPS_KEYWORDS,
     INTERNAL_LEAKAGE_TOKENS,
+    OPTIMIZED_BACKEND_SECTIONS,
 )
 
 ATS_THRESHOLDS = {"human_review": 85, "send_ready": 90, "improvement_review": 70}
@@ -56,7 +57,10 @@ def simulate_career_ops_ats(
     hard_blocked = bool(
         not resume
         or not plain_text.strip()
-        or any(flag["code"] in {"internal_leakage", "side_effect_guard_enabled"} for flag in parseability["flags"])
+        or any(
+            flag["code"] in {"internal_leakage", "side_effect_guard_enabled"}
+            for flag in parseability["flags"]
+        )
     )
     score_breakdown = _score_breakdown(
         resume=resume,
@@ -94,14 +98,19 @@ def simulate_career_ops_ats(
         "parseability": parseability,
         "suggestions": suggestions,
         "strengths": strengths,
-        "roast": _roast(score_band=score_band, keyword_analysis=keyword_analysis, parseability=parseability),
-        "summary": _summary(ats_score=ats_score, score_band=score_band, keyword_analysis=keyword_analysis),
+        "roast": _roast(
+            score_band=score_band, keyword_analysis=keyword_analysis, parseability=parseability
+        ),
+        "summary": _summary(
+            ats_score=ats_score, score_band=score_band, keyword_analysis=keyword_analysis
+        ),
         "quality": {
             "source_backed_claims": bool(source_refs) and not hard_blocked,
             "no_invented_candidate_facts": True,
             "external_side_effects_allowed": False,
             "live_ready": False,
-            "human_review_minimum_passed": ats_score >= ATS_THRESHOLDS["human_review"] and not hard_blocked,
+            "human_review_minimum_passed": ats_score >= ATS_THRESHOLDS["human_review"]
+            and not hard_blocked,
             "send_minimum_passed": ats_score >= ATS_THRESHOLDS["send_ready"] and not hard_blocked,
         },
         "source_refs": source_refs,
@@ -131,7 +140,11 @@ def _source_refs(*, packet: dict[str, Any], resume: dict[str, Any]) -> list[dict
     for container in (packet.get("source_refs", []), resume.get("source_refs", [])):
         if isinstance(container, list):
             refs.extend(item for item in container if isinstance(item, dict))
-    for claim in resume.get("claim_source_map", []) if isinstance(resume.get("claim_source_map"), list) else []:
+    for claim in (
+        resume.get("claim_source_map", [])
+        if isinstance(resume.get("claim_source_map"), list)
+        else []
+    ):
         if isinstance(claim, dict) and isinstance(claim.get("source_ref"), dict):
             refs.append(claim["source_ref"])
     return _dedupe_refs(refs)
@@ -174,7 +187,9 @@ def _strings(value: object) -> list[str]:
     return []
 
 
-def _keyword_analysis(*, job_keywords: list[str], plain_text: str, candidate_text: str) -> dict[str, Any]:
+def _keyword_analysis(
+    *, job_keywords: list[str], plain_text: str, candidate_text: str
+) -> dict[str, Any]:
     matched = []
     missing = []
     overused = []
@@ -254,20 +269,41 @@ def _parseability(
 ) -> dict[str, Any]:
     flags: list[dict[str, str]] = []
     if not resume:
-        flags.append({"code": "missing_resume", "message": "No tailored resume artifact is present."})
+        flags.append(
+            {"code": "missing_resume", "message": "No tailored resume artifact is present."}
+        )
     if not plain_text.strip():
         flags.append({"code": "missing_plain_text", "message": "Resume plain text is missing."})
     if _has_internal_leakage(plain_text):
-        flags.append({"code": "internal_leakage", "message": "Resume contains internal implementation terms."})
-    if present_sections != list(ATS_REQUIRED_SECTIONS):
-        flags.append({"code": "section_order", "message": "ATS sections are missing or not in the required order."})
+        flags.append(
+            {
+                "code": "internal_leakage",
+                "message": "Resume contains internal implementation terms.",
+            }
+        )
+    if not _has_supported_section_sequence(present_sections):
+        flags.append(
+            {
+                "code": "section_order",
+                "message": "ATS sections are missing or not in the required order.",
+            }
+        )
     for section in ATS_REQUIRED_SECTIONS:
         if section not in present_sections:
-            flags.append({"code": "missing_section", "message": f"Missing required ATS section: {section}."})
+            flags.append(
+                {"code": "missing_section", "message": f"Missing required ATS section: {section}."}
+            )
     if not source_refs:
-        flags.append({"code": "missing_source_refs", "message": "Resume lacks source references for claims."})
+        flags.append(
+            {"code": "missing_source_refs", "message": "Resume lacks source references for claims."}
+        )
     if _side_effect_enabled(resume):
-        flags.append({"code": "side_effect_guard_enabled", "message": "Resume artifact enables external side effects."})
+        flags.append(
+            {
+                "code": "side_effect_guard_enabled",
+                "message": "Resume artifact enables external side effects.",
+            }
+        )
     return {
         "required_sections": list(ATS_REQUIRED_SECTIONS),
         "present_sections": present_sections,
@@ -287,14 +323,18 @@ def _score_breakdown(
 ) -> dict[str, dict[str, Any]]:
     formatting = _score_formatting(plain_text=plain_text, parseability=parseability)
     keywords = _score_keywords(keyword_analysis=keyword_analysis)
-    structure = _score_structure(resume=resume, present_sections=present_sections, source_refs=source_refs)
+    structure = _score_structure(
+        resume=resume, present_sections=present_sections, source_refs=source_refs
+    )
     readability = _score_readability(plain_text=plain_text)
     risk = _score_risk(resume=resume, parseability=parseability, hard_blocked=hard_blocked)
     return {
         "formatting": _breakdown(formatting, "formatting", _formatting_feedback(parseability)),
         "keywords": _breakdown(keywords, "keywords", _keyword_feedback(keyword_analysis)),
         "structure": _breakdown(structure, "structure", _structure_feedback(present_sections)),
-        "readability": _breakdown(readability, "readability", "Resume text is concise and parseable."),
+        "readability": _breakdown(
+            readability, "readability", "Resume text is concise and parseable."
+        ),
         "risk": _breakdown(risk, "risk", _risk_feedback(parseability)),
     }
 
@@ -346,18 +386,28 @@ def _keyword_confidence_score_cap(keyword_analysis: dict[str, Any]) -> int:
     return ATS_SCORE_BREAKDOWN_MAX["keywords"]
 
 
-def _score_structure(*, resume: dict[str, Any], present_sections: list[str], source_refs: list[dict[str, Any]]) -> int:
+def _score_structure(
+    *, resume: dict[str, Any], present_sections: list[str], source_refs: list[dict[str, Any]]
+) -> int:
     score = 0
-    if present_sections == list(ATS_REQUIRED_SECTIONS):
+    if _has_supported_section_sequence(present_sections):
         score += 12
     else:
         score += max(0, len(set(present_sections).intersection(ATS_REQUIRED_SECTIONS)) * 2)
     claim_map = resume.get("claim_source_map", [])
-    if isinstance(claim_map, list) and claim_map and all(isinstance(item, dict) and item.get("source_ref") for item in claim_map):
+    if (
+        isinstance(claim_map, list)
+        and claim_map
+        and all(isinstance(item, dict) and item.get("source_ref") for item in claim_map)
+    ):
         score += 5
     if source_refs:
         score += 3
     return min(ATS_SCORE_BREAKDOWN_MAX["structure"], score)
+
+
+def _has_supported_section_sequence(present_sections: list[str]) -> bool:
+    return tuple(present_sections) in {ATS_REQUIRED_SECTIONS, OPTIMIZED_BACKEND_SECTIONS}
 
 
 def _score_readability(*, plain_text: str) -> int:
@@ -372,7 +422,10 @@ def _score_readability(*, plain_text: str) -> int:
     lines = [line.strip() for line in plain_text.splitlines() if line.strip()]
     if any(len(line.split()) > 45 for line in lines):
         score -= 3
-    if not any(verb in plain_text.casefold() for verb in ("built", "delivered", "created", "led", "implemented")):
+    if not any(
+        verb in plain_text.casefold()
+        for verb in ("built", "delivered", "created", "led", "implemented")
+    ):
         score -= 2
     return max(0, score)
 
@@ -432,12 +485,18 @@ def _suggestions(
 ) -> list[dict[str, Any]]:
     suggestions: list[dict[str, Any]] = []
     for flag in parseability["flags"]:
-        priority = "high" if flag["code"] in {"internal_leakage", "missing_section", "section_order"} else "medium"
+        priority = (
+            "high"
+            if flag["code"] in {"internal_leakage", "missing_section", "section_order"}
+            else "medium"
+        )
         suggestions.append(
             {
                 "category": "Structure" if "section" in flag["code"] else "Formatting",
                 "issue": flag["message"],
-                "recommendation": "Fix this before human review." if priority == "high" else "Review before approval.",
+                "recommendation": "Fix this before human review."
+                if priority == "high"
+                else "Review before approval.",
                 "priority": priority,
                 "safe_to_apply_automatically": False,
                 "requires_source_fact": False,
@@ -506,15 +565,25 @@ def _strengths(
     return strengths
 
 
-def _roast(*, score_band: str, keyword_analysis: dict[str, Any], parseability: dict[str, Any]) -> list[str]:
+def _roast(
+    *, score_band: str, keyword_analysis: dict[str, Any], parseability: dict[str, Any]
+) -> list[str]:
     if score_band == "send_ready":
-        return ["Strong ATS shape: standard sections, source-backed keywords, and low operational risk."]
+        return [
+            "Strong ATS shape: standard sections, source-backed keywords, and low operational risk."
+        ]
     if score_band == "human_review":
-        return ["Good enough for human review, but it still needs tightening before the 90+ send bar."]
+        return [
+            "Good enough for human review, but it still needs tightening before the 90+ send bar."
+        ]
     if _flag_codes(parseability):
-        return ["The resume has fixable ATS structure or safety issues before it should reach review."]
+        return [
+            "The resume has fixable ATS structure or safety issues before it should reach review."
+        ]
     if keyword_analysis["missing"]:
-        return ["The resume is structurally usable, but important job keywords are not source-backed yet."]
+        return [
+            "The resume is structurally usable, but important job keywords are not source-backed yet."
+        ]
     return ["The packet needs stronger source-backed alignment before review."]
 
 
@@ -530,7 +599,12 @@ def _opportunity(*, posting: dict[str, Any], packet: dict[str, Any]) -> dict[str
     packet_opp = _dict_value(packet.get("opportunity"))
     return {
         "id": str(posting.get("id") or packet_opp.get("id") or ""),
-        "employer_name": str(posting.get("company") or posting.get("employer") or packet_opp.get("employer_name") or ""),
+        "employer_name": str(
+            posting.get("company")
+            or posting.get("employer")
+            or packet_opp.get("employer_name")
+            or ""
+        ),
         "role_title": str(posting.get("title") or packet_opp.get("role_title") or ""),
         "job_url": str(posting.get("url") or packet_opp.get("job_url") or ""),
         "ats_provider_hint": _ats_provider_hint(posting),
@@ -569,7 +643,11 @@ def _has_internal_leakage(text: str) -> bool:
 
 def _side_effect_enabled(value: object) -> bool:
     if isinstance(value, dict):
-        return any((key == "external_side_effects_allowed" and child is True) or _side_effect_enabled(child) for key, child in value.items())
+        return any(
+            (key == "external_side_effects_allowed" and child is True)
+            or _side_effect_enabled(child)
+            for key, child in value.items()
+        )
     if isinstance(value, list):
         return any(_side_effect_enabled(child) for child in value)
     return False

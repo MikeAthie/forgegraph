@@ -585,7 +585,13 @@ def _assert_qa_allows_approval(stage_state: ProgramStageState) -> None:
 
 
 def _department_for_stage(stage_state: ProgramStageState) -> DepartmentRegistry:
-    department_id = (stage_state.state_json or {}).get("department_id")
+    raw_department_id = (stage_state.state_json or {}).get("department_id")
+    if raw_department_id is None:
+        raise DepartmentPipelineError(
+            "DEPARTMENT_NOT_FOUND",
+            f"Department for stage {stage_state.stage_id} was not found.",
+        )
+    department_id = str(raw_department_id)
     department = DepartmentRegistry.objects.filter(
         id=department_id,
         organization=stage_state.organization,

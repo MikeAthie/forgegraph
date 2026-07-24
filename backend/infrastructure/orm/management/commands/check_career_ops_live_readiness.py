@@ -19,8 +19,8 @@ class Command(BaseCommand):
         parser.add_argument("--json", action="store_true", dest="json_output")
 
     def handle(self, *args: object, **options: object) -> None:
-        company = Graph.objects.get(id=options["company_id"])
-        packet_version = AssetVersion.objects.get(id=options["packet_version_id"])
+        company = Graph.objects.get(id=str(options["company_id"]))
+        packet_version = AssetVersion.objects.get(id=str(options["packet_version_id"]))
         result = check_career_ops_packet_readiness(company=company, packet_version=packet_version)
         self.stdout.write(
             json.dumps(

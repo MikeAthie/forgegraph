@@ -22,9 +22,13 @@ def _create_company(user: User, *, with_version: bool = True) -> Graph:
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Task Co"))
+    company = cast(
+        Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Task Co")
+    )
     if with_version:
-        GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
+        GraphVersion.objects.create(
+            graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+        )
     return company
 
 
@@ -34,7 +38,9 @@ def _run(company: Graph, user: User) -> Run:
         version=1,
         graph_json={"nodes": [], "edges": [], "metadata": {}},
     )
-    return Run.objects.create(owner=user, organization=company.organization, graph_version=version, status="running")
+    return Run.objects.create(
+        owner=user, organization=company.organization, graph_version=version, status="running"
+    )
 
 
 def _posting() -> dict[str, object]:

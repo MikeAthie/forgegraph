@@ -11,7 +11,7 @@ import hashlib
 import json
 from datetime import datetime, time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from django.db import transaction
 from django.utils import timezone
@@ -102,7 +102,10 @@ FILE_DELIVERABLES: tuple[dict[str, str], ...] = (
 
 
 def read_manifest(root: Path) -> dict[str, Any]:
-    return json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    parsed = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    if not isinstance(parsed, dict):
+        raise ValueError("Legacy manifest must be a JSON object.")
+    return parsed
 
 
 @transaction.atomic
@@ -309,7 +312,7 @@ def _ensure_company(
         "Client workspace for Atlas weekend marketing agency deliverables."
     )
     company.save(update_fields=["owner", "name", "description", "updated_at"])
-    return company
+    return cast(Graph, company)
 
 
 def _ensure_pack(
@@ -317,6 +320,7 @@ def _ensure_pack(
     company: Graph,
     user: User,
 ) -> tuple[str, CompanyOperatingModelInstallation | None]:
+    installation: CompanyOperatingModelInstallation | None
     try:
         installation = install_pack_for_company(
             company=company, user=user, pack_id=PACK_ID, role="primary"

@@ -329,4 +329,4 @@ def _bounded(value: Any, limit: int) -> str:
 def _iso(value: Any | None) -> str:
     if value is None:
         return ""
-    return value.isoformat()
+    return str(value.isoformat())

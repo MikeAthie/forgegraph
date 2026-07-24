@@ -314,7 +314,7 @@ def _deterministic_sources(
     user: User,
     engagement: ServiceEngagement,
 ) -> tuple[ServiceDeliverable, ...]:
-    definitions = (
+    definitions: tuple[dict[str, Any], ...] = (
         {
             "deliverable_type": "codex_strategy_brief",
             "title": "Legacy Codex Strategy Brief",

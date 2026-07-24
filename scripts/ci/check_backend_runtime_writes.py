@@ -16,6 +16,8 @@ IGNORED_PARTS = {
     "migrations",
     "tests",
     "testsprite_tests",
+    ".hermes",
+    ".uv-review-venv",
     ".venv",
 }
 
@@ -40,6 +42,8 @@ ALLOWED_RUNTIME_WRITERS = {
     Path("backend/adapters/api/integrations/whatsapp_views.py"),
     Path("backend/adapters/api/integrations/webhook_views.py"),
     Path("backend/application/services/audit_log.py"),
+    Path("backend/application/services/career_ops_approvals.py"),
+    Path("backend/application/services/career_ops_pipeline.py"),
     Path("backend/application/services/gateway_schedules.py"),
     Path("backend/application/services/os_projections.py"),
     Path("backend/application/services/operator_actions.py"),
@@ -52,6 +56,7 @@ ALLOWED_RUNTIME_WRITERS = {
 
 ALLOWED_FIXTURE_WRITERS = {
     Path("backend/infrastructure/orm/management/commands/seed_frontend_control_plane_fixture.py"),
+    Path("backend/infrastructure/orm/management/commands/seed_fiverr_portfolio_demo.py"),
     Path("backend/infrastructure/orm/management/commands/seed_legacy_phase6_mock_objective.py"),
     Path("backend/infrastructure/orm/management/commands/seed_run_trace.py"),
     Path("backend/infrastructure/orm/management/commands/seed_strategy_report_fixture.py"),

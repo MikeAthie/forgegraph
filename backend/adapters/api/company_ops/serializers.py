@@ -54,7 +54,7 @@ class AtlasOnboardingIntakeSerializer(serializers.Serializer[Any]):
     service_slug = serializers.SlugField(required=False, allow_blank=True, max_length=160)
     service_package = serializers.CharField(required=False, allow_blank=True, max_length=255)
     notes = serializers.CharField(required=False, allow_blank=True, max_length=5000)
-    source = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    source: Any = serializers.CharField(required=False, allow_blank=True, max_length=64)
     metadata = serializers.JSONField(required=False)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:

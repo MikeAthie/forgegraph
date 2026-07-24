@@ -58,7 +58,9 @@ class Command(BaseCommand):
             raw_json=str(options["live_postings_json"]),
             json_file=str(options["live_postings_json_file"]),
         )
-        source_mode = "live_url_discovery" if live_postings is not None else "deterministic_fake_provider"
+        source_mode = (
+            "live_url_discovery" if live_postings is not None else "deterministic_fake_provider"
+        )
         live_search_options = _live_search_options(options)
         if live_postings is None and bool(options["live_search_skill"]):
             live_postings = _run_live_search_skill(
@@ -71,7 +73,9 @@ class Command(BaseCommand):
             )
             source_mode = "live_search_skill"
         elif live_search_options["has_live_search_inputs"] and live_postings is None:
-            raise CommandError("--live-search-query/--live-search-results-json-file require --live-search-skill.")
+            raise CommandError(
+                "--live-search-query/--live-search-results-json-file require --live-search-skill."
+            )
         result = run_career_ops_first_prompt(
             actor=user,
             cv_text=cv_text,
@@ -130,7 +134,7 @@ def _extract_pdf_text(path_value: str) -> str:
     if not path.exists():
         raise CommandError(f"CV PDF does not exist: {path_value}")
     try:
-        import fitz  # type: ignore[import-not-found]
+        import fitz
     except Exception as exc:  # pragma: no cover - depends on runtime image
         raise CommandError("PyMuPDF/fitz is required for --cv-pdf-path extraction.") from exc
     try:
@@ -170,10 +174,17 @@ def _live_search_options(options: dict[str, object]) -> dict[str, Any]:
     raw_queries = options.get("live_search_query") or []
     if isinstance(raw_queries, str):
         queries = [raw_queries]
-    else:
+    elif isinstance(raw_queries, list | tuple):
         queries = [str(query) for query in raw_queries if str(query).strip()]
+    else:
+        queries = []
     results_json_file = str(options.get("live_search_results_json_file") or "")
-    max_results = int(options.get("live_search_max_results") or 10)
+    raw_max_results = options.get("live_search_max_results")
+    max_results = (
+        int(raw_max_results)
+        if isinstance(raw_max_results, str | int | float) and raw_max_results
+        else 10
+    )
     return {
         "queries": queries,
         "max_results": max_results,

@@ -1366,8 +1366,8 @@ def _set_idempotency_status(
     idempotency_key: str,
 ) -> None:
     if idempotency_key:
-        record._whiteboard_board_idempotency_status = status
-        record._whiteboard_board_idempotency_key = idempotency_key
+        object.__setattr__(record, "_whiteboard_board_idempotency_status", status)
+        object.__setattr__(record, "_whiteboard_board_idempotency_key", idempotency_key)
 
 
 def _mutation_fingerprint(value: dict[str, Any]) -> str:

@@ -78,3 +78,10 @@ tasks-*.md
 # Local reference dump
 /src/
 .hermes/codex_session_workdir/
+
+# Personal Fiverr portfolio demo files
+/fiverr_portfolio/
+/artifacts/fiverr/
+/backend/infrastructure/orm/management/commands/seed_fiverr_portfolio_demo.py
+/backend/tests/unit/management/test_seed_fiverr_portfolio_demo.py
+/frontend/__tests__/demo-captures/fiverr-portfolio-demo.spec.ts

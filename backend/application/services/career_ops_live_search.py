@@ -86,7 +86,9 @@ class CareerOpsLiveSearchProvider(Protocol):
 class StaticCareerOpsLiveSearchProvider:
     """Deterministic provider for tests and manual JSON-fixture reruns."""
 
-    def __init__(self, hits: list[dict[str, Any]], *, provider_name: str = "career_ops_live_search_fixture") -> None:
+    def __init__(
+        self, hits: list[dict[str, Any]], *, provider_name: str = "career_ops_live_search_fixture"
+    ) -> None:
         self.provider_name = provider_name
         self._hits = [dict(hit) for hit in hits if isinstance(hit, dict)]
 
@@ -145,11 +147,13 @@ def build_career_ops_live_search_queries(
     secondary_skill = skills[1] if len(skills) > 1 else "AI"
     locations = _authorized_search_locations(constraints)
     for location in locations:
-        _append_unique_query(queries, f'"{primary_skill}" "{secondary_skill}" backend AI jobs {location}')
+        _append_unique_query(
+            queries, f'"{primary_skill}" "{secondary_skill}" backend AI jobs {location}'
+        )
 
     if any(skill.casefold() == "rag" for skill in skills):
         for location in locations[:2]:
-            _append_unique_query(queries, f'RAG backend engineer jobs {location}')
+            _append_unique_query(queries, f"RAG backend engineer jobs {location}")
 
     workflow_phrase = _workflow_phrase(cv_text=cv_text, prompt=prompt)
     if workflow_phrase:
@@ -198,7 +202,9 @@ def run_career_ops_live_search(
                 continue
             posting = normalize_career_ops_live_search_hit(
                 hit,
-                provider_name=getattr(search_provider, "provider_name", "career_ops_live_search_provider"),
+                provider_name=getattr(
+                    search_provider, "provider_name", "career_ops_live_search_provider"
+                ),
                 source_query=query,
                 source_rank=rank,
             )
@@ -226,7 +232,9 @@ def normalize_career_ops_live_search_hit(
         return {}
 
     title = _bounded_text(hit.get("title") or _title_from_url(url) or "Untitled role", 240)
-    company = _bounded_text(hit.get("company") or hit.get("employer") or _company_from_url(url), 160)
+    company = _bounded_text(
+        hit.get("company") or hit.get("employer") or _company_from_url(url), 160
+    )
     location = _bounded_text(hit.get("location") or hit.get("locations") or "", 240)
     if not location:
         location = _safe_location_from_source_query(source_query)
@@ -234,7 +242,9 @@ def normalize_career_ops_live_search_hit(
         hit.get("description") or hit.get("summary") or hit.get("snippet") or "",
         4000,
     )
-    provider = _bounded_text(hit.get("provider") or provider_name or "career_ops_live_search_provider", 120)
+    provider = _bounded_text(
+        hit.get("provider") or provider_name or "career_ops_live_search_provider", 120
+    )
     posting = {
         "title": title or "Untitled role",
         "company": company or "Unknown employer",
@@ -266,7 +276,10 @@ class _DuckDuckGoHTMLParser(HTMLParser):
         attributes = {key: value or "" for key, value in attrs}
         classes = set(attributes.get("class", "").split())
         if tag.lower() == "a" and "result__a" in classes:
-            self._active_link = {"url": _resolve_duckduckgo_href(attributes.get("href", "")), "title": ""}
+            self._active_link = {
+                "url": _resolve_duckduckgo_href(attributes.get("href", "")),
+                "title": "",
+            }
             self._capture_link_text = True
         elif "result__snippet" in classes and self.results:
             self._capture_snippet = True
@@ -386,7 +399,7 @@ def _fetch_search_html(url: str, *, timeout_seconds: float) -> str:
     try:
         with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310 - user-triggered public search.
             charset = response.headers.get_content_charset() or "utf-8"
-            return response.read(512_000).decode(charset, errors="replace")
+            return str(response.read(512_000).decode(charset, errors="replace"))
     except Exception:
         return ""
 
@@ -417,7 +430,11 @@ def _extract_skills(cv_text: str) -> list[str]:
 
 
 def _authorized_search_locations(constraints: dict[str, Any]) -> list[str]:
-    raw_locations = [str(item).strip() for item in constraints.get("work_authorized_regions") or [] if str(item).strip()]
+    raw_locations = [
+        str(item).strip()
+        for item in constraints.get("work_authorized_regions") or []
+        if str(item).strip()
+    ]
     excluded = {str(item).casefold() for item in constraints.get("excluded_regions") or []}
     locations: list[str] = []
     for preferred in _LOCATION_PRIORITY:
@@ -477,7 +494,11 @@ def _safe_location_from_source_query(source_query: str) -> str:
     if re.search(r"\bmexico\b", text):
         return "Mexico Remote"
     if re.search(r"\beuropean union\b|\beurope\b|\beu\b", text):
-        return "European Union Remote" if re.search(r"\beuropean union\b|\beu\b", text) else "Europe Remote"
+        return (
+            "European Union Remote"
+            if re.search(r"\beuropean union\b|\beu\b", text)
+            else "Europe Remote"
+        )
     if re.search(r"\bremote\b", text):
         return "Remote"
     return ""
@@ -542,7 +563,11 @@ def _company_from_url(url: str) -> str:
     hostname = (urlparse(url).hostname or "").lower()
     if not hostname:
         return "Unknown employer"
-    parts = [part for part in hostname.split(".") if part not in {"www", "jobs", "careers", "com", "net", "org"}]
+    parts = [
+        part
+        for part in hostname.split(".")
+        if part not in {"www", "jobs", "careers", "com", "net", "org"}
+    ]
     if not parts:
         return "Unknown employer"
     return " ".join(part.capitalize() for part in re.split(r"[-_]+", parts[0]) if part)

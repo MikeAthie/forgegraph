@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from typing import Any
+
 from application.services.career_ops_resume_formatter import render_career_ops_ats_resume
 
 
-def _tailored_resume(*, sections: list[dict[str, object]] | None = None) -> dict[str, object]:
+def _tailored_resume(*, sections: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     resume_sections = sections or [
-        {"heading": "SUMMARY", "items": ["Backend engineer building Python APIs and AI workflow systems."]},
+        {
+            "heading": "SUMMARY",
+            "items": ["Backend engineer building Python APIs and AI workflow systems."],
+        },
         {"heading": "TECHNICAL SKILLS", "items": ["Python", "FastAPI", "PostgreSQL", "RAG"]},
         {
             "heading": "SELECTED EXPERIENCE",
@@ -14,7 +19,10 @@ def _tailored_resume(*, sections: list[dict[str, object]] | None = None) -> dict
                 {"text": "Delivered RAG and agentic workflow prototypes with observability."},
             ],
         },
-        {"heading": "PROJECTS", "items": [{"text": "Created workflow automation prototypes for backend teams."}]},
+        {
+            "heading": "PROJECTS",
+            "items": [{"text": "Created workflow automation prototypes for backend teams."}],
+        },
         {"heading": "EDUCATION", "items": [{"text": "B.S. Computer Science."}]},
     ]
     return {
@@ -28,7 +36,10 @@ def _tailored_resume(*, sections: list[dict[str, object]] | None = None) -> dict
         "sections": resume_sections,
         "plain_text": "",
         "claim_source_map": [
-            {"claim": "Built production APIs using Python, FastAPI, PostgreSQL, and Redis.", "source_ref": {"type": "cv_proof_point", "index": 0}}
+            {
+                "claim": "Built production APIs using Python, FastAPI, PostgreSQL, and Redis.",
+                "source_ref": {"type": "cv_proof_point", "index": 0},
+            }
         ],
         "quality": {"external_side_effects_allowed": False},
     }
@@ -41,7 +52,16 @@ def test_render_ats_resume_text_preserves_standard_section_order() -> None:
     )
 
     text = artifacts.text
-    positions = [text.index(heading) for heading in ("SUMMARY", "TECHNICAL SKILLS", "SELECTED EXPERIENCE", "PROJECTS", "EDUCATION")]
+    positions = [
+        text.index(heading)
+        for heading in (
+            "SUMMARY",
+            "TECHNICAL SKILLS",
+            "SELECTED EXPERIENCE",
+            "PROJECTS",
+            "EDUCATION",
+        )
+    ]
     assert positions == sorted(positions)
     assert "MIGUEL ATHIE" in text
     assert "Backend Engineer" in text
@@ -62,7 +82,16 @@ def test_render_ats_resume_html_uses_semantic_single_column_markup() -> None:
     assert "<ul" in lower
     assert "<li" in lower
     assert "TECHNICAL SKILLS" in html
-    for forbidden in ("<table", "<img", "<svg", "<canvas", "display:none", "visibility:hidden", "grid-template", "column-count"):
+    for forbidden in (
+        "<table",
+        "<img",
+        "<svg",
+        "<canvas",
+        "display:none",
+        "visibility:hidden",
+        "grid-template",
+        "column-count",
+    ):
         assert forbidden not in lower
 
 
@@ -114,9 +143,7 @@ def test_render_ats_resume_uses_professional_template_without_ats_hostile_layout
 
 def test_render_ats_resume_education_from_candidate_identity_replaces_placeholder() -> None:
     sections = [
-        section
-        for section in _tailored_resume()["sections"]
-        if section["heading"] != "EDUCATION"
+        section for section in _tailored_resume()["sections"] if section["heading"] != "EDUCATION"
     ]
 
     artifacts = render_career_ops_ats_resume(
@@ -159,7 +186,9 @@ def test_render_ats_resume_includes_candidate_certifications() -> None:
 
 
 def test_validate_ats_resume_parseability_blocks_missing_section() -> None:
-    sections = [section for section in _tailored_resume()["sections"] if section["heading"] != "EDUCATION"]
+    sections = [
+        section for section in _tailored_resume()["sections"] if section["heading"] != "EDUCATION"
+    ]
 
     artifacts = render_career_ops_ats_resume(tailored_resume=_tailored_resume(sections=sections))
 

@@ -26,13 +26,17 @@ def _create_company(user: User, *, name: str = "CareerOps Reference Co") -> Grap
     organization = user.default_organization
     assert organization is not None
     company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name=name))
-    GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
+    GraphVersion.objects.create(
+        graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+    )
     return company
 
 
 def _add_base_cv(company: Graph) -> None:
+    organization = company.organization
+    assert organization is not None
     Asset.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         title="Base CV",
         asset_type="document",
@@ -117,7 +121,9 @@ def test_evaluation_builds_a_to_g_blocks_and_score_recommendation_from_jd_and_cv
     assert evaluation["quality"]["external_side_effects_allowed"] is False
 
 
-def test_pipeline_stops_before_evaluation_packet_and_approval_for_expired_posting(user: User) -> None:
+def test_pipeline_stops_before_evaluation_packet_and_approval_for_expired_posting(
+    user: User,
+) -> None:
     company = _create_company(user)
     _add_base_cv(company)
 
@@ -137,14 +143,27 @@ def test_pipeline_stops_before_evaluation_packet_and_approval_for_expired_postin
     assert result.decision_id is None
     assert result.packet_asset_version_id is None
     assert result.blocked_reasons == ["posting_expired"]
-    assert ServiceDeliverable.objects.filter(company=company, deliverable_type="job_liveness_receipt").count() == 1
-    assert ServiceDeliverable.objects.filter(company=company, deliverable_type="application_packet").count() == 0
+    assert (
+        ServiceDeliverable.objects.filter(
+            company=company, deliverable_type="job_liveness_receipt"
+        ).count()
+        == 1
+    )
+    assert (
+        ServiceDeliverable.objects.filter(
+            company=company, deliverable_type="application_packet"
+        ).count()
+        == 0
+    )
+    assert result.opportunity_id is not None
     opportunity = CompanyOpportunity.objects.get(id=result.opportunity_id)
     assert opportunity.status == "lost"
     assert opportunity.metadata_json["career_ops"]["application_status"] == "discarded"
 
 
-def test_pipeline_persists_reference_like_evaluation_packet_and_answers_for_strong_match(user: User) -> None:
+def test_pipeline_persists_reference_like_evaluation_packet_and_answers_for_strong_match(
+    user: User,
+) -> None:
     company = _create_company(user)
     _add_base_cv(company)
 
@@ -163,6 +182,7 @@ def test_pipeline_persists_reference_like_evaluation_packet_and_answers_for_stro
     assert packet["evaluation"]["score"] >= 4.5
     assert packet["evaluation"]["archetype"]["primary"] == "Agentic / Automation"
     assert len(packet["artifacts"]["application_answers"]) == 5
+    assert result.opportunity_id is not None
     opportunity = CompanyOpportunity.objects.get(id=result.opportunity_id)
     assert opportunity.metadata_json["career_ops"]["score"] >= 4.5
     assert opportunity.metadata_json["career_ops"]["tracker_status"] == "evaluated"

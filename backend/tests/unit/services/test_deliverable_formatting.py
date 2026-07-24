@@ -11,11 +11,13 @@ from application.services.deliverable_formatting import (
     FormatDeliverablesRequest,
     format_service_deliverables,
 )
+from application.services.tenancy import ensure_default_organization
 from infrastructure.orm.models import (
     Asset,
     AssetVersion,
     CompanyProgram,
     Graph,
+    Organization,
     ProgramStageState,
     ServiceCatalogItem,
     ServiceDeliverable,
@@ -26,12 +28,20 @@ from infrastructure.orm.models import (
 pytestmark = pytest.mark.django_db
 
 
+def _organization(user: User) -> Organization:
+    ensure_default_organization(user)
+    organization = user.default_organization
+    assert organization is not None
+    return organization
+
+
 def _company(user: User, name: str) -> Graph:
+    organization = _organization(user)
     return cast(
         Graph,
         Graph.objects.create(
             owner=user,
-            organization=user.default_organization,
+            organization=organization,
             name=name,
             description="Formatting test company.",
         ),
@@ -45,8 +55,9 @@ def _engagement(
     slug: str,
     profile_ref: str | None = None,
 ) -> ServiceEngagement:
+    organization = _organization(user)
     catalog = ServiceCatalogItem.objects.create(
-        organization=company.organization,
+        organization=organization,
         slug=slug,
         title=slug.replace("-", " ").title(),
         status="active",
@@ -55,7 +66,7 @@ def _engagement(
     )
     metadata = {"formatting": {"profile_ref": profile_ref}} if profile_ref else {}
     return ServiceEngagement.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         catalog_item=catalog,
         status="in_progress",
@@ -72,9 +83,10 @@ def _program(
     *,
     profile_ref: str | None = None,
 ) -> CompanyProgram:
+    organization = _organization(user)
     metadata = {"formatting": {"profile_ref": profile_ref}} if profile_ref else {}
     program = CompanyProgram.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         template_id="formatting.test.v1",
         display_label="Formatting Program",
@@ -86,7 +98,7 @@ def _program(
         created_by=user,
     )
     ProgramStageState.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         program=program,
         stage_id="handoff",
@@ -229,6 +241,7 @@ def test_formatting_service_persists_generic_derived_artifacts_for_distinct_busi
     assert result.quality_result.status == "passed"
 
     for artifact in result.artifacts:
+        assert artifact.asset_version_id is not None
         version = AssetVersion.objects.get(id=artifact.asset_version_id)
         provenance = version.provenance_json["render_provenance"]
         assert provenance["profile"]["profile_ref"] == result.profile.profile_ref
@@ -240,6 +253,7 @@ def test_formatting_service_persists_generic_derived_artifacts_for_distinct_busi
         ]
 
     markdown_artifact = result.artifact_by_format("markdown_report")
+    assert markdown_artifact.asset_version_id is not None
     markdown_version = AssetVersion.objects.get(id=markdown_artifact.asset_version_id)
     assert markdown_version.provenance_json["inline_content"] == markdown_artifact.text
     assert company_name in markdown_artifact.text
@@ -357,6 +371,7 @@ def test_formatting_service_persists_pdf_and_packages_it_when_requested(user: Us
     assert result.deferred_formats == ("email_handoff",)
 
     pdf = result.artifact_by_format("pdf_report")
+    assert pdf.asset_version_id is not None
     pdf_version = AssetVersion.objects.select_related("asset").get(id=pdf.asset_version_id)
     assert pdf.filename.endswith(".pdf")
     assert pdf.mime_type == "application/pdf"

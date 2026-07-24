@@ -103,7 +103,10 @@ def test_professional_resume_header_uses_requested_contact_line_without_eu_remot
     )
 
     assert "MIGUEL ATHIE" in artifacts.text
-    assert "Mexico City, MX • miguel.athien@gmail.com • +52 55 3900 3599 • GitHub: https://github.com/GreyCrossX" in artifacts.text
+    assert (
+        "Mexico City, MX • miguel.athien@gmail.com • +52 55 3900 3599 • GitHub: https://github.com/GreyCrossX"
+        in artifacts.text
+    )
     assert "EU Remote" not in artifacts.text
     assert "Mexico / Spain" not in artifacts.text
 
@@ -149,5 +152,5 @@ def test_professional_resume_groups_skills_in_dense_category_lines() -> None:
     text = artifacts.text
     assert "Backend / APIs: Python, FastAPI, Django, Go" in text
     assert "AI Engineering: RAG, LangGraph, agentic workflows" in text
-    skills_block = text[text.index("TECHNICAL SKILLS"): text.index("SELECTED EXPERIENCE")]
+    skills_block = text[text.index("TECHNICAL SKILLS") : text.index("SELECTED EXPERIENCE")]
     assert skills_block.count("\n- ") <= 3

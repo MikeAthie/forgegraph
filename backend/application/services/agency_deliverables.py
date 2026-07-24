@@ -410,8 +410,10 @@ def _source_evidence_lines(
         return [f"- {item['label']} (`{item['type']}`): {item['status']}" for item in package_items]
 
     lines = [f"- Source kinds: {', '.join(definition.source_kinds)}."]
-    deployment = sources.get("deployment") if isinstance(sources.get("deployment"), dict) else {}
-    performance = sources.get("performance") if isinstance(sources.get("performance"), dict) else {}
+    raw_deployment = sources.get("deployment")
+    deployment: dict[str, Any] = raw_deployment if isinstance(raw_deployment, dict) else {}
+    raw_performance = sources.get("performance")
+    performance: dict[str, Any] = raw_performance if isinstance(raw_performance, dict) else {}
     if definition.type in {"connector_gap_report", "execution_receipt"}:
         lines.extend(_deployment_lines(deployment))
     if definition.type == "performance_report":
@@ -430,8 +432,10 @@ def _deployment_lines(deployment: dict[str, Any]) -> list[str]:
         label = str(channel.get("label") or channel.get("id") or "channel")
         status = str(channel.get("status") or "unknown")
         reason = str(channel.get("blocked_reason_code") or channel.get("blocked_reason") or "")
-        receipt = channel.get("receipt") if isinstance(channel.get("receipt"), dict) else {}
-        result = receipt.get("result") if isinstance(receipt.get("result"), dict) else {}
+        raw_receipt = channel.get("receipt")
+        receipt: dict[str, Any] = raw_receipt if isinstance(raw_receipt, dict) else {}
+        raw_result = receipt.get("result")
+        result: dict[str, Any] = raw_result if isinstance(raw_result, dict) else {}
         result_status = str(result.get("status") or "")
         detail = f"- {label}: {status}"
         if reason:
@@ -536,7 +540,8 @@ def _channels(deployment: dict[str, Any]) -> list[dict[str, Any]]:
     channels = deployment.get("channels")
     if isinstance(channels, list):
         return [channel for channel in channels if isinstance(channel, dict)]
-    policy = deployment.get("policy") if isinstance(deployment.get("policy"), dict) else {}
+    raw_policy = deployment.get("policy")
+    policy: dict[str, Any] = raw_policy if isinstance(raw_policy, dict) else {}
     policy_channels = policy.get("channels")
     if isinstance(policy_channels, list):
         return [channel for channel in policy_channels if isinstance(channel, dict)]

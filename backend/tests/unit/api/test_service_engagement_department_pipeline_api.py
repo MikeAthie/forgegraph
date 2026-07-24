@@ -63,8 +63,9 @@ def _catalog_item(user: User) -> ServiceCatalogItem:
 
 
 def _engagement(user: User, company: Graph) -> ServiceEngagement:
+    organization = _organization(user)
     return ServiceEngagement.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         catalog_item=_catalog_item(user),
         status="in_progress",

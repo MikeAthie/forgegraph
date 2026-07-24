@@ -88,11 +88,16 @@ def test_run_career_ops_first_prompt_command_accepts_live_posting_json_file(user
         "https://jobs.example.test/eu-live/backend-ai-engineer"
     ]
     whiteboard = WorkWhiteboard.objects.get(id=payload["whiteboard_id"])
-    assert whiteboard.metadata_json["career_ops"]["first_prompt"]["source_mode"] == "live_url_discovery"
+    assert (
+        whiteboard.metadata_json["career_ops"]["first_prompt"]["source_mode"]
+        == "live_url_discovery"
+    )
     assert CompanyOpportunity.objects.filter(company_id=payload["company_id"]).count() == 1
 
 
-def test_run_career_ops_first_prompt_command_routes_live_search_skill_results(user, tmp_path) -> None:
+def test_run_career_ops_first_prompt_command_routes_live_search_skill_results(
+    user, tmp_path
+) -> None:
     cv_text_file = tmp_path / "cv.txt"
     cv_text_file.write_text(
         "Miguel Athie\nPython FastAPI Django PostgreSQL Redis RAG LangGraph agentic workflows backend APIs.",

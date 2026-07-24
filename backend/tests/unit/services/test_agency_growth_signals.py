@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -43,7 +43,7 @@ def _company(user: User) -> tuple[Graph, GraphVersion]:
     return company, version
 
 
-def _engagement(company: Graph, user: User, *, metadata: dict) -> ServiceEngagement:
+def _engagement(company: Graph, user: User, *, metadata: dict[str, Any]) -> ServiceEngagement:
     organization = company.organization
     assert organization is not None
     catalog = ServiceCatalogItem.objects.create(

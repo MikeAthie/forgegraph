@@ -79,8 +79,9 @@ def _catalog_item(user: User) -> ServiceCatalogItem:
 
 
 def _engagement(user: User, company: Graph) -> ServiceEngagement:
+    organization = _organization(user)
     return ServiceEngagement.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         catalog_item=_catalog_item(user),
         status="in_progress",
@@ -245,12 +246,13 @@ def test_approval_requires_completed_qa(user):
 def test_attach_deliverable_and_asset_records_lineage(user):
     departments = _departments(user)
     company = _company(user)
+    organization = _organization(user)
     engagement = _engagement(user, company)
     create_pipeline_for_engagement(engagement, created_by=user)
     strategy = stage_state_for_engagement(engagement, "strategy_research")
 
     asset = Asset.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         title="Legacy strategy brief",
         asset_type="document",
@@ -266,7 +268,7 @@ def test_attach_deliverable_and_asset_records_lineage(user):
         provenance_json={"source": "test"},
     )
     deliverable = ServiceDeliverable.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         engagement=engagement,
         title="Legacy strategy brief",

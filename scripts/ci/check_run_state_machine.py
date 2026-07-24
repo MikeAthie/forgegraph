@@ -16,6 +16,8 @@ IGNORED_PARTS = {
     "migrations",
     "tests",
     "testsprite_tests",
+    ".hermes",
+    ".uv-review-venv",
     ".venv",
 }
 
@@ -28,7 +30,7 @@ QUERYSET_STATUS_UPDATE = re.compile(r"""Run\.objects\.filter\([^)]*\)\.update\(\
 def _ignored(path: Path) -> bool:
     if path.relative_to(REPO_ROOT) == STATE_MACHINE:
         return True
-    return any(part in IGNORED_PARTS for part in path.parts)
+    return any(part in IGNORED_PARTS or part.startswith(".venv") for part in path.parts)
 
 
 def main() -> int:

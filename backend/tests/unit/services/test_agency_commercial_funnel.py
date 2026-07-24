@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -47,7 +47,9 @@ def _company(user: User) -> tuple[Graph, GraphVersion]:
     return company, version
 
 
-def _catalog(company: Graph, *, pricing_metadata: dict | None = None) -> ServiceCatalogItem:
+def _catalog(
+    company: Graph, *, pricing_metadata: dict[str, Any] | None = None
+) -> ServiceCatalogItem:
     organization = company.organization
     assert organization is not None
     return ServiceCatalogItem.objects.create(
@@ -70,7 +72,7 @@ def _opportunity(
     user: User,
     *,
     status: str = "qualified",
-    metadata: dict | None = None,
+    metadata: dict[str, Any] | None = None,
     signal: CompanySignal | None = None,
     title: str = "Lifecycle growth proposal",
 ) -> CompanyOpportunity:

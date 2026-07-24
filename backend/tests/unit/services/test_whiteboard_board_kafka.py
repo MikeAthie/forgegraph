@@ -106,6 +106,9 @@ class _Consumer:
         self.fail_commit = fail_commit
         self.committed = 0
 
+    def subscribe(self, topics: list[str]) -> None:
+        _ = topics
+
     def poll(self, timeout: float | None = None) -> _Message | None:
         _ = timeout
         if not self.messages:

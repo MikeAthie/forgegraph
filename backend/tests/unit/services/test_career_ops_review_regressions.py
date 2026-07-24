@@ -33,13 +33,17 @@ def _create_company(user: User, *, name: str) -> Graph:
     organization = user.default_organization
     assert organization is not None
     company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name=name))
-    GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
+    GraphVersion.objects.create(
+        graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+    )
     return company
 
 
 def _add_base_cv(company: Graph) -> None:
+    organization = company.organization
+    assert organization is not None
     Asset.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         title="Base CV",
         asset_type="document",
@@ -60,8 +64,12 @@ def _posting(index: int, *, employer: str = "Acme AI") -> dict[str, object]:
 def test_pipeline_keeps_deliverables_isolated_per_opportunity(user: User) -> None:
     company = _create_company(user, name="CareerOps Multi Opp Co")
 
-    first = run_career_ops_url_pipeline(company=company, actor=user, posting=_posting(1), idempotency_key="multi:1")
-    second = run_career_ops_url_pipeline(company=company, actor=user, posting=_posting(2), idempotency_key="multi:2")
+    first = run_career_ops_url_pipeline(
+        company=company, actor=user, posting=_posting(1), idempotency_key="multi:1"
+    )
+    second = run_career_ops_url_pipeline(
+        company=company, actor=user, posting=_posting(2), idempotency_key="multi:2"
+    )
 
     assert first.opportunity_id != second.opportunity_id
     assert len(set(first.deliverable_ids).intersection(second.deliverable_ids)) == 0
@@ -81,7 +89,9 @@ def test_packet_readiness_rejects_packet_from_another_company_even_same_org(user
     assert other_result.packet_asset_version_id is not None
     packet_version = AssetVersion.objects.get(id=other_result.packet_asset_version_id)
 
-    readiness = check_career_ops_packet_readiness(company=allowed_company, packet_version=packet_version)
+    readiness = check_career_ops_packet_readiness(
+        company=allowed_company, packet_version=packet_version
+    )
 
     assert readiness.status == "blocked"
     assert readiness.checks["packet_belongs_to_company"] == "blocked"
@@ -153,7 +163,9 @@ def test_request_packet_approval_replay_preserves_existing_approved_decision(use
         approval_task=approval_task,
         opportunity=opportunity,
         packet_version=packet_version,
-        deliverable_versions=[{"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}],
+        deliverable_versions=[
+            {"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}
+        ],
     )
     decision.status = "approved"
     decision.resolution_json = {"approved_by": str(user.id)}
@@ -164,7 +176,9 @@ def test_request_packet_approval_replay_preserves_existing_approved_decision(use
         approval_task=approval_task,
         opportunity=opportunity,
         packet_version=packet_version,
-        deliverable_versions=[{"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}],
+        deliverable_versions=[
+            {"deliverable_id": str(deliverable.id), "asset_version_id": str(packet_version.id)}
+        ],
     )
 
     assert replay.id == decision.id

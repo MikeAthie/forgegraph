@@ -61,6 +61,7 @@ dev = [
 target-version = "py312"
 line-length = 100
 extend-exclude = [
+    ".hermes",
     "infrastructure/grpc/engine_pb2.py",
     "infrastructure/grpc/engine_pb2_grpc.py",
     "infrastructure/orm/migrations",
@@ -94,6 +95,7 @@ plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
 strict = true
 ignore_missing_imports = true
 exclude = [
+    "\\.hermes/.*\\.py$",
     "infrastructure/grpc/engine_pb2\\.py$",
     "infrastructure/grpc/engine_pb2_grpc\\.py$",
     "infrastructure/orm/migrations/.*\\.py$",

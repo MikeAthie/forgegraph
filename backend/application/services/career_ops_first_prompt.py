@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from django.db import transaction
 from django.utils import timezone
@@ -266,7 +266,9 @@ def run_career_ops_first_prompt(
     )
 
 
-def ensure_career_ops_company(*, actor: User, candidate: dict[str, Any], idempotency_key: str) -> Graph:
+def ensure_career_ops_company(
+    *, actor: User, candidate: dict[str, Any], idempotency_key: str
+) -> Graph:
     organization = actor.default_organization
     if organization is None:
         raise ValueError("CareerOps company requires an organization.")
@@ -285,17 +287,25 @@ def ensure_career_ops_company(*, actor: User, candidate: dict[str, Any], idempot
     if company.name != expected_name:
         company.name = expected_name
         updates.append("name")
-    if company.description != "ForgeGraph-native CareerOps workspace for candidate job-search operations.":
-        company.description = "ForgeGraph-native CareerOps workspace for candidate job-search operations."
+    if (
+        company.description
+        != "ForgeGraph-native CareerOps workspace for candidate job-search operations."
+    ):
+        company.description = (
+            "ForgeGraph-native CareerOps workspace for candidate job-search operations."
+        )
         updates.append("description")
     if updates:
         company.save(update_fields=[*updates, "updated_at"])
     ensure_career_ops_graph_version(company=company)
-    return company
+    return cast(Graph, company)
 
 
 def ensure_career_ops_graph_version(*, company: Graph) -> GraphVersion:
-    latest = GraphVersion.objects.filter(graph=company).order_by("-version").first()
+    latest = cast(
+        GraphVersion | None,
+        GraphVersion.objects.filter(graph=company).order_by("-version").first(),
+    )
     graph_json = {
         "nodes": [
             {"id": slug, "type": "career_ops_department", "label": name}
@@ -310,7 +320,10 @@ def ensure_career_ops_graph_version(*, company: Graph) -> GraphVersion:
     }
     if latest is not None:
         return latest
-    return GraphVersion.objects.create(graph=company, version=1, graph_json=graph_json)
+    return cast(
+        GraphVersion,
+        GraphVersion.objects.create(graph=company, version=1, graph_json=graph_json),
+    )
 
 
 def ensure_career_ops_departments(*, company: Graph) -> list[DepartmentRegistry]:
@@ -352,7 +365,9 @@ def ensure_first_prompt_program(
     if organization is None:
         raise ValueError("CareerOps program requires an organization-scoped company.")
     external_key = f"career-ops:first-prompt:{idempotency_key}"
-    current_stage_id = "prepare_tailored_cv" if source_mode == "live_url_discovery" else "opportunity_shortlist"
+    current_stage_id = (
+        "prepare_tailored_cv" if source_mode == "live_url_discovery" else "opportunity_shortlist"
+    )
     program, created = CompanyProgram.objects.get_or_create(
         company=company,
         external_key=external_key,
@@ -404,7 +419,9 @@ def ensure_first_prompt_stages(
 ) -> list[ProgramStageState]:
     stages: list[ProgramStageState] = []
     active_stage_ids = {str(stage["id"]) for stage in stage_definitions}
-    ProgramStageState.objects.filter(program=program).exclude(stage_id__in=active_stage_ids).delete()
+    ProgramStageState.objects.filter(program=program).exclude(
+        stage_id__in=active_stage_ids
+    ).delete()
     for sequence, stage in enumerate(stage_definitions, start=1):
         template = {
             "id": stage["id"],
@@ -424,7 +441,9 @@ def ensure_first_prompt_stages(
                 "label": str(stage["label"]),
                 "sequence": sequence,
                 "status": str(stage["status"]),
-                "started_at": timezone.now() if stage["status"] in {"completed", "in_progress"} else None,
+                "started_at": timezone.now()
+                if stage["status"] in {"completed", "in_progress"}
+                else None,
                 "completed_at": timezone.now() if stage["status"] == "completed" else None,
                 "state_json": {"template": template, "department_slug": stage["department_slug"]},
             },
@@ -503,10 +522,14 @@ def build_live_possible_postings(
             continue
         if not _visa_ok(locations=locations, authorized_regions=authorized_regions):
             continue
-        score, fit_reasons = _live_fit_score(raw=raw, candidate_skills=candidate_skills, target_salary=target_salary)
+        score, fit_reasons = _live_fit_score(
+            raw=raw, candidate_skills=candidate_skills, target_salary=target_salary
+        )
         if score < 4.0:
             continue
-        source_mode = str(raw.get("source_mode") or "live_url_discovery").strip() or "live_url_discovery"
+        source_mode = (
+            str(raw.get("source_mode") or "live_url_discovery").strip() or "live_url_discovery"
+        )
         source_query = str(raw.get("source_query") or "").strip()
         posting = {
             "title": str(raw.get("title") or "Untitled role").strip(),
@@ -530,10 +553,15 @@ def build_live_possible_postings(
         if source_query:
             posting["source_query"] = source_query
         results.append(sanitize_outbox_payload(posting))
-    return sorted(results, key=lambda item: (-float(item.get("score") or 0), int(item.get("source_rank") or 0)))[:10]
+    return sorted(
+        results,
+        key=lambda item: (-float(item.get("score") or 0), int(item.get("source_rank") or 0)),
+    )[:10]
 
 
-def build_initial_possible_postings(*, candidate: dict[str, Any], constraints: dict[str, Any]) -> list[dict[str, Any]]:
+def build_initial_possible_postings(
+    *, candidate: dict[str, Any], constraints: dict[str, Any]
+) -> list[dict[str, Any]]:
     del candidate
     authorized_regions = list(constraints.get("work_authorized_regions") or [])
     target_salary = constraints.get("target_salary_usd") or 60000
@@ -544,7 +572,11 @@ def build_initial_possible_postings(*, candidate: dict[str, Any], constraints: d
             "location": "Spain / EU Remote",
             "locations": ["Spain", "European Union", "Remote"],
             "salary_range_usd": [55000, 75000],
-            "fit_reasons": ["Python/FastAPI/Django backend", "agentic workflows", "PostgreSQL and Redis"],
+            "fit_reasons": [
+                "Python/FastAPI/Django backend",
+                "agentic workflows",
+                "PostgreSQL and Redis",
+            ],
         },
         {
             "title": "Backend Engineer, Agentic Workflows",
@@ -560,7 +592,11 @@ def build_initial_possible_postings(*, candidate: dict[str, Any], constraints: d
             "location": "Madrid / Hybrid Spain",
             "locations": ["Spain", "European Union"],
             "salary_range_usd": [52000, 68000],
-            "fit_reasons": ["law background", "Lex Toolkit legal agents", "FastAPI/Next.js full-stack"],
+            "fit_reasons": [
+                "law background",
+                "Lex Toolkit legal agents",
+                "FastAPI/Next.js full-stack",
+            ],
         },
         {
             "title": "Python Backend Engineer, Data Integrations",
@@ -576,7 +612,11 @@ def build_initial_possible_postings(*, candidate: dict[str, Any], constraints: d
             "location": "Mexico / Remote",
             "locations": ["Mexico", "Remote"],
             "salary_range_usd": [45000, 65000],
-            "fit_reasons": ["automation consulting", "stakeholder translation", "RAG and LLM workflows"],
+            "fit_reasons": [
+                "automation consulting",
+                "stakeholder translation",
+                "RAG and LLM workflows",
+            ],
         },
         {
             "title": "US-only Senior Backend Engineer",
@@ -661,7 +701,9 @@ def _attach_first_prompt_stage_outputs(
     source_mode: str = "deterministic_fake_provider",
 ) -> None:
     stage_id = "score_fit" if source_mode == "live_url_discovery" else "market_role_discovery"
-    output_type = "live_job_shortlist" if source_mode == "live_url_discovery" else "possible_job_list"
+    output_type = (
+        "live_job_shortlist" if source_mode == "live_url_discovery" else "possible_job_list"
+    )
     stage = ProgramStageState.objects.get(program=program, stage_id=stage_id)
     state = dict(stage.state_json or {})
     task = dict(state.get(TASK_METADATA_KEY) or {})
@@ -684,7 +726,10 @@ def _fit_score(*, item: dict[str, Any], target_salary: float) -> float:
     score = 4.0
     if salary_low <= target_salary <= salary_high:
         score += 0.4
-    if any("AI" in str(reason) or "agent" in str(reason).casefold() for reason in item.get("fit_reasons", [])):
+    if any(
+        "AI" in str(reason) or "agent" in str(reason).casefold()
+        for reason in item.get("fit_reasons", [])
+    ):
         score += 0.3
     return round(min(score, 5.0), 1)
 
@@ -696,7 +741,8 @@ def _live_fit_score(
     target_salary: float,
 ) -> tuple[float, list[str]]:
     haystack = " ".join(
-        str(raw.get(key) or "") for key in ("title", "company", "description", "summary", "location")
+        str(raw.get(key) or "")
+        for key in ("title", "company", "description", "summary", "location")
     ).casefold()
     matched_skills = [skill for skill in candidate_skills if skill.casefold() in haystack]
     fit_reasons: list[str] = []
@@ -704,7 +750,9 @@ def _live_fit_score(
     if matched_skills:
         fit_reasons.append("Matched CV skills: " + ", ".join(matched_skills[:6]))
         score += min(1.5, 0.3 * len(matched_skills))
-    if any(token in haystack for token in ("backend", "platform", "api", "apis", "agent", "ai", "rag")):
+    if any(
+        token in haystack for token in ("backend", "platform", "api", "apis", "agent", "ai", "rag")
+    ):
         fit_reasons.append("Role language aligns with backend/AI platform work")
         score += 0.8
     if any(token in haystack for token in ("workflow", "workflows", "automation", "orchestration")):

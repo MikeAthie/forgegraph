@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from io import StringIO
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -45,7 +46,9 @@ def test_run_career_ops_e2e_command_persists_forgegraph_state(user: User) -> Non
     assert payload["processed_count"] == 2
     assert payload["external_side_effects_allowed"] is False
     assert payload["live_send_allowed"] is False
-    assert payload["docker_command"].startswith("docker compose exec backend python manage.py run_career_ops_e2e")
+    assert payload["docker_command"].startswith(
+        "docker compose exec backend python manage.py run_career_ops_e2e"
+    )
 
     company = Graph.objects.get(id=payload["company_id"])
     assert company.name == "CareerOps Docker Command Test Co"
@@ -54,12 +57,21 @@ def test_run_career_ops_e2e_command_persists_forgegraph_state(user: User) -> Non
     assert "https://github.com/MikeAthie/ForgeGraph" in json.dumps(base_cv.metadata_json)
     assert CompanySignal.objects.filter(company=company, domain_context="career_ops").count() == 2
     assert CompanyOpportunity.objects.filter(company=company).count() == 2
-    assert Run.objects.filter(organization=company.organization, input_json__career_ops__pipeline="url_intake").count() == 2
+    assert (
+        Run.objects.filter(
+            organization=company.organization, input_json__career_ops__pipeline="url_intake"
+        ).count()
+        == 2
+    )
     assert TaskRecord.objects.filter(execution__graph_version__graph=company).count() >= 12
     assert DecisionRecord.objects.filter(execution__graph_version__graph=company).count() == 2
     assert StateProjection.objects.filter(company=company).exists()
 
-    deliverable_types = set(ServiceDeliverable.objects.filter(company=company).values_list("deliverable_type", flat=True))
+    deliverable_types = set(
+        ServiceDeliverable.objects.filter(company=company).values_list(
+            "deliverable_type", flat=True
+        )
+    )
     assert deliverable_types >= {
         "job_liveness_receipt",
         "job_evaluation_report",
@@ -86,21 +98,30 @@ def test_run_career_ops_e2e_command_persists_forgegraph_state(user: User) -> Non
         assert pdf_version.mime_type == "application/pdf"
         assert pdf_version.provenance_json["career_ops"]["external_side_effects_allowed"] is False
         text_version = AssetVersion.objects.get(id=packet["ats_resume_text_asset_version_id"])
-        text_content = base64.b64decode(text_version.provenance_json["inline_content_base64"]).decode("utf-8")
+        text_content = base64.b64decode(
+            text_version.provenance_json["inline_content_base64"]
+        ).decode("utf-8")
         assert "Cambridge English C2 Proficiency" in text_content
-
 
 
 def test_run_career_ops_e2e_command_can_deliver_whatsapp_handoff(user: User, tmp_path) -> None:
     out = StringIO()
-    bridge_posts: list[tuple[str, dict]] = []
+    bridge_posts: list[tuple[str, dict[str, Any]]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict | None = None, timeout: int = 0):
+    def fake_post(
+        url: str,
+        *,
+        json: dict[str, Any],
+        headers: dict[str, Any] | None = None,
+        timeout: int = 0,
+    ) -> Mock:
         bridge_posts.append((url, json))
         response = Mock()
         response.raise_for_status.return_value = None
         if url.endswith("/send-media"):
-            response.json.return_value = {"messageId": f"media-{len([u for u, _ in bridge_posts if u.endswith('/send-media')])}"}
+            response.json.return_value = {
+                "messageId": f"media-{len([u for u, _ in bridge_posts if u.endswith('/send-media')])}"
+            }
         else:
             response.json.return_value = {"messageId": "summary-text-1"}
         return response
@@ -109,8 +130,15 @@ def test_run_career_ops_e2e_command_can_deliver_whatsapp_handoff(user: User, tmp
     health.raise_for_status.return_value = None
     health.json.return_value = {"status": "connected"}
 
-    with patch("infrastructure.orm.management.commands.run_career_ops_e2e.requests.get", return_value=health), patch(
-        "infrastructure.orm.management.commands.run_career_ops_e2e.requests.post", side_effect=fake_post
+    with (
+        patch(
+            "infrastructure.orm.management.commands.run_career_ops_e2e.requests.get",
+            return_value=health,
+        ),
+        patch(
+            "infrastructure.orm.management.commands.run_career_ops_e2e.requests.post",
+            side_effect=fake_post,
+        ),
     ):
         call_command(
             "run_career_ops_e2e",
@@ -150,4 +178,9 @@ def test_run_career_ops_e2e_command_can_deliver_whatsapp_handoff(user: User, tmp
     message = CommunicationMessage.objects.get(id=delivery["communication_message_id"])
     assert message.company == company
     assert message.attachments.count() >= 4
-    assert CommunicationEventReceipt.objects.filter(company=company, consumer_group="career_ops_e2e.whatsapp").count() == 3
+    assert (
+        CommunicationEventReceipt.objects.filter(
+            company=company, consumer_group="career_ops_e2e.whatsapp"
+        ).count()
+        == 3
+    )

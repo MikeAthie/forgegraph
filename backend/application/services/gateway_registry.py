@@ -562,20 +562,21 @@ def _credential_check(
             "status": "ok",
             "message": "No credential required.",
         }
-    if connection.credential_id is None:
+    credential = connection.credential
+    if credential is None:
         return {
             "code": "credential_missing",
             "status": "error",
             "message": "Credential is not attached.",
         }
-    metadata = normalize_token_metadata(connection.credential.token_metadata)
+    metadata = normalize_token_metadata(credential.token_metadata)
     if is_credential_revoked(metadata):
         return {
             "code": "credential_revoked",
             "status": "error",
             "message": "Credential is revoked.",
         }
-    if connection.credential.provider != capability.credential_provider:
+    if credential.provider != capability.credential_provider:
         return {
             "code": "credential_provider_mismatch",
             "status": "warning",

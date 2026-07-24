@@ -23,8 +23,13 @@ def _create_company(user: User) -> Graph:
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Quality Co"))
-    GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
+    company = cast(
+        Graph,
+        Graph.objects.create(owner=user, organization=organization, name="CareerOps Quality Co"),
+    )
+    GraphVersion.objects.create(
+        graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+    )
     return company
 
 
@@ -46,8 +51,10 @@ def _packet_version(company: Graph, user: User) -> AssetVersion:
 
 
 def _base_cv(company: Graph) -> Asset:
+    organization = company.organization
+    assert organization is not None
     return Asset.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         title="Base CV",
         asset_type="document",
@@ -63,7 +70,9 @@ def _base_cv(company: Graph) -> Asset:
     )
 
 
-def _deliverable_for_packet(packet_version: AssetVersion, deliverable_type: str) -> ServiceDeliverable:
+def _deliverable_for_packet(
+    packet_version: AssetVersion, deliverable_type: str
+) -> ServiceDeliverable:
     opportunity_id = packet_version.provenance_json["career_ops"]["opportunity"]["id"]
     return ServiceDeliverable.objects.get(
         company=packet_version.asset.company,
@@ -135,7 +144,9 @@ def test_packet_readiness_blocks_resume_without_required_ats_sections(user: User
     version = _packet_version(company, user)
     payload = version.provenance_json["career_ops"]
     resume = payload["artifacts"]["tailored_resume"]
-    resume["sections"] = [section for section in resume["sections"] if section["heading"] != "EDUCATION"]
+    resume["sections"] = [
+        section for section in resume["sections"] if section["heading"] != "EDUCATION"
+    ]
     version.provenance_json = {"career_ops": payload}
     version.save(update_fields=["provenance_json"])
 
@@ -168,7 +179,9 @@ def test_packet_readiness_blocks_internal_leakage_in_resume_text(user: User) -> 
     _base_cv(company)
     version = _packet_version(company, user)
     payload = version.provenance_json["career_ops"]
-    payload["artifacts"]["tailored_resume"]["plain_text"] = "This leaks Hermes metadata_json prompt details."
+    payload["artifacts"]["tailored_resume"]["plain_text"] = (
+        "This leaks Hermes metadata_json prompt details."
+    )
     version.provenance_json = {"career_ops": payload}
     version.save(update_fields=["provenance_json"])
 
@@ -238,7 +251,9 @@ def test_packet_readiness_blocks_failed_ats_pdf_parseability_report(user: User) 
     _base_cv(company)
     version = _packet_version(company, user)
     report_deliverable = _deliverable_for_packet(version, "ats_resume_parseability_report")
-    report_version = report_deliverable.artifact.versions.latest("created_at")
+    report_asset = report_deliverable.artifact
+    assert report_asset is not None
+    report_version = report_asset.versions.latest("created_at")
     report_payload = report_version.provenance_json["career_ops"]
     report_payload["status"] = "blocked"
     report_payload["blockers"] = ["missing_section:EDUCATION"]
@@ -269,7 +284,9 @@ def test_packet_readiness_blocks_missing_ats_pdf_deliverable(user: User) -> None
     assert readiness.live_send_allowed is False
 
 
-def test_packet_readiness_still_blocks_without_exact_version_approval_when_content_quality_passes(user: User) -> None:
+def test_packet_readiness_still_blocks_without_exact_version_approval_when_content_quality_passes(
+    user: User,
+) -> None:
     company = _create_company(user)
     _base_cv(company)
     version = _packet_version(company, user)

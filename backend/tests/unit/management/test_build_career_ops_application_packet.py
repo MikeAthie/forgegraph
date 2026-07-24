@@ -21,14 +21,23 @@ def _create_company(user: User) -> Graph:
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    company = cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Packet Command Co"))
-    GraphVersion.objects.create(graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}})
+    company = cast(
+        Graph,
+        Graph.objects.create(
+            owner=user, organization=organization, name="CareerOps Packet Command Co"
+        ),
+    )
+    GraphVersion.objects.create(
+        graph=company, version=1, graph_json={"nodes": [], "edges": [], "metadata": {}}
+    )
     return company
 
 
 def _base_cv(company: Graph) -> Asset:
+    organization = company.organization
+    assert organization is not None
     return Asset.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         title="Base CV",
         asset_type="document",
@@ -44,7 +53,9 @@ def _base_cv(company: Graph) -> Asset:
     )
 
 
-def test_build_career_ops_application_packet_command_builds_existing_opportunity_packet(user: User) -> None:
+def test_build_career_ops_application_packet_command_builds_existing_opportunity_packet(
+    user: User,
+) -> None:
     company = _create_company(user)
     _base_cv(company)
     signal = record_scanned_job(
@@ -90,7 +101,9 @@ def test_build_career_ops_application_packet_command_builds_existing_opportunity
     assert payload["external_side_effects_allowed"] is False
     assert {
         deliverable.deliverable_type
-        for deliverable in ServiceDeliverable.objects.filter(company=company, metadata_json__career_ops__opportunity_id=str(opportunity.id))
+        for deliverable in ServiceDeliverable.objects.filter(
+            company=company, metadata_json__career_ops__opportunity_id=str(opportunity.id)
+        )
     } >= {
         "tailored_resume_html",
         "ats_resume_text",

@@ -19,7 +19,10 @@ def _create_company(user: User) -> Graph:
     ensure_default_organization(user)
     organization = user.default_organization
     assert organization is not None
-    return cast(Graph, Graph.objects.create(owner=user, organization=organization, name="CareerOps Packet Co"))
+    return cast(
+        Graph,
+        Graph.objects.create(owner=user, organization=organization, name="CareerOps Packet Co"),
+    )
 
 
 def _opportunity(company: Graph, user: User):
@@ -39,8 +42,10 @@ def _opportunity(company: Graph, user: User):
 
 
 def _base_cv(company: Graph) -> Asset:
+    organization = company.organization
+    assert organization is not None
     return Asset.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         title="Base CV",
         asset_type="document",
@@ -90,7 +95,7 @@ def test_build_packet_payloads_detects_base_cv_asset(user: User) -> None:
     ats_simulation = payloads.packet["artifacts"]["ats_simulation"]
 
     assert resume is not None
-    assert resume["format"] == "ats_resume_v1"
+    assert str(resume["format"]).startswith("ats_resume_v2.")
     assert "FastAPI" in resume["plain_text"]
     assert "AWS Lambda" not in resume["plain_text"]
     assert cover_letter["status"] == "draft"
@@ -104,7 +109,9 @@ def test_build_packet_payloads_detects_base_cv_asset(user: User) -> None:
     assert "ats_send_minimum_passed" in payloads.packet["quality"]
 
 
-def test_build_packet_payloads_treats_live_search_snippet_status_as_unfetched_not_expired(user: User) -> None:
+def test_build_packet_payloads_treats_live_search_snippet_status_as_unfetched_not_expired(
+    user: User,
+) -> None:
     company = _create_company(user)
     _base_cv(company)
     opportunity = _opportunity(company, user)

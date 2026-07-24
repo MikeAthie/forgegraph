@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from django.test import override_settings
 
@@ -87,9 +89,12 @@ def _departments(user: User) -> None:
 
 
 def test_codex_session_runtime_is_feature_flagged():
+    def unused_runner(*_args: Any, **_kwargs: Any) -> CodexSessionRunResult:
+        raise AssertionError("The disabled runtime must not invoke its runner.")
+
     with override_settings(ENABLE_CODEX_SESSION_RUNTIME=False):
         with pytest.raises(CodexSessionRuntimeDisabled):
-            run_codex_session_prompt(prompt="Draft strategy", runner=lambda *_args, **_kwargs: None)
+            run_codex_session_prompt(prompt="Draft strategy", runner=unused_runner)
 
 
 def test_codex_session_runtime_uses_fake_runner_without_leaking_auth():
@@ -149,7 +154,9 @@ def test_codex_output_becomes_stage_owned_deliverable(user):
     complete_stage(strategy, actor=user)
     deliverable.refresh_from_db()
     assert deliverable.status == "ready"
-    assert deliverable.department.slug == "strategy_research"
+    department = deliverable.department
+    assert department is not None
+    assert department.slug == "strategy_research"
     assert deliverable.artifact is not None
     assert deliverable.metadata_json["source"] == "codex_session_runtime"
     assert deliverable.metadata_json["codex_session"]["status"] == "succeeded"

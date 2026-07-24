@@ -314,9 +314,11 @@ def build_launch_readiness_scorecard(
     _normalize_context(context)
     score_overrides = readiness_scores if readiness_scores is not None else scores
     merged_scores = {**DEFAULT_READINESS_SCORES, **dict(score_overrides or {})}
-    dimensions = []
+    dimensions: list[dict[str, Any]] = []
+    dimension_scores: list[int | float] = []
     for dimension in READINESS_DIMENSIONS:
         score = _coerce_score(merged_scores.get(dimension["key"], 0))
+        dimension_scores.append(score)
         dimensions.append(
             {
                 "key": dimension["key"],
@@ -331,8 +333,8 @@ def build_launch_readiness_scorecard(
             }
         )
 
-    average_score = round(mean(item["score"] for item in dimensions), 2)
-    lowest_score = min(item["score"] for item in dimensions)
+    average_score = round(mean(dimension_scores), 2)
+    lowest_score = min(dimension_scores)
     average_gate = average_score >= READINESS_MINIMUM_AVERAGE
     floor_gate = lowest_score >= READINESS_MINIMUM_DIMENSION_SCORE
     ready = average_gate and floor_gate
@@ -385,7 +387,7 @@ def build_campaign_package(
 def render_campaign_package_markdown(
     package_or_context: Mapping[str, Any] | AtlasCampaignContext,
 ) -> str:
-    if _is_package(package_or_context):
+    if isinstance(package_or_context, Mapping) and _is_package(package_or_context):
         package = dict(package_or_context)
     else:
         package = {

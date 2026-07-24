@@ -428,24 +428,24 @@ class ServiceEngagementDepartmentPipelineStageActionView(APIView):
             if action == "start":
                 start_stage(stage, actor=user)
             elif action == "complete":
-                serializer = DepartmentPipelineCompleteStageSerializer(data=request.data)
-                if not serializer.is_valid():
-                    return _validation_error(serializer.errors)
+                complete_serializer = DepartmentPipelineCompleteStageSerializer(data=request.data)
+                if not complete_serializer.is_valid():
+                    return _validation_error(complete_serializer.errors)
                 complete_stage(
                     stage,
-                    outputs=serializer.validated_data.get("outputs") or [],
+                    outputs=complete_serializer.validated_data.get("outputs") or [],
                     actor=user,
                 )
             elif action == "block":
-                serializer = DepartmentPipelineReasonSerializer(data=request.data)
-                if not serializer.is_valid():
-                    return _validation_error(serializer.errors)
-                block_stage(stage, reason=serializer.validated_data["reason"], actor=user)
+                block_serializer = DepartmentPipelineReasonSerializer(data=request.data)
+                if not block_serializer.is_valid():
+                    return _validation_error(block_serializer.errors)
+                block_stage(stage, reason=block_serializer.validated_data["reason"], actor=user)
             elif action == "skip":
-                serializer = DepartmentPipelineReasonSerializer(data=request.data)
-                if not serializer.is_valid():
-                    return _validation_error(serializer.errors)
-                skip_stage(stage, reason=serializer.validated_data["reason"], actor=user)
+                skip_serializer = DepartmentPipelineReasonSerializer(data=request.data)
+                if not skip_serializer.is_valid():
+                    return _validation_error(skip_serializer.errors)
+                skip_stage(stage, reason=skip_serializer.validated_data["reason"], actor=user)
             else:
                 return _not_found("Department pipeline stage action was not found.")
         except DepartmentPipelineError as exc:

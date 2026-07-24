@@ -26,8 +26,8 @@ class Command(BaseCommand):
         parser.add_argument("--json", action="store_true", dest="json_output")
 
     def handle(self, *args: object, **options: object) -> None:
-        company = Graph.objects.get(id=options["company_id"])
-        user = User.objects.get(id=options["user_id"])
+        company = Graph.objects.get(id=str(options["company_id"]))
+        user = User.objects.get(id=str(options["user_id"]))
         result = run_career_ops_url_pipeline(
             company=company,
             actor=user,

@@ -38,7 +38,13 @@ pytestmark = pytest.mark.django_db
 
 
 def _make_run(user, *, status: str = "running") -> Run:
-    graph = Graph.objects.create(owner=user, name="Redis Runtime Failure Graph")
+    organization = user.default_organization
+    assert organization is not None
+    graph = Graph.objects.create(
+        owner=user,
+        organization=organization,
+        name="Redis Runtime Failure Graph",
+    )
     version = GraphVersion.objects.create(
         graph=graph,
         version=1,
@@ -46,6 +52,7 @@ def _make_run(user, *, status: str = "running") -> Run:
     )
     return Run.objects.create(
         owner=user,
+        organization=organization,
         graph_version=version,
         status=status,
         trace_id="trace-before",

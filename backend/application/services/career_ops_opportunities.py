@@ -53,7 +53,9 @@ def record_scanned_job(
         role_title=career_ops["role_title"],
         url=career_ops["job_url"],
     )
-    cooldown = should_skip_due_to_recent_application(company=company, posting=posting, cooldown_days=cooldown_days)
+    cooldown = should_skip_due_to_recent_application(
+        company=company, posting=posting, cooldown_days=cooldown_days
+    )
     career_ops["application_status"] = "discovered"
     career_ops["recent_application_cooldown"] = cooldown
 
@@ -83,11 +85,22 @@ def record_scanned_job(
         signal.summary = _summary_for_posting(career_ops)
         signal.channel = career_ops["provider"]
         signal.contact_alias = career_ops["employer_name"]
-        signal.save(update_fields=["title", "summary", "channel", "contact_alias", "metadata_json", "updated_at"])
+        signal.save(
+            update_fields=[
+                "title",
+                "summary",
+                "channel",
+                "contact_alias",
+                "metadata_json",
+                "updated_at",
+            ]
+        )
     return signal
 
 
-def ensure_opportunity_for_signal(*, signal: CompanySignal, user: User | None) -> CompanyOpportunity | None:
+def ensure_opportunity_for_signal(
+    *, signal: CompanySignal, user: User | None
+) -> CompanyOpportunity | None:
     """Create or replay a job opportunity derived from a CareerOps scanned signal."""
 
     career_ops = _career_ops_metadata(signal.metadata_json)
@@ -215,7 +228,9 @@ def _career_ops_metadata_for_posting(posting: dict[str, Any]) -> dict[str, Any]:
         "provider": str(posting.get("provider") or "manual_url").strip(),
         "salary": posting.get("salary"),
         "score": posting.get("score"),
-        "description": str(posting.get("description") or posting.get("body_text") or posting.get("jd_text") or "").strip(),
+        "description": str(
+            posting.get("description") or posting.get("body_text") or posting.get("jd_text") or ""
+        ).strip(),
         "apply_controls": list(posting.get("apply_controls") or []),
         "http_status": posting.get("http_status"),
         "final_url": str(posting.get("final_url") or url).strip(),

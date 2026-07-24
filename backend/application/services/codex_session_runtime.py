@@ -71,8 +71,11 @@ def run_codex_session_prompt(
     codex_command = str(getattr(settings, "CODEX_SESSION_COMMAND", "codex") or "codex")
     command = [codex_command, "exec"]
     resolved_workdir = str(workdir or getattr(settings, "CODEX_SESSION_WORKDIR", "."))
-    resolved_timeout = int(
-        timeout_seconds or getattr(settings, "CODEX_SESSION_TIMEOUT_SECONDS", 180)
+    configured_timeout = timeout_seconds or getattr(settings, "CODEX_SESSION_TIMEOUT_SECONDS", 180)
+    resolved_timeout = (
+        int(configured_timeout)
+        if isinstance(configured_timeout, str | bytes | bytearray | int | float)
+        else 180
     )
     if runner is not None:
         return runner(command, cwd=resolved_workdir, timeout=resolved_timeout, prompt=clean_prompt)
@@ -232,7 +235,7 @@ def _subprocess_runner(
     except subprocess.TimeoutExpired as exc:
         return CodexSessionRunResult(
             status="failed",
-            output_text=exc.stdout or "",
+            output_text=_output_text(exc.stdout),
             error_text="codex session runtime timed out.",
             command_summary="codex exec <prompt>",
             duration_ms=_duration_ms(started),
@@ -240,12 +243,18 @@ def _subprocess_runner(
         )
     return CodexSessionRunResult(
         status="succeeded" if completed.returncode == 0 else "failed",
-        output_text=completed.stdout or "",
-        error_text=completed.stderr or "",
+        output_text=_output_text(completed.stdout),
+        error_text=_output_text(completed.stderr),
         command_summary="codex exec <prompt>",
         duration_ms=_duration_ms(started),
         exit_code=completed.returncode,
     )
+
+
+def _output_text(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
 
 
 def _stage_prompt(

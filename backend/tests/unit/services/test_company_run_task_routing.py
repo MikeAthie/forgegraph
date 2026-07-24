@@ -55,8 +55,9 @@ def _company(user: User) -> Graph:
 
 
 def _engagement(user: User, company: Graph) -> ServiceEngagement:
+    organization = _organization(user)
     catalog = ServiceCatalogItem.objects.create(
-        organization=company.organization,
+        organization=organization,
         slug="consulting-assessment",
         title="Consulting Assessment",
         status="active",
@@ -64,7 +65,7 @@ def _engagement(user: User, company: Graph) -> ServiceEngagement:
         created_by=user,
     )
     return ServiceEngagement.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         catalog_item=catalog,
         status="in_progress",
@@ -75,8 +76,9 @@ def _engagement(user: User, company: Graph) -> ServiceEngagement:
 
 
 def _program(user: User, company: Graph, engagement: ServiceEngagement) -> CompanyProgram:
+    organization = _organization(user)
     program = CompanyProgram.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         template_id="consulting.assessment.v1",
         display_label="Company Run",
@@ -89,7 +91,7 @@ def _program(user: User, company: Graph, engagement: ServiceEngagement) -> Compa
         created_by=user,
     )
     ProgramStageState.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         program=program,
         stage_id="discovery",
@@ -102,7 +104,7 @@ def _program(user: User, company: Graph, engagement: ServiceEngagement) -> Compa
         },
     )
     ProgramStageState.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         program=program,
         stage_id="analysis",
@@ -112,7 +114,7 @@ def _program(user: User, company: Graph, engagement: ServiceEngagement) -> Compa
         state_json={},
     )
     ProgramStageState.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         program=program,
         stage_id="recommendation",
@@ -125,8 +127,9 @@ def _program(user: User, company: Graph, engagement: ServiceEngagement) -> Compa
 
 
 def _whiteboard(user: User, company: Graph, engagement: ServiceEngagement) -> WorkWhiteboard:
+    organization = _organization(user)
     return WorkWhiteboard.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         service_engagement=engagement,
         status=WorkWhiteboard.STATUS_IN_STRATEGY,
@@ -140,10 +143,11 @@ def _whiteboard(user: User, company: Graph, engagement: ServiceEngagement) -> Wo
 
 def test_bootstrap_creates_agnostic_stage_task_cards_and_whiteboard_snapshot(user):
     company = _company(user)
+    organization = _organization(user)
     engagement = _engagement(user, company)
     whiteboard = _whiteboard(user, company, engagement)
     DepartmentRegistry.objects.create(
-        organization=company.organization,
+        organization=organization,
         slug="advisory-intake",
         name="Advisory Intake",
         department_type="consulting",
@@ -172,7 +176,7 @@ def test_bootstrap_creates_agnostic_stage_task_cards_and_whiteboard_snapshot(use
         "analysis"
     ]
     assert DepartmentRegistry.objects.filter(
-        organization=company.organization,
+        organization=organization,
         slug="analysis",
         department_type="program_stage",
     ).exists()
@@ -194,6 +198,7 @@ def test_bootstrap_creates_agnostic_stage_task_cards_and_whiteboard_snapshot(use
 
 def test_stage_task_status_and_deliverable_provenance_are_linked(user):
     company = _company(user)
+    organization = _organization(user)
     engagement = _engagement(user, company)
     whiteboard = _whiteboard(user, company, engagement)
     program = _program(user, company, engagement)
@@ -206,7 +211,7 @@ def test_stage_task_status_and_deliverable_provenance_are_linked(user):
     assert running.metadata_json[TASK_METADATA_KEY]["status"] == "running"
 
     asset = Asset.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         title="Discovery notes",
         asset_type="document",
@@ -222,7 +227,7 @@ def test_stage_task_status_and_deliverable_provenance_are_linked(user):
         provenance_json={"source": "synthetic"},
     )
     deliverable = ServiceDeliverable.objects.create(
-        organization=company.organization,
+        organization=organization,
         company=company,
         engagement=engagement,
         title="Discovery Notes",

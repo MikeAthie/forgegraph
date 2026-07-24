@@ -243,10 +243,10 @@ def test_prepare_legacy_handoff_uses_formatter_persisted_package(user, tmp_path)
     assert result["quality_status"] == "passed"
     assert result["source_deliverable_count"] == 3
     assert result["pdf_asset_version_id"]
-    assert result["pdf_filename"].endswith(".pdf")
+    assert cast(str, result["pdf_filename"]).endswith(".pdf")
 
     package_version = AssetVersion.objects.select_related("asset").get(
-        id=result["package_asset_version_id"]
+        id=cast(str, result["package_asset_version_id"])
     )
     assert package_version.asset.metadata_json["source"] == "deliverable_formatting"
     assert package_version.asset.metadata_json["format"] == "zip_package"
@@ -308,7 +308,9 @@ def test_legacy_handoff_zip_contains_formatter_report_manifest_and_quality_data(
         str(source.id) for source in sources
     ]
     assert [source["content_hash"] for source in manifest_payload["sources"]] == [
-        source.artifact.versions.get().content_hash for source in sources
+        source_asset.versions.get().content_hash
+        for source in sources
+        if (source_asset := source.artifact) is not None
     ]
     assert manifest_payload["outputs"][0]["format"] == "markdown_report"
     assert manifest_payload["outputs"][0]["asset_version_id"] == result["markdown_asset_version_id"]
@@ -414,7 +416,7 @@ def test_legacy_weekend_pipeline_is_idempotent(user, tmp_path):
         ServiceDeliverable.objects.filter(engagement=engagement).count()
         == first["deliverable_count"]
     )
-    company = cast(Graph, engagement.company)
+    company = engagement.company
     assert (
         TaskRoutingRecord.objects.filter(company=company, service_engagement=engagement).count()
         == 9

@@ -388,7 +388,8 @@ def _provenance_with_output_ids(
     asset_id: str,
     asset_version_id: str,
 ) -> dict[str, Any]:
-    updated = json.loads(json.dumps(provenance, sort_keys=True, default=str))
+    serialized = json.loads(json.dumps(provenance, sort_keys=True, default=str))
+    updated = serialized if isinstance(serialized, dict) else {}
     output = dict(updated.get("output") or {})
     output["asset_id"] = asset_id
     output["asset_version_id"] = asset_version_id

@@ -22,12 +22,9 @@ def test_agency_account_catalog_uses_actual_atlas_department_slugs() -> None:
     assert ATLAS_DEPARTMENT_SLUGS == expected_slugs
 
     owner_slugs = {
-        item.owner_department_slug
-        for item in (
-            *list_health_dimension_definitions(),
-            *list_onboarding_item_definitions(),
-            *list_connector_definitions(),
-        )
+        *(item.owner_department_slug for item in list_health_dimension_definitions()),
+        *(item.owner_department_slug for item in list_onboarding_item_definitions()),
+        *(item.owner_department_slug for item in list_connector_definitions()),
     }
     assert owner_slugs <= expected_slugs
 

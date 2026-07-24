@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 from django.test import override_settings
@@ -32,7 +33,7 @@ def _company(user: User) -> Graph:
         version=1,
         graph_json={"nodes": [], "edges": [], "metadata": {}},
     )
-    return company
+    return cast(Graph, company)
 
 
 def _fake_codex_runtime(**kwargs):

@@ -35,7 +35,12 @@ _FORBIDDEN_HTML_TOKENS = (
 _RESUME_INTERNAL_LEAKAGE_TOKENS = tuple(
     token for token in INTERNAL_LEAKAGE_TOKENS if token not in {"forgegraph", "prompt"}
 )
-_FORBIDDEN_VISIBLE_TOKENS = (*_RESUME_INTERNAL_LEAKAGE_TOKENS, "metadata_json", "provenance_json", "raw tool")
+_FORBIDDEN_VISIBLE_TOKENS = (
+    *_RESUME_INTERNAL_LEAKAGE_TOKENS,
+    "metadata_json",
+    "provenance_json",
+    "raw tool",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +61,9 @@ def render_career_ops_ats_resume(
 
     identity = candidate_identity or {}
     normalized_sections = _normalized_sections(tailored_resume, candidate_identity=identity)
-    merged_opportunity = _opportunity_payload(tailored_resume=tailored_resume, opportunity=opportunity)
+    merged_opportunity = _opportunity_payload(
+        tailored_resume=tailored_resume, opportunity=opportunity
+    )
     text = _render_text_resume(
         sections=normalized_sections,
         opportunity=merged_opportunity,
@@ -92,7 +99,7 @@ def _normalized_sections(  # noqa: C901
     raw_sections = tailored_resume.get("sections") if isinstance(tailored_resume, dict) else []
     if not isinstance(raw_sections, list):
         raw_sections = []
-    by_heading: dict[str, list[str]] = {}
+    by_heading: dict[str, list[Any]] = {}
     for section in raw_sections:
         if not isinstance(section, dict):
             continue
@@ -101,7 +108,9 @@ def _normalized_sections(  # noqa: C901
             continue
         items = [_clean_visible_text(item) for item in _section_items(section.get("items"))]
         by_heading[heading] = [item for item in items if item]
-    education_items = _education_items(candidate_identity.get("education") or candidate_identity.get("education_items"))
+    education_items = _education_items(
+        candidate_identity.get("education") or candidate_identity.get("education_items")
+    )
     if education_items:
         by_heading["EDUCATION"] = education_items
 
@@ -113,7 +122,9 @@ def _normalized_sections(  # noqa: C901
     if certification_items:
         by_heading["CERTIFICATIONS"] = certification_items
 
-    professional_summary = _clean_multiline_text(candidate_identity.get("professional_summary") or "")
+    professional_summary = _clean_multiline_text(
+        candidate_identity.get("professional_summary") or ""
+    )
     if professional_summary:
         by_heading["SUMMARY"] = [professional_summary]
 
@@ -140,7 +151,9 @@ def _normalized_sections(  # noqa: C901
     ]
     for heading, items in by_heading.items():
         if heading not in ATS_REQUIRED_SECTIONS:
-            ordered.append({"heading": heading, "items": items, "source_present": True, "style": "bullets"})
+            ordered.append(
+                {"heading": heading, "items": items, "source_present": True, "style": "bullets"}
+            )
     return ordered
 
 
@@ -160,7 +173,9 @@ def _education_items(value: Any) -> list[str]:
         institution = _clean_visible_text(raw_item.get("institution") or raw_item.get("school"))
         degree = _clean_visible_text(raw_item.get("degree"))
         field = _clean_visible_text(raw_item.get("field") or raw_item.get("major"))
-        graduation_year = _clean_visible_text(raw_item.get("graduation_year") or raw_item.get("year"))
+        graduation_year = _clean_visible_text(
+            raw_item.get("graduation_year") or raw_item.get("year")
+        )
         location = _clean_visible_text(raw_item.get("location"))
         degree_line = ", ".join(value for value in (degree, field) if value)
         right_side = " | ".join(value for value in (graduation_year, location) if value)
@@ -213,7 +228,9 @@ def _skill_items(value: Any) -> list[str]:
         category = _clean_visible_text(raw_item.get("category") or raw_item.get("name"))
         item_value = raw_item.get("items") or raw_item.get("skills") or raw_item.get("text")
         if isinstance(item_value, list | tuple):
-            item_text = ", ".join(_clean_visible_text(item) for item in item_value if _clean_visible_text(item))
+            item_text = ", ".join(
+                _clean_visible_text(item) for item in item_value if _clean_visible_text(item)
+            )
         else:
             item_text = _clean_visible_text(item_value)
         if category and item_text:
@@ -258,10 +275,21 @@ def _card_items(
         subtitle = _first_clean_value(raw_item, subtitle_keys)
         period = _clean_visible_text(raw_item.get("period") or raw_item.get("dates") or "")
         url = _clean_visible_text(raw_item.get("url") or raw_item.get("link") or "")
-        bullets = [_clean_visible_text(item) for item in _section_items(raw_item.get("bullets") or raw_item.get("items"))]
+        bullets = [
+            _clean_visible_text(item)
+            for item in _section_items(raw_item.get("bullets") or raw_item.get("items"))
+        ]
         bullets = [item for item in bullets if item]
         if title:
-            cards.append({"title": title, "subtitle": subtitle, "period": period, "url": url, "bullets": bullets})
+            cards.append(
+                {
+                    "title": title,
+                    "subtitle": subtitle,
+                    "period": period,
+                    "url": url,
+                    "bullets": bullets,
+                }
+            )
     return cards
 
 
@@ -323,9 +351,7 @@ def _render_text_resume(
         or ""
     )
     title = _clean_visible_text(
-        candidate_identity.get("title")
-        or candidate_identity.get("headline")
-        or ""
+        candidate_identity.get("title") or candidate_identity.get("headline") or ""
     )
     contact = [
         _clean_visible_text(candidate_identity.get(key) or "")
@@ -411,32 +437,30 @@ def _render_html_resume(
         or ""
     )
     title = _clean_visible_text(
-        candidate_identity.get("title")
-        or candidate_identity.get("headline")
-        or ""
+        candidate_identity.get("title") or candidate_identity.get("headline") or ""
     )
     if not name:
         name = "Candidate Resume"
     header = [f"<h1>{html.escape(name)}</h1>"]
     if title:
-        header.append(f"<p class=\"title\">{html.escape(title)}</p>")
+        header.append(f'<p class="title">{html.escape(title)}</p>')
     contact = [
         _clean_visible_text(candidate_identity.get(key) or "")
         for key in ("location", "email", "phone", "github", "linkedin", "website")
     ]
     contact_line = " • ".join(value for value in contact if value)
     if contact_line:
-        header.append(f"<p class=\"contact\">{html.escape(contact_line)}</p>")
+        header.append(f'<p class="contact">{html.escape(contact_line)}</p>')
 
     section_html = []
     for section in sections:
         heading = str(section["heading"])
         section_html.append(
-            "<section>" f"<h2>{html.escape(heading)}</h2>" + _section_html_body(section) + "</section>"
+            f"<section><h2>{html.escape(heading)}</h2>" + _section_html_body(section) + "</section>"
         )
     return "".join(
         [
-            "<!doctype html><html><head><meta charset=\"utf-8\">",
+            '<!doctype html><html><head><meta charset="utf-8">',
             "<title>ATS Resume</title>",
             "<style>",
             "@page{size:Letter;margin:0.5in}",
@@ -473,12 +497,20 @@ def _section_html_body(section: dict[str, Any]) -> str:
                 continue
             title = _card_title_line(card)
             meta = _card_meta_line(card)
-            bullets = [_clean_visible_text(item) for item in card.get("bullets", []) if _clean_visible_text(item)]
+            bullets = [
+                _clean_visible_text(item)
+                for item in card.get("bullets", [])
+                if _clean_visible_text(item)
+            ]
             articles.append(
                 "<article>"
                 + (f"<h3>{html.escape(title)}</h3>" if title else "")
-                + (f"<p class=\"meta\">{html.escape(meta)}</p>" if meta else "")
-                + ("<ul>" + "".join(f"<li>{html.escape(item)}</li>" for item in bullets) + "</ul>" if bullets else "")
+                + (f'<p class="meta">{html.escape(meta)}</p>' if meta else "")
+                + (
+                    "<ul>" + "".join(f"<li>{html.escape(item)}</li>" for item in bullets) + "</ul>"
+                    if bullets
+                    else ""
+                )
                 + "</article>"
             )
         return "".join(articles)
@@ -498,9 +530,7 @@ def _render_professional_pdf_resume(  # noqa: C901
         or "Candidate Resume"
     ).upper()
     title = _clean_visible_text(
-        candidate_identity.get("title")
-        or candidate_identity.get("headline")
-        or ""
+        candidate_identity.get("title") or candidate_identity.get("headline") or ""
     )
     contact = [
         _clean_visible_text(candidate_identity.get(key) or "")
@@ -592,9 +622,7 @@ def _styled_pdf_document_bytes(pages: list[list[dict[str, Any]]]) -> bytes:
         )
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(pages or [[]])} >>".encode(
-            "ascii"
-        ),
+        f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(pages or [[]])} >>".encode("ascii"),
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
     ]
@@ -630,7 +658,9 @@ def _pdf_ats_text(value: str) -> str:
     normalized = str(value or "")
     normalized = normalized.replace("•", "|").replace("—", "-").replace("–", "-")
     normalized = normalized.replace("’", "'").replace("“", '"').replace("”", '"')
-    return unicodedata.normalize("NFKD", normalized).encode("ascii", errors="ignore").decode("ascii")
+    return (
+        unicodedata.normalize("NFKD", normalized).encode("ascii", errors="ignore").decode("ascii")
+    )
 
 
 def _parseability_report(
@@ -643,7 +673,9 @@ def _parseability_report(
     blockers: list[str] = []
     warnings: list[str] = []
     checks: dict[str, str] = {}
-    present = [str(section["heading"]) for section in sections if section.get("source_present") is True]
+    present = [
+        str(section["heading"]) for section in sections if section.get("source_present") is True
+    ]
     missing = [heading for heading in ATS_REQUIRED_SECTIONS if heading not in present]
     if missing:
         checks["required_sections_present"] = "blocked"
@@ -652,7 +684,9 @@ def _parseability_report(
         checks["required_sections_present"] = "pass"
 
     ordered_positions = [text.find(heading) for heading in ATS_REQUIRED_SECTIONS]
-    if any(position < 0 for position in ordered_positions) or ordered_positions != sorted(ordered_positions):
+    if any(position < 0 for position in ordered_positions) or ordered_positions != sorted(
+        ordered_positions
+    ):
         checks["section_order"] = "blocked"
         blockers.append("section_order_invalid")
     else:

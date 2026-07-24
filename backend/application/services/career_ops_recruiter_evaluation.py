@@ -36,12 +36,16 @@ def evaluate_career_ops_resume_professional_delivery(
         "version": RECRUITER_EVALUATION_VERSION,
         "review_prompt": RECRUITER_REVIEW_PROMPT,
         "opportunity": {
-            "employer_name": str(opportunity.get("employer_name") or opportunity.get("company") or ""),
+            "employer_name": str(
+                opportunity.get("employer_name") or opportunity.get("company") or ""
+            ),
             "role_title": str(opportunity.get("role_title") or opportunity.get("title") or ""),
         },
         "scores": scores,
         "overall_score": overall,
-        "recommendation": "approve_for_human_send_review" if overall >= 80 else "revise_before_send",
+        "recommendation": "approve_for_human_send_review"
+        if overall >= 80
+        else "revise_before_send",
         "strengths": strengths,
         "risks": risks,
         "external_side_effects_allowed": False,
@@ -130,7 +134,9 @@ def _section(text: str, heading: str) -> str:
     start = text.find(heading)
     if start < 0:
         return ""
-    following = [text.find(candidate, start + len(heading)) for candidate in headings if candidate != heading]
+    following = [
+        text.find(candidate, start + len(heading)) for candidate in headings if candidate != heading
+    ]
     following = [position for position in following if position > start]
     end = min(following) if following else len(text)
     return text[start:end]
@@ -143,7 +149,9 @@ def _strengths(text: str, scores: dict[str, int]) -> list[str]:
     if scores["role_fit"] >= 85:
         strengths.append("Strong backend/API and AI-workflow alignment for the target role.")
     if "Grey Cross Developments" in text:
-        strengths.append("Experience is anchored in named roles rather than generic capability bullets.")
+        strengths.append(
+            "Experience is anchored in named roles rather than generic capability bullets."
+        )
     if "https://github.com/" in text:
         strengths.append("Project section includes public proof links for technical credibility.")
     return strengths or ["Readable baseline CV structure with standard ATS headings."]
@@ -152,11 +160,17 @@ def _strengths(text: str, scores: dict[str, int]) -> list[str]:
 def _risks(text: str, scores: dict[str, int]) -> list[str]:
     risks: list[str] = []
     if scores["presentation"] < 80:
-        risks.append("Presentation needs tightening; avoid one-skill-per-line dumps and generic bullets.")
+        risks.append(
+            "Presentation needs tightening; avoid one-skill-per-line dumps and generic bullets."
+        )
     if _one_word_skill_lines(text) >= 6:
-        risks.append("Skills are too sparse per line, which wastes CV space and weakens professional delivery.")
+        risks.append(
+            "Skills are too sparse per line, which wastes CV space and weakens professional delivery."
+        )
     if "Not provided in source CV" in text:
         risks.append("A required section still contains placeholder text.")
     if scores["credibility"] < 80:
-        risks.append("Add more named roles, dates, project links, or source-backed evidence to increase credibility.")
+        risks.append(
+            "Add more named roles, dates, project links, or source-backed evidence to increase credibility."
+        )
     return risks or ["No major professional-delivery risks detected for human review."]

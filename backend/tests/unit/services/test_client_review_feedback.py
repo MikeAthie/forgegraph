@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from application.services.client_review_feedback import (
     ClientReviewComment,
     classify_client_review_comment,
@@ -8,7 +10,7 @@ from application.services.client_review_feedback import (
 
 
 class FakeWhiteboard:
-    def __init__(self, metadata_json: dict[str, object] | None = None) -> None:
+    def __init__(self, metadata_json: dict[str, Any] | None = None) -> None:
         self.metadata_json = metadata_json or {}
         self.saved_update_fields: list[str] | None = None
 

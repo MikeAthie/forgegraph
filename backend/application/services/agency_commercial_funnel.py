@@ -128,8 +128,9 @@ def _commercial_intake_source(
     engagement: ServiceEngagement | None,
 ) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
-    if opportunity.signal_id:
-        sources.append(_metadata_intake(_mapping(opportunity.signal.metadata_json)))
+    signal = opportunity.signal
+    if signal is not None:
+        sources.append(_metadata_intake(_mapping(signal.metadata_json)))
     sources.append(_metadata_intake(_mapping(opportunity.metadata_json)))
     if engagement is not None:
         sources.append(_metadata_intake(_mapping(engagement.intake_data_json)))
@@ -167,9 +168,9 @@ def _icp_fit(value: Any) -> dict[str, Any]:
 def _pain(value: Any) -> dict[str, Any]:
     items: list[str] = []
     if isinstance(value, list | tuple | set):
-        items = [_safe_text(item) for item in value]
+        items = [text for item in value if (text := _safe_text(item)) is not None]
     elif isinstance(value, str):
-        items = [_safe_text(item) for item in value.split(";")]
+        items = [text for item in value.split(";") if (text := _safe_text(item)) is not None]
     else:
         text = _safe_text(value)
         items = [text] if text is not None else []

@@ -69,9 +69,13 @@ def mock_engine_client():
     mock_client = MockEngineClient()
     runs_pkg = importlib.import_module("adapters.api.runs")
     if not hasattr(runs_pkg, "responses"):
-        runs_pkg.responses = SimpleNamespace(get_engine_client=lambda *args, **kwargs: mock_client)
+        runs_pkg.__dict__["responses"] = SimpleNamespace(
+            get_engine_client=lambda *args, **kwargs: mock_client
+        )
     if not hasattr(runs_pkg, "common"):
-        runs_pkg.common = SimpleNamespace(get_engine_client=lambda *args, **kwargs: mock_client)
+        runs_pkg.__dict__["common"] = SimpleNamespace(
+            get_engine_client=lambda *args, **kwargs: mock_client
+        )
     with (
         patch(
             "adapters.api.runs.responses.get_engine_client",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from django.utils import timezone
@@ -43,7 +43,7 @@ def _company(user: User) -> tuple[Graph, GraphVersion]:
     return company, version
 
 
-def _engagement(company: Graph, user: User, *, metadata: dict) -> ServiceEngagement:
+def _engagement(company: Graph, user: User, *, metadata: dict[str, Any]) -> ServiceEngagement:
     organization = company.organization
     assert organization is not None
     catalog = ServiceCatalogItem.objects.create(
@@ -64,10 +64,10 @@ def _engagement(company: Graph, user: User, *, metadata: dict) -> ServiceEngagem
     )
 
 
-def _cadence(payload: dict, slug: str) -> dict:
+def _cadence(payload: dict[str, Any], slug: str) -> dict[str, Any]:
     matches = [item for item in payload["cadences"] if item["slug"] == slug]
     assert len(matches) == 1
-    return matches[0]
+    return cast(dict[str, Any], matches[0])
 
 
 def test_stale_weekly_report_is_at_risk(user) -> None:

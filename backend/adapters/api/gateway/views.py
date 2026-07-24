@@ -116,6 +116,8 @@ class GatewayConnectionDetailView(APIView):
         connection = _connection_for_user(user, connection_id)
         if isinstance(connection, Response):
             return connection
+        if connection is None:
+            return _forbidden("Gateway connection was not found.")
         payload = _payload(request)
         graph_version = _graph_version_for_user(user, payload.get("graph_version_id"))
         if isinstance(graph_version, Response):
@@ -145,6 +147,8 @@ class GatewayConnectionHealthView(APIView):
         connection = _connection_for_user(user, connection_id)
         if isinstance(connection, Response):
             return connection
+        if connection is None:
+            return _forbidden("Gateway connection was not found.")
         diagnostics = record_connection_health(connection)
         _audit(user, "gateway.connection.health_checked", "gateway_connection", connection.id)
         return success_response(
@@ -162,6 +166,8 @@ class GatewayConnectionDiagnosticsView(APIView):
         connection = _connection_for_user(user, connection_id)
         if isinstance(connection, Response):
             return connection
+        if connection is None:
+            return _forbidden("Gateway connection was not found.")
         return success_response({"diagnostics": connection_diagnostics(connection).as_dict()})
 
 
@@ -192,6 +198,12 @@ class GatewayScheduleListCreateView(APIView):
         )
         if isinstance(graph_version, Response):
             return graph_version
+        if graph_version is None:
+            return error_response(
+                code="VALIDATION_ERROR",
+                message="graph_version_id is required.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         connection = _connection_for_user(user, payload.get("connection_id"), required=False)
         if isinstance(connection, Response):
             return connection
@@ -368,7 +380,7 @@ def _graph_version_for_user(
             message="Graph version was not found.",
             status=status.HTTP_404_NOT_FOUND,
         )
-    return graph_version
+    return cast(GraphVersion, graph_version)
 
 
 def _credential_for_user(user: User, credential_id: Any) -> APIKey | Response | None:

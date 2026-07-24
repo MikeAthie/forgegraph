@@ -182,8 +182,8 @@ def build_operating_model_pack_health_payload() -> dict[str, Any]:
         required_contents = REQUIRED_PACK_CONTENTS.get(pack_id, set())
         if not required_contents or pack_id not in packs_by_base_id:
             continue
-        contains = set(packs_by_base_id[pack_id].get("contains") or [])
-        missing = sorted(required_contents - contains)
+        contained_item_ids = set(packs_by_base_id[pack_id].get("contains") or [])
+        missing = sorted(required_contents - contained_item_ids)
         if missing:
             missing_required_contents.append({"pack_id": pack_id, "missing": missing})
 

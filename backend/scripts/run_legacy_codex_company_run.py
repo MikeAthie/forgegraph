@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from django.conf import settings
 from django.utils import timezone
@@ -29,6 +30,7 @@ from application.services.legacy_weekend_pipeline import (
 from infrastructure.orm.models import (
     AssetVersion,
     DepartmentRegistry,
+    Organization,
     ServiceDeliverable,
     TaskRoutingRecord,
     User,
@@ -100,7 +102,7 @@ Required outputs by the end of the run: strategy, brand/copy pack, CRM response 
 """.strip()
 
 
-def _ensure_departments(organization):
+def _ensure_departments(organization: Organization) -> None:
     for slug, name in DEPARTMENTS.items():
         department, _ = DepartmentRegistry.objects.get_or_create(
             organization=organization,
@@ -117,7 +119,7 @@ def _ensure_departments(organization):
         department.save()
 
 
-def run(email: str = "admin@forgegraph.local") -> dict:
+def run(email: str = "admin@forgegraph.local") -> dict[str, Any]:
     settings.ENABLE_CODEX_SESSION_RUNTIME = True
     settings.CODEX_SESSION_COMMAND = r"C:\Users\mathi\AppData\Roaming\npm\codex.cmd"
     codex_workdir = Path(settings.BASE_DIR).parent / ".hermes" / "codex_session_workdir"
