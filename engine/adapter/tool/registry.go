@@ -115,7 +115,7 @@ func (r *Registry) Register(def Definition) {
 	if r.tools[name] == nil {
 		r.tools[name] = make(map[string]*Definition)
 	}
-	copyDef := def
+	copyDef := cloneDefinition(def)
 	copyDef.Visibility = normalizeVisibility(copyDef.Visibility)
 	r.tools[name][version] = &copyDef
 }
@@ -125,8 +125,45 @@ func (r *Registry) LoadDefinitions(defs []Definition) error {
 		if err := ValidateDefinitionForRuntimeMode(def, r.runtimeMode); err != nil {
 			return err
 		}
+	}
+	for _, def := range defs {
 		r.Register(def)
 	}
+	return nil
+}
+
+// ReplaceDefinitions atomically replaces delivered tools while retaining the
+// built-in baseline. It is intended for authoritative backend manifest
+// snapshots, where tools removed from a later snapshot must stop resolving.
+func (r *Registry) ReplaceDefinitions(defs []Definition) error {
+	for _, def := range defs {
+		if err := ValidateDefinitionForRuntimeMode(def, r.runtimeMode); err != nil {
+			return err
+		}
+	}
+
+	next := make(map[string]map[string]*Definition)
+	add := func(def Definition) {
+		def = normalizeLegacyAliases(def)
+		copyDef := cloneDefinition(def)
+		copyDef.Visibility = normalizeVisibility(copyDef.Visibility)
+		name := strings.ToLower(copyDef.Name)
+		version := strings.ToLower(copyDef.Version)
+		if next[name] == nil {
+			next[name] = make(map[string]*Definition)
+		}
+		next[name][version] = &copyDef
+	}
+	for _, def := range BuiltinTools() {
+		add(def)
+	}
+	for _, def := range defs {
+		add(def)
+	}
+
+	r.mu.Lock()
+	r.tools = next
+	r.mu.Unlock()
 	return nil
 }
 
@@ -142,10 +179,19 @@ func (r *Registry) Resolve(name, version string) (*Definition, bool) {
 		return nil, false
 	}
 	if version == "" {
-		return latestVersion(versions)
+		def, ok := latestVersion(versions)
+		if !ok {
+			return nil, false
+		}
+		copyDef := cloneDefinition(*def)
+		return &copyDef, true
 	}
 	def, ok := versions[strings.ToLower(version)]
-	return def, ok
+	if !ok {
+		return nil, false
+	}
+	copyDef := cloneDefinition(*def)
+	return &copyDef, true
 }
 
 func (r *Registry) List() []*Definition {
@@ -154,7 +200,8 @@ func (r *Registry) List() []*Definition {
 	var result []*Definition
 	for _, versions := range r.tools {
 		for _, def := range versions {
-			result = append(result, def)
+			copyDef := cloneDefinition(*def)
+			result = append(result, &copyDef)
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -164,6 +211,76 @@ func (r *Registry) List() []*Definition {
 		return result[i].Name < result[j].Name
 	})
 	return result
+}
+
+func cloneDefinition(def Definition) Definition {
+	cloned := def
+	cloned.InputSchema = cloneDefinitionMap(def.InputSchema)
+	cloned.OutputSchema = cloneDefinitionMap(def.OutputSchema)
+	cloned.ConfigSchema = cloneDefinitionMap(def.ConfigSchema)
+	cloned.DefaultConfig = cloneDefinitionMap(def.DefaultConfig)
+	cloned.AgentHints = cloneDefinitionMap(def.AgentHints)
+	cloned.Execution.HTTP = cloneHTTPToolConfig(def.Execution.HTTP)
+	cloned.Execution.Local = cloneLocalToolConfig(def.Execution.Local)
+	cloned.HTTP = cloneHTTPToolConfig(def.HTTP)
+	cloned.Local = cloneLocalToolConfig(def.Local)
+	return cloned
+}
+
+func cloneHTTPToolConfig(config *HTTPToolConfig) *HTTPToolConfig {
+	if config == nil {
+		return nil
+	}
+	cloned := *config
+	if config.Headers != nil {
+		cloned.Headers = make(map[string]string, len(config.Headers))
+		for key, value := range config.Headers {
+			cloned.Headers[key] = value
+		}
+	}
+	return &cloned
+}
+
+func cloneLocalToolConfig(config *LocalToolConfig) *LocalToolConfig {
+	if config == nil {
+		return nil
+	}
+	cloned := *config
+	return &cloned
+}
+
+func cloneDefinitionMap(input map[string]any) map[string]any {
+	if input == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(input))
+	for key, value := range input {
+		cloned[key] = cloneDefinitionValue(value)
+	}
+	return cloned
+}
+
+func cloneDefinitionValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneDefinitionMap(typed)
+	case []any:
+		cloned := make([]any, len(typed))
+		for index, item := range typed {
+			cloned[index] = cloneDefinitionValue(item)
+		}
+		return cloned
+	case []string:
+		return append([]string(nil), typed...)
+	case map[string]string:
+		cloned := make(map[string]string, len(typed))
+		for key, item := range typed {
+			cloned[key] = item
+		}
+		return cloned
+	default:
+		return value
+	}
 }
 
 func (r *Registry) LoadManifests(dir string) error {

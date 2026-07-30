@@ -65,6 +65,61 @@ func TestRegistryRegisterOrderIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestRegistryReplaceDefinitionsRemovesRevokedToolsAtomically(t *testing.T) {
+	reg := NewRegistry()
+	first := validHTTPDefinition("remote.first")
+	second := validHTTPDefinition("remote.second")
+	if err := reg.ReplaceDefinitions([]Definition{first, second}); err != nil {
+		t.Fatalf("first ReplaceDefinitions() error = %v", err)
+	}
+
+	invalid := validHTTPDefinition("remote.invalid")
+	invalid.Execution.HTTP = nil
+	if err := reg.ReplaceDefinitions([]Definition{invalid}); err == nil {
+		t.Fatal("invalid replacement unexpectedly succeeded")
+	}
+	if _, ok := reg.Resolve("remote.first", "1.0.0"); !ok {
+		t.Fatal("failed replacement partially changed registry")
+	}
+
+	if err := reg.ReplaceDefinitions([]Definition{second}); err != nil {
+		t.Fatalf("second ReplaceDefinitions() error = %v", err)
+	}
+	if _, ok := reg.Resolve("remote.first", "1.0.0"); ok {
+		t.Fatal("tool removed from backend snapshot still resolves")
+	}
+	if _, ok := reg.Resolve("remote.second", "1.0.0"); !ok {
+		t.Fatal("tool retained in backend snapshot does not resolve")
+	}
+}
+
+func TestRegistryResolveReturnsDefensiveCopy(t *testing.T) {
+	reg := NewRegistry()
+	def := validHTTPDefinition("copy.safe")
+	def.InputSchema["properties"] = map[string]any{"query": map[string]any{"type": "string"}}
+	if err := reg.LoadDefinitions([]Definition{def}); err != nil {
+		t.Fatalf("LoadDefinitions() error = %v", err)
+	}
+
+	resolved, ok := reg.Resolve("copy.safe", "1.0.0")
+	if !ok {
+		t.Fatal("copy.safe did not resolve")
+	}
+	resolved.Execution.HTTP.URL = "https://mutated.example.com"
+	resolved.InputSchema["type"] = "string"
+
+	again, ok := reg.Resolve("copy.safe", "1.0.0")
+	if !ok {
+		t.Fatal("copy.safe did not resolve a second time")
+	}
+	if again.Execution.HTTP.URL != "https://example.com/tool" {
+		t.Fatalf("registry HTTP config was mutated through resolved value: %q", again.Execution.HTTP.URL)
+	}
+	if again.InputSchema["type"] != "object" {
+		t.Fatalf("registry schema was mutated through resolved value: %#v", again.InputSchema)
+	}
+}
+
 func TestRegistryLoadManifestsValidatesDefinitions(t *testing.T) {
 	tmpDir := t.TempDir()
 	manifestPath := filepath.Join(tmpDir, "broken.json")

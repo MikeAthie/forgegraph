@@ -78,6 +78,9 @@ tasks-*.md
 # Local reference dump
 /src/
 .hermes/codex_session_workdir/
+.hermes/codex_media_workdir/
+/backend/.hermes/codex_media_workdir/
+/backend/.hermes/docker_smoke/
 
 # Personal Fiverr portfolio demo files
 /fiverr_portfolio/

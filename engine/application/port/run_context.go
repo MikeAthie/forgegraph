@@ -54,6 +54,7 @@ type RunContext struct {
 	MemoryBuffer      *entity.MessageBuffer
 	MemoryConfig      *entity.MemoryConfig
 	CurrentSummary    *entity.Summary
+	CurrentSummaryFn  func() *entity.Summary
 	TrackMessage      func(count int)
 	TrackLLMCall      func() error
 	TrackToolCall     func() error
@@ -61,6 +62,20 @@ type RunContext struct {
 	ObservationClient ObservationMemoryClient
 	Policy            *entity.ExecutionPolicy
 	LLMAccess         LLMAccessConfig
+}
+
+// Summary returns the latest execution-local summary.
+// CurrentSummaryFn lets the scheduler publish asynchronous summary updates
+// without racing with concurrent executors. CurrentSummary remains as a
+// compatibility fallback for callers that construct RunContext directly.
+func (c *RunContext) Summary() *entity.Summary {
+	if c == nil {
+		return nil
+	}
+	if c.CurrentSummaryFn != nil {
+		return c.CurrentSummaryFn()
+	}
+	return c.CurrentSummary
 }
 
 // StreamChunkEmitter receives incremental LLM response chunks.

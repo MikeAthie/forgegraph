@@ -1,11 +1,9 @@
-FROM golang:1.25.9-alpine3.23 AS builder
+FROM golang:1.25.12-alpine3.23 AS builder
 
 WORKDIR /app
 
 # git can be needed for some module fetches; ca-certs helps TLS downloads
-RUN apk add --no-cache protobuf protobuf-dev git ca-certificates
-
-RUN go install github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.8.9
+RUN apk add --no-cache git ca-certificates
 
 COPY go.mod go.sum* ./
 RUN go mod download
@@ -24,7 +22,6 @@ RUN apk add --no-cache ca-certificates \
 WORKDIR /app
 
 COPY --from=builder /engine .
-COPY --from=builder /go/bin/grpcurl /usr/local/bin/grpcurl
 
 EXPOSE 50051 9090
 

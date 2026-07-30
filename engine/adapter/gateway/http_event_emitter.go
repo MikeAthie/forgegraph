@@ -89,6 +89,53 @@ type callbackDecisionEnvelope struct {
 	ConflictCode   string `json:"conflict_code,omitempty"`
 }
 
+// pendingEventTracker is a context-aware dynamic counter. Unlike sync.WaitGroup,
+// it is safe for Flush to observe an empty queue while other runs may enqueue
+// later events.
+type pendingEventTracker struct {
+	mu     sync.Mutex
+	count  int
+	zeroCh chan struct{}
+}
+
+func (t *pendingEventTracker) Add() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.count == 0 {
+		t.zeroCh = make(chan struct{})
+	}
+	t.count++
+}
+
+func (t *pendingEventTracker) Done() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.count <= 0 {
+		panic("pending event tracker: negative counter")
+	}
+	t.count--
+	if t.count == 0 {
+		close(t.zeroCh)
+	}
+}
+
+func (t *pendingEventTracker) Wait(ctx context.Context) error {
+	t.mu.Lock()
+	if t.count == 0 {
+		t.mu.Unlock()
+		return nil
+	}
+	zeroCh := t.zeroCh
+	t.mu.Unlock()
+
+	select {
+	case <-zeroCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func normalizeCallbackDecision(raw string) string {
 	return strings.ToLower(strings.TrimSpace(raw))
 }
@@ -108,7 +155,7 @@ type HTTPEventEmitter struct {
 	eventChans  []chan *port.ExecutionEvent
 	workerCount int
 	wg          sync.WaitGroup
-	pending     sync.WaitGroup
+	pending     pendingEventTracker
 	closed      bool
 	closeMu     sync.Mutex
 
@@ -188,7 +235,7 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 	}
 
 	maxRetries := config.MaxRetries
-	if maxRetries == 0 {
+	if maxRetries <= 0 {
 		maxRetries = 3
 	}
 
@@ -198,7 +245,7 @@ func NewHTTPEventEmitter(config HTTPEventEmitterConfig) (*HTTPEventEmitter, erro
 	}
 
 	bufferSize := config.BufferSize
-	if bufferSize == 0 {
+	if bufferSize <= 0 {
 		bufferSize = 100
 	}
 
@@ -381,7 +428,7 @@ func (e *HTTPEventEmitter) EmitAsync(event *port.ExecutionEvent) {
 	}
 
 	eventChan := e.eventChannelFor(event)
-	e.pending.Add(1)
+	e.pending.Add()
 	select {
 	case eventChan <- event:
 		e.closeMu.Unlock()
@@ -414,21 +461,14 @@ func shardIndex(key string, shards int) int {
 	}
 	hasher := fnv.New32a()
 	_, _ = hasher.Write([]byte(normalized))
-	return int(hasher.Sum32() % uint32(shards))
+	// #nosec G115 -- the modulo result is strictly smaller than positive int shards.
+	return int(uint64(hasher.Sum32()) % uint64(shards))
 }
 
 // Flush waits for all pending async events to be sent
 func (e *HTTPEventEmitter) Flush(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() {
-		e.pending.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-ctx.Done():
-		return ctx.Err()
+	if err := e.pending.Wait(ctx); err != nil {
+		return err
 	}
 
 	for {
@@ -874,7 +914,7 @@ func (e *HTTPEventEmitter) appendToSpool(event *port.ExecutionEvent) error {
 	e.spoolMu.Lock()
 	defer e.spoolMu.Unlock()
 
-	if err := os.MkdirAll(filepath.Dir(e.spoolPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(e.spoolPath), 0o700); err != nil {
 		log.Printf("Warning: failed to create event spool directory: %v", err)
 		return err
 	}
@@ -913,7 +953,7 @@ func (e *HTTPEventEmitter) appendToDeadLetter(event *port.ExecutionEvent, reason
 	e.spoolMu.Lock()
 	defer e.spoolMu.Unlock()
 
-	if err := os.MkdirAll(filepath.Dir(e.deadLetterPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(e.deadLetterPath), 0o700); err != nil {
 		log.Printf("Warning: failed to create event dead-letter directory: %v", err)
 		return err
 	}
@@ -1181,16 +1221,8 @@ func (e *HTTPEventEmitter) Close(ctx context.Context) error {
 	}
 	e.closeMu.Unlock()
 
-	pendingDone := make(chan struct{})
-	go func() {
-		e.pending.Wait()
-		close(pendingDone)
-	}()
-
-	select {
-	case <-pendingDone:
-	case <-ctx.Done():
-		return ctx.Err()
+	if err := e.pending.Wait(ctx); err != nil {
+		return err
 	}
 
 	closeDone := make(chan struct{})

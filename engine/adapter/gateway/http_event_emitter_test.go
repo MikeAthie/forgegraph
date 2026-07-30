@@ -796,28 +796,6 @@ func TestEmitSpoolsWhenSuccessResponseMissingDecision(t *testing.T) {
 	}
 }
 
-func assertEventually(t *testing.T, timeout time.Duration, condition func() bool) {
-	t.Helper()
-
-	if condition() {
-		return
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	ticker := time.NewTicker(20 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-timer.C:
-			t.Fatal("condition was not satisfied before timeout")
-		case <-ticker.C:
-			if condition() {
-				return
-			}
-		}
-	}
-}
-
 func bytesSplitLines(data []byte) [][]byte {
 	lines := make([][]byte, 0)
 	start := 0

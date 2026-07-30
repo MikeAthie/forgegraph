@@ -113,6 +113,10 @@ type Scheduler struct {
 
 	// Active runs tracking
 	activeRuns sync.Map // runID -> *runContext
+
+	lifecycleMu sync.Mutex
+	stopping    bool
+	activeRunWG sync.WaitGroup
 }
 
 // NewScheduler creates a new scheduler
@@ -123,6 +127,18 @@ func NewScheduler(
 	emitter port.EventEmitter,
 	memoryStore port.MemoryStore,
 ) *Scheduler {
+	defaults := DefaultSchedulerConfig()
+	if config.MaxWorkers <= 0 {
+		config.MaxWorkers = defaults.MaxWorkers
+	}
+	if config.DefaultTimeoutMs <= 0 {
+		config.DefaultTimeoutMs = defaults.DefaultTimeoutMs
+	}
+	switch config.CheckpointMode {
+	case CheckpointModeNone, CheckpointModeNode, CheckpointModeBatch:
+	default:
+		config.CheckpointMode = defaults.CheckpointMode
+	}
 	if config.CheckpointMode == "" {
 		config.CheckpointMode = CheckpointModeNode
 	}
@@ -199,6 +215,7 @@ type runContext struct {
 	runID                string
 	ctx                  context.Context
 	cancel               context.CancelFunc
+	done                 chan struct{}
 	clock                schedulerClock
 	runSpan              oteltrace.Span
 	startedAt            time.Time
@@ -236,8 +253,9 @@ type runContext struct {
 	resumeRetryNode string          // snapshot next_node allowed one re-entry after a failed pre-snapshot attempt
 
 	// Worker coordination
-	workChan chan string
-	wg       sync.WaitGroup
+	workChan     chan string
+	wg           sync.WaitGroup
+	backgroundWG sync.WaitGroup
 
 	// Error tracking (first error wins)
 	errMu sync.Mutex
@@ -379,11 +397,122 @@ func (rc *runContext) markSummaryInFlight() {
 func (rc *runContext) applySummary(summary *entity.Summary, cfg entity.SummarizationConfig) {
 	rc.summaryMu.Lock()
 	rc.currentSummary = summary
-	rc.memoryCtx.CurrentSummary = summary
 	rc.messagesSinceSummary = 0
 	rc.cooldownRemaining = cfg.CooldownMessages
 	rc.summaryInFlight = false
 	rc.summaryMu.Unlock()
+}
+
+func (rc *runContext) currentSummarySnapshot() *entity.Summary {
+	rc.summaryMu.Lock()
+	defer rc.summaryMu.Unlock()
+	return rc.currentSummary
+}
+
+func (s *Scheduler) registerActiveRun(runID string, rc *runContext) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+
+	if s.stopping {
+		return domain.ErrSchedulerStopping
+	}
+	if _, loaded := s.activeRuns.LoadOrStore(runID, rc); loaded {
+		return domain.ErrRunAlreadyActive
+	}
+	s.activeRunWG.Add(1)
+	return nil
+}
+
+func (s *Scheduler) unregisterActiveRun(runID string, rc *runContext) {
+	if s.activeRuns.CompareAndDelete(runID, rc) {
+		close(rc.done)
+		s.activeRunWG.Done()
+	}
+}
+
+func (s *Scheduler) registerResumedRun(ctx context.Context, runID string, rc *runContext) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		err := s.registerActiveRun(runID, rc)
+		if !errors.Is(err, domain.ErrRunAlreadyActive) {
+			return err
+		}
+
+		value, ok := s.activeRuns.Load(runID)
+		if !ok {
+			continue
+		}
+		previous, ok := value.(*runContext)
+		if !ok || previous == nil || previous.ctx.Err() == nil {
+			return err
+		}
+
+		select {
+		case <-previous.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func closeUnstartedRun(rc *runContext) {
+	if rc == nil {
+		return
+	}
+	if rc.runSpan != nil {
+		rc.runSpan.End()
+	}
+	rc.cancel()
+	close(rc.workChan)
+}
+
+func (s *Scheduler) closeRegisteredRun(rc *runContext, runErr error) {
+	if rc == nil {
+		return
+	}
+	if rc.runSpan != nil {
+		if runErr != nil {
+			rc.runSpan.RecordError(runErr)
+		}
+		rc.runSpan.End()
+	}
+	rc.cancel()
+	rc.backgroundWG.Wait()
+	close(rc.workChan)
+	s.unregisterActiveRun(rc.runID, rc)
+}
+
+// Shutdown rejects new runs, cancels active execution, and waits for every
+// registered run goroutine to leave the scheduler.
+func (s *Scheduler) Shutdown(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	s.lifecycleMu.Lock()
+	s.stopping = true
+	s.activeRuns.Range(func(_, value any) bool {
+		if rc, ok := value.(*runContext); ok && rc != nil {
+			rc.cancel()
+		}
+		return true
+	})
+	s.lifecycleMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		s.activeRunWG.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (rc *runContext) clearSummaryInFlight() {
@@ -620,6 +749,7 @@ func (s *Scheduler) StartRun(
 		runID:            runID,
 		ctx:              runCtx,
 		cancel:           cancel,
+		done:             make(chan struct{}),
 		clock:            s.clock,
 		runSpan:          runSpan,
 		startedAt:        s.clock.Now(),
@@ -665,6 +795,7 @@ func (s *Scheduler) StartRun(
 		MemoryBuffer:      rc.messageBuffer,
 		MemoryConfig:      rc.memoryConfig,
 		CurrentSummary:    rc.currentSummary,
+		CurrentSummaryFn:  rc.currentSummarySnapshot,
 		TrackMessage:      rc.trackMessages,
 		TrackLLMCall:      rc.trackLLMCall,
 		TrackToolCall:     rc.trackToolCall,
@@ -723,20 +854,18 @@ func (s *Scheduler) StartRun(
 		rc.initialNodes = s.computeReadyNodes(rc)
 	}
 
-	// Store active run
-	s.activeRuns.Store(runID, rc)
+	// Claim the run before any execution-visible write. Duplicate delivery is
+	// rejected so one run ID can never have multiple engine owners.
+	if err := s.registerActiveRun(runID, rc); err != nil {
+		closeUnstartedRun(rc)
+		return err
+	}
 
 	s.preloadMemory(rc)
 
 	// Update run status to running
 	if err := s.repository.UpdateRunStatus(rc.intentContext(ctx), runID, string(value.RunStatusRunning)); err != nil {
-		s.activeRuns.Delete(runID)
-		if rc.runSpan != nil {
-			rc.runSpan.RecordError(err)
-			rc.runSpan.End()
-		}
-		rc.cancel()
-		close(rc.workChan)
+		s.closeRegisteredRun(rc, err)
 		return fmt.Errorf("critical run start state write failed: %w", err)
 	}
 
@@ -761,12 +890,7 @@ func (s *Scheduler) StartRun(
 func (s *Scheduler) executeRun(rc *runContext) {
 	defer func() {
 		// Cleanup
-		s.activeRuns.Delete(rc.runID)
-		if rc.runSpan != nil {
-			rc.runSpan.End()
-		}
-		rc.cancel()
-		close(rc.workChan)
+		s.closeRegisteredRun(rc, nil)
 	}()
 
 	// Start workers (they exit when context is cancelled)
@@ -866,6 +990,11 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	currentVisitCount = rc.visitCounts[nodeID]
 	rc.running[nodeID] = true
 	rc.pendingMu.Unlock()
+	defer func() {
+		rc.pendingMu.Lock()
+		delete(rc.running, nodeID)
+		rc.pendingMu.Unlock()
+	}()
 
 	rc.currentNodeMu.Lock()
 	rc.currentNodeID = nodeID
@@ -951,11 +1080,6 @@ func (s *Scheduler) executeNode(rc *runContext, nodeID string) {
 	startTime := s.clock.Now()
 	result, err := s.executeWithRetries(nodeCtx, rc, node, executor, nodeRun)
 	duration := s.clock.Now().Sub(startTime).Milliseconds()
-
-	// Mark as no longer running
-	rc.pendingMu.Lock()
-	delete(rc.running, nodeID)
-	rc.pendingMu.Unlock()
 
 	if err != nil {
 		// Check if this is a context cancellation (graceful shutdown)
@@ -1098,6 +1222,9 @@ func (s *Scheduler) executeWithRetries(ctx context.Context, rc *runContext, node
 		result, err := executor.Execute(execCtx, node, rc.state)
 		cancel()
 
+		if err == nil && result == nil {
+			err = fmt.Errorf("executor for node %s returned a nil result", node.ID)
+		}
 		if err == nil && result.Error == nil {
 			return result, nil
 		}
@@ -1725,8 +1852,8 @@ func (s *Scheduler) buildCheckpointSnapshot(rc *runContext, stepIndex int) (map[
 	if rc.memoryConfig != nil {
 		checkpointPayload["memory_config"] = rc.memoryConfig
 	}
-	if rc.currentSummary != nil {
-		checkpointPayload["current_summary"] = rc.currentSummary
+	if summary := rc.currentSummarySnapshot(); summary != nil {
+		checkpointPayload["current_summary"] = summary
 	}
 
 	_ = stepIndex
@@ -2704,16 +2831,6 @@ func computeStateDelta(before map[string]any, after map[string]any) (map[string]
 	return delta, deleted
 }
 
-func toStringSlice(raw []any) []string {
-	out := make([]string, 0, len(raw))
-	for _, value := range raw {
-		if str, ok := value.(string); ok && str != "" {
-			out = append(out, str)
-		}
-	}
-	return out
-}
-
 func decodeMessages(raw any) []entity.Message {
 	bytes, err := json.Marshal(raw)
 	if err != nil {
@@ -2724,82 +2841,6 @@ func decodeMessages(raw any) []entity.Message {
 		return nil
 	}
 	return msgs
-}
-
-func decodeMemoryConfig(raw any) *entity.MemoryConfig {
-	bytes, err := json.Marshal(raw)
-	if err != nil {
-		return nil
-	}
-	var cfg entity.MemoryConfig
-	if err := json.Unmarshal(bytes, &cfg); err != nil {
-		return nil
-	}
-	// Ensure defaults for missing numeric fields.
-	if cfg.Tier1.BufferSize <= 0 {
-		cfg.Tier1.BufferSize = 20
-	}
-	if cfg.Tier1.LimitMode == "" {
-		cfg.Tier1.LimitMode = "messages"
-	}
-	if cfg.Tier1.MaxTokens <= 0 {
-		cfg.Tier1.MaxTokens = 4000
-	}
-	if cfg.Tier2.SummaryTTL <= 0 {
-		cfg.Tier2.SummaryTTL = 86400
-	}
-	if cfg.Tier2.FactsTTL <= 0 {
-		cfg.Tier2.FactsTTL = 604800
-	}
-	if cfg.Tier3.TopK <= 0 {
-		cfg.Tier3.TopK = 5
-	}
-	if cfg.Tier3.Threshold <= 0 {
-		cfg.Tier3.Threshold = 0.7
-	}
-	if cfg.Tier3.RecencyWeight < 0 {
-		cfg.Tier3.RecencyWeight = 0.2
-	}
-	if cfg.Tier3.EmbeddingModel == "" {
-		cfg.Tier3.EmbeddingModel = "text-embedding-ada-002"
-	}
-	if cfg.CrossSession.SessionTTLHours <= 0 {
-		cfg.CrossSession.SessionTTLHours = 24
-	}
-	return &cfg
-}
-
-func decodeSummary(raw any) *entity.Summary {
-	bytes, err := json.Marshal(raw)
-	if err != nil {
-		return nil
-	}
-	var summary entity.Summary
-	if err := json.Unmarshal(bytes, &summary); err != nil {
-		return nil
-	}
-	return &summary
-}
-
-func decodeStringIntMap(raw any) map[string]int {
-	bytes, err := json.Marshal(raw)
-	if err != nil {
-		return nil
-	}
-
-	decoded := make(map[string]any)
-	if err := json.Unmarshal(bytes, &decoded); err != nil {
-		return nil
-	}
-
-	out := make(map[string]int, len(decoded))
-	for key, value := range decoded {
-		if key == "" {
-			continue
-		}
-		out[key] = coerceInt(value)
-	}
-	return out
 }
 
 func (s *Scheduler) shouldUseSessionMemory(cfg *entity.MemoryConfig) bool {
@@ -3014,49 +3055,32 @@ func (s *Scheduler) finalizeRun(rc *runContext) {
 }
 
 func (s *Scheduler) preloadMemory(rc *runContext) {
-	if rc == nil || rc.messageBuffer == nil || rc.memoryConfig == nil {
+	if rc == nil || rc.memoryConfig == nil || !rc.memoryConfig.Tier3.Enabled || s.memoryRetriever == nil {
 		return
 	}
-	if !s.shouldUseSessionMemory(rc.memoryConfig) && !(rc.memoryConfig.Tier3.Enabled && s.memoryRetriever != nil) {
+	if rc.currentSummarySnapshot() == nil {
 		return
 	}
 
+	rc.backgroundWG.Add(1)
 	go func() {
-		if s.shouldUseSessionMemory(rc.memoryConfig) && rc.sessionID != "" && s.memoryStore != nil && rc.messageBuffer.Count() == 0 {
-			start := time.Now()
-			namespace := sessionNamespace(rc.tenantID)
-			key := sessionBufferKey(rc.sessionID)
-			value, found, err := s.memoryStore.Get(context.Background(), namespace, key)
-			if err != nil {
-				log.Printf("Failed to load session buffer for %s: %v", rc.sessionID, err)
-				metrics.RecordPreloadOperation("session_restore", "error", time.Since(start))
-			} else if found {
-				messages := decodeMessages(value)
-				if len(messages) > 0 {
-					rc.messageBuffer.Restore(messages)
-					metrics.RecordPreloadOperation("session_restore", "hit", time.Since(start))
-				} else {
-					metrics.RecordPreloadOperation("session_restore", "miss", time.Since(start))
-				}
-			} else {
-				metrics.RecordPreloadOperation("session_restore", "miss", time.Since(start))
-			}
-		}
-
-		if rc.memoryConfig.Tier3.Enabled && s.memoryRetriever != nil && rc.currentSummary != nil {
-			s.warmupVectorCache(rc)
-		}
+		defer rc.backgroundWG.Done()
+		s.warmupVectorCache(rc)
 	}()
 }
 
 func (s *Scheduler) warmupVectorCache(rc *runContext) {
-	if rc == nil || s.memoryRetriever == nil || rc.memoryConfig == nil || rc.currentSummary == nil {
+	if rc == nil || s.memoryRetriever == nil || rc.memoryConfig == nil {
+		return
+	}
+	summary := rc.currentSummarySnapshot()
+	if summary == nil {
 		return
 	}
 
 	req := port.MemoryRetrieveRequest{
 		TenantID:       rc.tenantID,
-		Query:          rc.currentSummary.Content,
+		Query:          summary.Content,
 		AgentID:        "",
 		RunID:          rc.runID,
 		SessionID:      rc.sessionID,
@@ -3067,7 +3091,7 @@ func (s *Scheduler) warmupVectorCache(rc *runContext) {
 	}
 
 	start := time.Now()
-	if _, err := s.memoryRetriever.Retrieve(context.Background(), req); err != nil {
+	if _, err := s.memoryRetriever.Retrieve(rc.ctx, req); err != nil {
 		log.Printf("Vector cache warmup failed for run %s: %v", rc.runID, err)
 		metrics.RecordPreloadOperation("vector_warmup", "error", time.Since(start))
 		return
@@ -3277,6 +3301,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		runID:            runID,
 		ctx:              runCtx,
 		cancel:           cancel,
+		done:             make(chan struct{}),
 		clock:            s.clock,
 		runSpan:          runSpan,
 		startedAt:        s.clock.Now(),
@@ -3314,6 +3339,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		MemoryBuffer:      rc.messageBuffer,
 		MemoryConfig:      rc.memoryConfig,
 		CurrentSummary:    rc.currentSummary,
+		CurrentSummaryFn:  rc.currentSummarySnapshot,
 		TrackMessage:      rc.trackMessages,
 		TrackLLMCall:      rc.trackLLMCall,
 		TrackToolCall:     rc.trackToolCall,
@@ -3361,8 +3387,12 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 		rc.initialNodes = s.computeReadyNodes(rc)
 	}
 
-	// Store active run
-	s.activeRuns.Store(runID, rc)
+	// Claim the paused run before acknowledging or mutating its durable resume
+	// state. Concurrent resume delivery must not start duplicate execution.
+	if err := s.registerResumedRun(ctx, runID, rc); err != nil {
+		closeUnstartedRun(rc)
+		return err
+	}
 
 	// Clear pause state and update run status
 	if s.pauseIntentActiveMode() {
@@ -3373,34 +3403,16 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			resumeAttemptID,
 			humanDecision,
 		); err != nil {
-			s.activeRuns.Delete(runID)
-			if rc.runSpan != nil {
-				rc.runSpan.RecordError(err)
-				rc.runSpan.End()
-			}
-			rc.cancel()
-			close(rc.workChan)
+			s.closeRegisteredRun(rc, err)
 			return fmt.Errorf("failed to publish ack_run_resumed intent: %w", err)
 		}
 	} else {
 		if err := s.repository.ClearPauseState(ctx, runID); err != nil {
-			s.activeRuns.Delete(runID)
-			if rc.runSpan != nil {
-				rc.runSpan.RecordError(err)
-				rc.runSpan.End()
-			}
-			rc.cancel()
-			close(rc.workChan)
+			s.closeRegisteredRun(rc, err)
 			return fmt.Errorf("failed to clear pause state: %w", err)
 		}
 		if err := s.repository.UpdateRunStatus(rc.intentContext(ctx), runID, string(value.RunStatusRunning)); err != nil {
-			s.activeRuns.Delete(runID)
-			if rc.runSpan != nil {
-				rc.runSpan.RecordError(err)
-				rc.runSpan.End()
-			}
-			rc.cancel()
-			close(rc.workChan)
+			s.closeRegisteredRun(rc, err)
 			return fmt.Errorf("failed to mark resumed run running: %w", err)
 		}
 	}
@@ -3412,13 +3424,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			nodeRun.OutputJSON = nil
 			nodeRun.ErrorJSON = nil
 			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
-				s.activeRuns.Delete(runID)
-				if rc.runSpan != nil {
-					rc.runSpan.RecordError(err)
-					rc.runSpan.End()
-				}
-				rc.cancel()
-				close(rc.workChan)
+				s.closeRegisteredRun(rc, err)
 				return fmt.Errorf("failed to update resumed agent node run: %w", err)
 			}
 		} else {
@@ -3428,13 +3434,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 			nodeRun.OutputJSON = map[string]any{"output": humanDecision}
 			nodeRun.ErrorJSON = nil
 			if err := s.repository.UpdateNodeRun(resumeIntentCtx, nodeRun); err != nil {
-				s.activeRuns.Delete(runID)
-				if rc.runSpan != nil {
-					rc.runSpan.RecordError(err)
-					rc.runSpan.End()
-				}
-				rc.cancel()
-				close(rc.workChan)
+				s.closeRegisteredRun(rc, err)
 				return fmt.Errorf("failed to update resumed human gate node run: %w", err)
 			}
 		}
@@ -3457,12 +3457,7 @@ func (s *Scheduler) ResumeRun(ctx context.Context, runID, nodeID, inputJSON stri
 func (s *Scheduler) executeResumedRun(rc *runContext, startNodes []string) {
 	defer func() {
 		// Cleanup
-		s.activeRuns.Delete(rc.runID)
-		if rc.runSpan != nil {
-			rc.runSpan.End()
-		}
-		rc.cancel()
-		close(rc.workChan)
+		s.closeRegisteredRun(rc, nil)
 	}()
 
 	// Start workers

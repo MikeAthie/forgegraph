@@ -7,6 +7,8 @@ import (
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type curatedObservation struct {
@@ -313,7 +315,7 @@ func appendBufferSection(sb *strings.Builder, buffer *entity.MessageBuffer) {
 	}
 	sb.WriteString("Recent messages:\n")
 	for _, msg := range messages {
-		role := strings.Title(msg.Role)
+		role := cases.Title(language.Und, cases.NoLower).String(msg.Role)
 		sb.WriteString(fmt.Sprintf("%s: %s\n", role, msg.Content))
 	}
 	sb.WriteString("\n")

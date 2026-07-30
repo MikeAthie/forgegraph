@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"testing"
 	"time"
 
-	"github.com/forgegraph/engine/adapter/executor"
 	"github.com/forgegraph/engine/application/port"
 	"github.com/forgegraph/engine/domain"
 	"github.com/forgegraph/engine/domain/entity"
@@ -54,6 +52,35 @@ type mockCheckpointState struct {
 type mockCacheEntry struct {
 	output    any
 	expiresAt time.Time
+}
+
+func cloneRunEntity(run *entity.Run) *entity.Run {
+	if run == nil {
+		return nil
+	}
+	clone := *run
+	if run.EndedAt != nil {
+		endedAt := *run.EndedAt
+		clone.EndedAt = &endedAt
+	}
+	clone.InputJSON = cloneMapAny(run.InputJSON)
+	clone.OutputJSON = cloneMapAny(run.OutputJSON)
+	return &clone
+}
+
+func cloneNodeRunEntity(nodeRun *entity.NodeRun) *entity.NodeRun {
+	if nodeRun == nil {
+		return nil
+	}
+	clone := *nodeRun
+	if nodeRun.EndedAt != nil {
+		endedAt := *nodeRun.EndedAt
+		clone.EndedAt = &endedAt
+	}
+	clone.InputJSON = cloneMapAny(nodeRun.InputJSON)
+	clone.OutputJSON = cloneMapAny(nodeRun.OutputJSON)
+	clone.ErrorJSON = cloneMapAny(nodeRun.ErrorJSON)
+	return &clone
 }
 
 func newMockRepository() *mockRepository {
@@ -365,91 +392,6 @@ func (e *mockExecutor) getNodeExecuteCount(nodeID string) int {
 	return e.executeCounts[nodeID]
 }
 
-type schedulerLLMClient struct {
-	response *executor.LLMResponse
-}
-
-type schedulerObservationClient struct {
-	saveRequest    *port.ObservationSaveRequest
-	saveResponse   port.Observation
-	searchResponse []port.Observation
-	contextResp    port.ObservationContextResponse
-	timelineResp   []port.Observation
-}
-
-func (m *schedulerLLMClient) Complete(ctx context.Context, request *executor.LLMRequest) (*executor.LLMResponse, error) {
-	if m.response != nil {
-		return m.response, nil
-	}
-	return &executor.LLMResponse{
-		Content: `{"action":"final_answer","final_answer":"done"}`,
-		Model:   request.Model,
-	}, nil
-}
-
-func (m *schedulerObservationClient) SaveObservation(ctx context.Context, request port.ObservationSaveRequest) (port.Observation, error) {
-	m.saveRequest = &request
-	return m.saveResponse, nil
-}
-
-func (m *schedulerObservationClient) SearchObservations(ctx context.Context, request port.ObservationSearchRequest) ([]port.Observation, error) {
-	return m.searchResponse, nil
-}
-
-func (m *schedulerObservationClient) GetContext(ctx context.Context, request port.ObservationContextRequest) (port.ObservationContextResponse, error) {
-	return m.contextResp, nil
-}
-
-func (m *schedulerObservationClient) GetTimeline(ctx context.Context, request port.ObservationTimelineRequest) ([]port.Observation, error) {
-	return m.timelineResp, nil
-}
-
-// recordingEmitter captures emitted events for verification
-type recordingEmitter struct {
-	mu     sync.Mutex
-	events []*port.ExecutionEvent
-}
-
-func newRecordingEmitter() *recordingEmitter {
-	return &recordingEmitter{
-		events: make([]*port.ExecutionEvent, 0),
-	}
-}
-
-func (e *recordingEmitter) Emit(ctx context.Context, event *port.ExecutionEvent) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.events = append(e.events, event)
-	return nil
-}
-
-func (e *recordingEmitter) EmitAsync(event *port.ExecutionEvent) {
-	e.Emit(context.Background(), event)
-}
-
-func (e *recordingEmitter) Flush(ctx context.Context) error {
-	return nil
-}
-
-func (e *recordingEmitter) getEvents() []*port.ExecutionEvent {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	result := make([]*port.ExecutionEvent, len(e.events))
-	copy(result, e.events)
-	return result
-}
-
-func (e *recordingEmitter) hasEventType(eventType port.EventType) bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	for _, ev := range e.events {
-		if ev.Type == eventType {
-			return true
-		}
-	}
-	return false
-}
-
 // Helper to create a test graph JSON
 func makeGraphJSON(nodes []entity.Node, edges []entity.Edge) string {
 	graph := entity.Graph{
@@ -458,12 +400,4 @@ func makeGraphJSON(nodes []entity.Node, edges []entity.Edge) string {
 	}
 	data, _ := json.Marshal(graph)
 	return string(data)
-}
-
-// Helper to create a mock scheduler for tests
-func newMockScheduler(t *testing.T) (*Scheduler, *mockRepository, *recordingEmitter) {
-	repo := newMockRepository()
-	emitter := newRecordingEmitter()
-
-	return nil, repo, emitter
 }

@@ -15,15 +15,27 @@ import (
 // GrpcMemoryRetriever calls the control plane memory gRPC service.
 type GrpcMemoryRetriever struct {
 	client MemoryServiceClient
+	conn   *grpc.ClientConn
 }
 
 func NewGrpcMemoryRetriever(host, port string) (*GrpcMemoryRetriever, error) {
 	target := fmt.Sprintf("%s:%s", host, port)
-	conn, err := grpc.Dial(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
-	return &GrpcMemoryRetriever{client: NewMemoryServiceClient(conn)}, nil
+	return &GrpcMemoryRetriever{
+		client: NewMemoryServiceClient(conn),
+		conn:   conn,
+	}, nil
+}
+
+// Close releases the underlying gRPC client connection.
+func (r *GrpcMemoryRetriever) Close() error {
+	if r == nil || r.conn == nil {
+		return nil
+	}
+	return r.conn.Close()
 }
 
 func (r *GrpcMemoryRetriever) Retrieve(ctx context.Context, request port.MemoryRetrieveRequest) (port.MemoryRetrieveResponse, error) {
@@ -133,7 +145,7 @@ func (r *GrpcMemoryRetriever) SearchObservations(ctx context.Context, request po
 		Scope:          request.Scope,
 		Type:           request.Type,
 		TopicKey:       request.TopicKey,
-		Limit:          int32(request.Limit),
+		Limit:          boundedProtoLimit(request.Limit),
 		IncludeDeleted: request.IncludeDeleted,
 	})
 	if err != nil {
@@ -157,7 +169,7 @@ func (r *GrpcMemoryRetriever) GetContext(ctx context.Context, request port.Obser
 		SessionId: request.SessionID,
 		AgentId:   request.AgentID,
 		Query:     request.Query,
-		Limit:     int32(request.Limit),
+		Limit:     boundedProtoLimit(request.Limit),
 	})
 	if err != nil {
 		return port.ObservationContextResponse{}, err
@@ -184,7 +196,7 @@ func (r *GrpcMemoryRetriever) GetTimeline(ctx context.Context, request port.Obse
 		SessionId:      request.SessionID,
 		AgentId:        request.AgentID,
 		Scope:          request.Scope,
-		Limit:          int32(request.Limit),
+		Limit:          boundedProtoLimit(request.Limit),
 		IncludeDeleted: request.IncludeDeleted,
 	})
 	if err != nil {
@@ -194,6 +206,17 @@ func (r *GrpcMemoryRetriever) GetTimeline(ctx context.Context, request port.Obse
 		return nil, errors.New(resp.GetError())
 	}
 	return observationsFromProto(resp.GetObservations()), nil
+}
+
+func boundedProtoLimit(limit int) int32 {
+	const maxInt32 = int64(1<<31 - 1)
+	if limit <= 0 {
+		return 0
+	}
+	if int64(limit) > maxInt32 {
+		return int32(maxInt32)
+	}
+	return int32(limit)
 }
 
 func observationsFromProto(items []*Observation) []port.Observation {

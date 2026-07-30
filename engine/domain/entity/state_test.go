@@ -48,3 +48,30 @@ func TestStateSnapshot_DeepClonesNestedStructures(t *testing.T) {
 		t.Fatalf("state mutated through snapshot clone: asset_id = %v", currentFirstAsset["asset_id"])
 	}
 }
+
+func TestStateDoesNotExposeOrRetainMutableValues(t *testing.T) {
+	state := NewState()
+	input := map[string]any{
+		"nested": map[string]any{
+			"items": []any{map[string]any{"name": "original"}},
+		},
+	}
+
+	state.Set("payload", input)
+	input["nested"].(map[string]any)["items"].([]any)[0].(map[string]any)["name"] = "changed-after-set"
+
+	stored, ok := state.Get("payload")
+	if !ok {
+		t.Fatal("expected stored payload")
+	}
+	stored.(map[string]any)["nested"].(map[string]any)["items"].([]any)[0].(map[string]any)["name"] = "changed-after-get"
+
+	again, ok := state.Get("payload")
+	if !ok {
+		t.Fatal("expected stored payload on second get")
+	}
+	name := again.(map[string]any)["nested"].(map[string]any)["items"].([]any)[0].(map[string]any)["name"]
+	if name != "original" {
+		t.Fatalf("state retained or exposed mutable value: name = %v, want original", name)
+	}
+}
