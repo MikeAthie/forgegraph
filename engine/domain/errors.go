@@ -22,8 +22,10 @@ var (
 // Execution errors
 var (
 	ErrRunNotFound        = errors.New("run not found")
+	ErrRunAlreadyActive   = errors.New("run is already active")
 	ErrRunAlreadyEnded    = errors.New("run has already ended")
 	ErrRunNotPaused       = errors.New("run is not paused")
+	ErrSchedulerStopping  = errors.New("scheduler is shutting down")
 	ErrNodeNotFound       = errors.New("node not found")
 	ErrExecutorNotFound   = errors.New("no executor registered for node type")
 	ErrCheckpointNotFound = errors.New("checkpoint not found")

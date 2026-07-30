@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -54,8 +55,12 @@ func (c *MarketplaceManifestClient) Fetch(ctx context.Context, tenantID string, 
 		return nil, false, fmt.Errorf("tenant_id is required")
 	}
 
-	url := fmt.Sprintf("%s/api/marketplace/runtime-manifests?tenant_id=%s", c.baseURL, tenantID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	endpoint := fmt.Sprintf(
+		"%s/api/marketplace/runtime-manifests?%s",
+		c.baseURL,
+		url.Values{"tenant_id": []string{tenantID}}.Encode(),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, false, fmt.Errorf("build request: %w", err)
 	}

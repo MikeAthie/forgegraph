@@ -20,6 +20,35 @@ func TestNormalizeRunStateModeDefaultsToControlPlaneHTTP(t *testing.T) {
 	}
 }
 
+func TestBoundedProtoLimit(t *testing.T) {
+	const maxInt32 = int32(1<<31 - 1)
+	tests := []struct {
+		name  string
+		input int
+		want  int32
+	}{
+		{name: "negative", input: -1, want: 0},
+		{name: "zero", input: 0, want: 0},
+		{name: "normal", input: 25, want: 25},
+		{name: "maximum", input: int(maxInt32), want: maxInt32},
+	}
+	if ^uint(0)>>63 == 1 {
+		tests = append(tests, struct {
+			name  string
+			input int
+			want  int32
+		}{name: "overflow", input: int(int64(maxInt32) + 1), want: maxInt32})
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := boundedProtoLimit(test.input); got != test.want {
+				t.Fatalf("boundedProtoLimit(%d) = %d, want %d", test.input, got, test.want)
+			}
+		})
+	}
+}
+
 func TestSelectRunRepositoryDriverRejectsLegacyDualWrite(t *testing.T) {
 	cfg := &Config{RunStateMode: runStateModeLegacyDualWrite}
 
@@ -251,14 +280,18 @@ func TestShutdownEngineRuntimeStopsResources(t *testing.T) {
 	grpcServer := &fakeGRPCServer{}
 	emitter := &fakeEventEmitter{}
 	worker := &fakeWorker{}
+	scheduler := &fakeScheduler{}
+	memoryRetriever := &fakeCloser{}
 	redisClient := &fakeCloser{}
 	cancelled := false
 
 	err := shutdownEngineRuntime(context.Background(), engineRuntimeResources{
 		cancel:              func() { cancelled = true },
 		grpcServer:          grpcServer,
+		scheduler:           scheduler,
 		eventEmitter:        emitter,
 		summarizationWorker: worker,
+		memoryRetriever:     memoryRetriever,
 		redisClient:         redisClient,
 	})
 	if err != nil {
@@ -276,11 +309,17 @@ func TestShutdownEngineRuntimeStopsResources(t *testing.T) {
 	if !worker.stopped {
 		t.Fatal("expected summarization worker to stop")
 	}
+	if !scheduler.stopped {
+		t.Fatal("expected scheduler to stop")
+	}
 	if !emitter.closed {
 		t.Fatal("expected event emitter to close")
 	}
 	if !redisClient.closed {
 		t.Fatal("expected runtime intent redis client to close")
+	}
+	if !memoryRetriever.closed {
+		t.Fatal("expected memory retriever to close")
 	}
 }
 
@@ -316,6 +355,15 @@ func (e *fakeEventEmitter) Close(context.Context) error {
 
 type fakeWorker struct {
 	stopped bool
+}
+
+type fakeScheduler struct {
+	stopped bool
+}
+
+func (s *fakeScheduler) Shutdown(context.Context) error {
+	s.stopped = true
+	return nil
 }
 
 func (w *fakeWorker) Stop() {

@@ -547,7 +547,7 @@ func (e *ToolExecutor) executeHTTPTool(
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		closeErr := resp.Body.Close()
 		cancel()
 		if err != nil {
 			return nil, domain.NewAmbiguousExecutionError(
@@ -562,6 +562,9 @@ func (e *ToolExecutor) executeHTTPTool(
 					"attempt":           attempt,
 				},
 			)
+		}
+		if closeErr != nil {
+			log.Printf("failed to close tool HTTP response body for %s: %v", def.Name, closeErr)
 		}
 		var parsed any
 		contentType := resp.Header.Get("Content-Type")

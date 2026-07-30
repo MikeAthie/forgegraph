@@ -256,7 +256,7 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		var buffer *entity.MessageBuffer
 		var summary *entity.Summary
 		if runCtx != nil {
-			summary = runCtx.CurrentSummary
+			summary = runCtx.Summary()
 			if runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.AutoPrepend {
 				buffer = runCtx.MemoryBuffer
 			}
@@ -458,7 +458,7 @@ func (e *PromptExecutor) Execute(ctx context.Context, node *entity.Node, state *
 		var buffer *entity.MessageBuffer
 		var summary *entity.Summary
 		if runCtx != nil {
-			summary = runCtx.CurrentSummary
+			summary = runCtx.Summary()
 			if runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.AutoPrepend {
 				buffer = runCtx.MemoryBuffer
 			}

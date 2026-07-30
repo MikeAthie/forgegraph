@@ -250,10 +250,7 @@ func makeGraphJSONWithMetadata(nodes []entity.Node, edges []entity.Edge, metadat
 func waitForSchedulerInactive(t *testing.T, scheduler *Scheduler, runID string) {
 	t.Helper()
 	waitForRuntimeCondition(t, 2*time.Second, func() bool {
-		if !scheduler.IsRunActive(runID) {
-			return true
-		}
-		return false
+		return !scheduler.IsRunActive(runID)
 	}, fmt.Sprintf("run %s remained active", runID))
 }
 

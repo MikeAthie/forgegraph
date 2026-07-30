@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -40,8 +41,13 @@ func (r *BackendCredentialResolver) Resolve(ctx context.Context, credentialID st
 		return "", "", fmt.Errorf("tenant_id is required")
 	}
 
-	url := fmt.Sprintf("%s/api/engine/credentials/%s?tenant_id=%s", r.baseURL, credentialID, tenantID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	endpoint := fmt.Sprintf(
+		"%s/api/engine/credentials/%s?%s",
+		r.baseURL,
+		url.PathEscape(credentialID),
+		url.Values{"tenant_id": []string{tenantID}}.Encode(),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("build request: %w", err)
 	}

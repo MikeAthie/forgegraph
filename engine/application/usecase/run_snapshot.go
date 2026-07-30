@@ -3,11 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"sort"
-
-	"github.com/forgegraph/engine/domain"
-	"github.com/forgegraph/engine/domain/entity"
 )
 
 // RunSnapshot provides a deterministic inspection view of scheduler state for tests.
@@ -60,13 +56,6 @@ func (s *Scheduler) SnapshotRun(ctx context.Context, runID string) (*RunSnapshot
 		sort.Strings(snapshot.Skipped)
 		return snapshot, nil
 	}
-	if !errors.Is(pauseErr, domain.ErrRunNotFound) {
-		var validationErr *domain.ValidationError
-		if !errors.As(pauseErr, &validationErr) {
-			// Repository pause-state absence is non-fatal here.
-		}
-	}
-
 	return snapshot, nil
 }
 
@@ -159,33 +148,4 @@ func cloneValue(value any) any {
 		}
 		return decoded
 	}
-}
-
-func cloneRunEntity(run *entity.Run) *entity.Run {
-	if run == nil {
-		return nil
-	}
-	clone := *run
-	if run.EndedAt != nil {
-		endedAt := *run.EndedAt
-		clone.EndedAt = &endedAt
-	}
-	clone.InputJSON = cloneMapAny(run.InputJSON)
-	clone.OutputJSON = cloneMapAny(run.OutputJSON)
-	return &clone
-}
-
-func cloneNodeRunEntity(nodeRun *entity.NodeRun) *entity.NodeRun {
-	if nodeRun == nil {
-		return nil
-	}
-	clone := *nodeRun
-	if nodeRun.EndedAt != nil {
-		endedAt := *nodeRun.EndedAt
-		clone.EndedAt = &endedAt
-	}
-	clone.InputJSON = cloneMapAny(nodeRun.InputJSON)
-	clone.OutputJSON = cloneMapAny(nodeRun.OutputJSON)
-	clone.ErrorJSON = cloneMapAny(nodeRun.ErrorJSON)
-	return &clone
 }

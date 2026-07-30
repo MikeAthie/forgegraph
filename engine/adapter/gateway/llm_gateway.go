@@ -855,9 +855,11 @@ func normalizeGatewayLLMAccess(req LLMRequest) LLMRequest {
 			mode = normalizeLLMMode(rawMode)
 		}
 	}
-	if req.Metadata == nil {
-		req.Metadata = map[string]string{}
+	metadata := make(map[string]string, len(req.Metadata)+2)
+	for key, value := range req.Metadata {
+		metadata[key] = value
 	}
+	req.Metadata = metadata
 	credentialSource := normalizeCredentialSource(req.CredentialSource, mode)
 	if rawSource := strings.TrimSpace(req.Metadata["credential_source"]); rawSource != "" {
 		credentialSource = normalizeCredentialSource(rawSource, mode)

@@ -40,14 +40,14 @@ func (s *State) Get(key string) (any, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	val, ok := s.values[key]
-	return val, ok
+	return cloneStateValue(val), ok
 }
 
 // Set stores a value in state (thread-safe)
 func (s *State) Set(key string, value any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.values[key] = value
+	s.values[key] = cloneStateValue(value)
 }
 
 // Delete removes a value from state (thread-safe)
@@ -113,7 +113,7 @@ func (s *State) Merge(values map[string]any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for k, v := range values {
-		s.values[k] = v
+		s.values[k] = cloneStateValue(v)
 	}
 }
 
@@ -221,6 +221,14 @@ func cloneStateValue(value any) any {
 			cloned[i] = cloneStateValue(item)
 		}
 		return cloned
+	case map[string]string:
+		cloned := make(map[string]string, len(typed))
+		for key, item := range typed {
+			cloned[key] = item
+		}
+		return cloned
+	case []string:
+		return append([]string(nil), typed...)
 	default:
 		return value
 	}

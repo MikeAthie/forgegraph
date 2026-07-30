@@ -209,7 +209,7 @@ func (e *AgentExecutor) Execute(ctx context.Context, node *entity.Node, state *e
 	var buffer *entity.MessageBuffer
 	var summary *entity.Summary
 	if curatedContext != nil && runCtx != nil {
-		summary = runCtx.CurrentSummary
+		summary = runCtx.Summary()
 		if runCtx.MemoryConfig != nil && runCtx.MemoryConfig.Tier1.AutoPrepend {
 			buffer = runCtx.MemoryBuffer
 		}

@@ -129,6 +129,10 @@ type stoppableWorker interface {
 	Stop()
 }
 
+type shutdownScheduler interface {
+	Shutdown(context.Context) error
+}
+
 type closeableResource interface {
 	Close() error
 }
@@ -137,8 +141,10 @@ type engineRuntimeResources struct {
 	cancel              context.CancelFunc
 	grpcServer          grpcLifecycleServer
 	metricsServer       *http.Server
+	scheduler           shutdownScheduler
 	eventEmitter        eventEmitterCloser
 	summarizationWorker stoppableWorker
+	memoryRetriever     closeableResource
 	redisClient         closeableResource
 }
 
@@ -315,7 +321,7 @@ func refreshMarketplaceManifests(
 		return previousChecksum
 	}
 
-	if err := registry.LoadDefinitions(payload.Tools); err != nil {
+	if err := registry.ReplaceDefinitions(payload.Tools); err != nil {
 		log.Warn("marketplace_manifest_load_failed", "tenant_id", tenantID, "checksum", payload.Checksum, "error", err.Error())
 		return previousChecksum
 	}
@@ -598,12 +604,22 @@ func shutdownEngineRuntime(ctx context.Context, resources engineRuntimeResources
 			shutdownErrors = append(shutdownErrors, fmt.Errorf("metrics shutdown: %w", err))
 		}
 	}
+	if resources.scheduler != nil {
+		if err := resources.scheduler.Shutdown(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("scheduler shutdown: %w", err))
+		}
+	}
 	if resources.summarizationWorker != nil {
 		resources.summarizationWorker.Stop()
 	}
 	if resources.eventEmitter != nil {
 		if err := resources.eventEmitter.Close(ctx); err != nil {
 			shutdownErrors = append(shutdownErrors, fmt.Errorf("event emitter shutdown: %w", err))
+		}
+	}
+	if resources.memoryRetriever != nil {
+		if err := resources.memoryRetriever.Close(); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("memory retriever close: %w", err))
 		}
 	}
 	if resources.redisClient != nil {
@@ -830,6 +846,7 @@ func main() {
 	var llmMetricsSnapshot func() gateway.LLMMetricsSnapshot
 	var httpEventEmitter *gateway.HTTPEventEmitter
 	var summaryWorker *usecase.SummarizationWorker
+	var memoryRetriever *GrpcMemoryRetriever
 	var metricsServer *http.Server
 	var err error
 	repoDriver, err := selectRunRepositoryDriver(cfg)
@@ -1077,6 +1094,7 @@ func main() {
 		if err != nil {
 			log.Warn("memory_retriever_init_failed", "error", err.Error())
 		} else {
+			memoryRetriever = retriever
 			scheduler.SetMemoryRetriever(retriever)
 			scheduler.SetObservationClient(retriever)
 			registry.RegisterAll(
@@ -1158,8 +1176,9 @@ func main() {
 			_, _ = w.Write(payload)
 		})
 		metricsServer = &http.Server{
-			Addr:    ":" + cfg.MetricsPort,
-			Handler: mux,
+			Addr:              ":" + cfg.MetricsPort,
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() {
 			log.Info("metrics_server_listening", "port", cfg.MetricsPort)
@@ -1216,8 +1235,10 @@ func main() {
 			cancel:              stopSignals,
 			grpcServer:          grpcServer,
 			metricsServer:       metricsServer,
+			scheduler:           scheduler,
 			eventEmitter:        httpEventEmitter,
 			summarizationWorker: summaryWorker,
+			memoryRetriever:     memoryRetriever,
 			redisClient:         runtimeIntentRedisClient,
 		}); err != nil {
 			log.Error("engine_shutdown_failed", "error", err.Error())
