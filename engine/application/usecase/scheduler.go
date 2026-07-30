@@ -445,10 +445,15 @@ func (s *Scheduler) registerResumedRun(ctx context.Context, runID string, rc *ru
 			continue
 		}
 		previous, ok := value.(*runContext)
-		if !ok || previous == nil || previous.ctx.Err() == nil {
+		if !ok || previous == nil {
 			return err
 		}
 
+		// Resume is authorized by the backend-owned pause snapshot loaded before
+		// this claim. That snapshot is committed just before the paused execution
+		// cancels its context, so a valid resume may arrive during this short
+		// handoff window while the old context is still live. Wait for its cleanup
+		// instead of rejecting the durable resume as a duplicate active run.
 		select {
 		case <-previous.done:
 		case <-ctx.Done():
